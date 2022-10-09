@@ -1,0 +1,63 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RepositoryType>git</RepositoryType>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <LangVersion>preview</LangVersion>
+    <Description>Image generator</Description>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Nullable>enable</Nullable>
+    <Copyright>© Zomp Inc. All rights reserved.</Copyright>
+    <Company>Zomp</Company>
+    <Authors>Victor Irzak</Authors>
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <!-- This ensures the library will be packaged as a source generator when we use `dotnet pack` -->
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+  <!-- https://stackoverflow.com/a/59893520/6461844 -->
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">
+    <ItemGroup>
+      <!-- Filter out unnecessary files -->
+      <_ReferenceCopyLocalPaths Include="@(ReferenceCopyLocalPaths-&gt;WithMetadataValue('ReferenceSourceTarget', 'ProjectReference')-&gt;WithMetadataValue('PrivateAssets', 'All'))" />
+    </ItemGroup>
+
+    <!-- Print batches for debug purposes -->
+    <Message Text="Batch for .nupkg: ReferenceCopyLocalPaths = @(_ReferenceCopyLocalPaths), ReferenceCopyLocalPaths.DestinationSubDirectory = %(_ReferenceCopyLocalPaths.DestinationSubDirectory) Filename = %(_ReferenceCopyLocalPaths.Filename) Extension = %(_ReferenceCopyLocalPaths.Extension)" Importance="High" Condition="'@(_ReferenceCopyLocalPaths)' != ''" />
+
+    <ItemGroup>
+      <!-- Add file to package with consideration of sub folder. If empty, the root folder is chosen. -->
+      <BuildOutputInPackage Include="@(_ReferenceCopyLocalPaths)" TargetPath="%(_ReferenceCopyLocalPaths.DestinationSubDirectory)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="IsExternalInit" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" Pack="false" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />
+    <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.CodeAnalysis" />
+    <Using Include="Microsoft.CodeAnalysis.CSharp" />
+    <Using Include="Microsoft.CodeAnalysis.CSharp.Syntax" />
+    <Using Include="Microsoft.CodeAnalysis.Text" />
+    <Using Include="System.Collections.Immutable" />
+    <Using Include="System.Diagnostics" />
+    <Using Include="System.Runtime.CompilerServices" />
+    <Using Include="System.Text" />
+    <Using Include="System.Text.RegularExpressions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+  </ItemGroup>
+</Project>

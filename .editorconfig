@@ -1,0 +1,17 @@
+[*]
+end_of_line = crlf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+
+[*.cs]
+indent_size = 4
+csharp_style_expression_bodied_methods = true:silent
+csharp_style_namespace_declarations = file_scoped
+
+# Suppress repeated 'using' statement from generated files until .Net 6 is out of preview
+[*.{g.cs,AssemblyInfo.cs,AssemblyAttributes.cs,Designer.cs}]
+dotnet_diagnostic.CS0105.severity = none
+
+[*.sh]
+end_of_line = lf

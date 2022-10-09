@@ -1,0 +1,11 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+formatLevel=minimal
+if [ -n "$1" ]; then
+  formatLevel=$1
+fi
+
+EXIT_STATUS=0
+dotnet tool run dotnet-format --verify-no-changes Zomp.SyncMethodGenerator.sln -v $formatLevel whitespace || EXIT_STATUS=$?
+exit $EXIT_STATUS

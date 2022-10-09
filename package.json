@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "husky": "^8.0.1"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "prepare": "husky install"
+  }
+}

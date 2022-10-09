@@ -1,0 +1,35 @@
+<Project>
+  <PropertyGroup>
+    <Copyright>© Zomp Inc. All rights reserved.</Copyright>
+    <Company>Zomp</Company>
+    <Authors>Victor Irzak</Authors>
+    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <EnablePreviewFeatures>true</EnablePreviewFeatures>
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>AllEnabledByDefault</AnalysisMode>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(MsBuildProjectName.EndsWith('.Tests'))">
+    <NoWarn>$(NoWarn);CA1810</NoWarn>
+    
+    <!-- Slow logger is just fine -->
+    <NoWarn>$(NoWarn);CA1848</NoWarn>
+
+    <!-- Don't care about the naming in testing projects -->
+    <NoWarn>$(NoWarn);CA1711;CA1707</NoWarn>
+
+    <!-- No UI thread -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+
+    <!-- Don't need comments -->
+    <NoWarn>$(NoWarn);SA1600</NoWarn>
+  </PropertyGroup>
+
+</Project>

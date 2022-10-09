@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net472'">
+    <EnablePreviewFeatures>true</EnablePreviewFeatures>
+    <GenerateRequiresPreviewFeaturesAttribute>true</GenerateRequiresPreviewFeaturesAttribute>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="Fody" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="ModuleInit.Fody" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <PackageReference Include="System.Runtime.Experimental" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Compile Remove="GenericMathTests.cs" />
+    <None Include="GenericMathTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Verify.XUnit" />
+    <PackageReference Include="Verify.SourceGenerators" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Zomp.SyncMethodGenerator\Zomp.SyncMethodGenerator.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.CodeAnalysis" />
+    <Using Include="Microsoft.CodeAnalysis.CSharp" />
+    <Using Include="System.Collections.Immutable" />
+    <Using Include="System.Numerics" Condition="$(TargetFramework) != 'net6.0'" />
+  </ItemGroup>
+</Project>
