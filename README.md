@@ -36,7 +36,7 @@ A list of changes applied to the new synchronized method:
 - Remove async modifier
 - Remove await from methods as well as `foreach` statement
 - Change types
-  | From                                                                                                                                                                                     | To                                                                                                    |
+  | From                                                                                                                                                                                       | To                                                                                                       |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
   | [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task) or [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1)                | void                                                                                                     |
   | [Task\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1) or [ValueTask\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask-1) | T                                                                                                        |
