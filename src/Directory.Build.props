@@ -2,6 +2,7 @@
   <Import Project="..\Directory.Build.props" />
 
   <PropertyGroup>
+    <Title>Sync Method Generator</Title>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/zompinc/sync-method-generator.git</RepositoryUrl>
     <PackageProjectUrl>https://github.com/zompinc/sync-method-generator</PackageProjectUrl>
@@ -13,8 +14,8 @@
     <PackageIcon>icon.png</PackageIcon>
     <Deterministic>true</Deterministic>
     <EnablePackageValidation>true</EnablePackageValidation>
-    <NoWarn>$(NoWarn);EF1001</NoWarn>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">

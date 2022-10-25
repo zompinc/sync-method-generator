@@ -36,6 +36,7 @@ A list of changes applied to the new synchronized method:
 - Remove async modifier
 - Remove await from methods as well as `foreach` statement
 - Change types
+
   | From                                                                                                                                                                                       | To                                                                                                       |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
   | [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task) or [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1)                | void                                                                                                     |
@@ -44,6 +45,7 @@ A list of changes applied to the new synchronized method:
   | [IAsyncEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1)                                                                         | [IEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1) |
   | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)                                                                                                                 | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                   |
   | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)                                                                                                 | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                   |
+
 - Remove parameters
   - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
   - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1)
