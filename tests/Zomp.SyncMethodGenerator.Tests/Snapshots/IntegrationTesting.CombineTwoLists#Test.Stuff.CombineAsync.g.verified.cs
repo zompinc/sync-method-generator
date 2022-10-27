@@ -11,7 +11,7 @@ public partial class Stuff
         {
             if (!(enumerator2.MoveNext()))
             {
-                throw new InvalidOperationException("Must have the same size");
+                throw new global::System.InvalidOperationException("Must have the same size");
             }
             yield return (item, enumerator2.Current);
         }

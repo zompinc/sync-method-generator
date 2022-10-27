@@ -12,7 +12,7 @@ namespace Test
 
             int avgCount = adjacentCount * 2 + 1;
 
-            var meanQueue = new Queue<double>();
+            var meanQueue = new global::System.Collections.Generic.Queue<double>();
             foreach (var o in list)
             {
                 var item = o.ToDouble(null);

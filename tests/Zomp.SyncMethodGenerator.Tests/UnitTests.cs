@@ -108,6 +108,7 @@ public partial class Stuff
         var source = """
 using N2;
 using static N2.C1;
+using System;
 using System.Threading.Tasks;
 
 namespace N1
@@ -131,6 +132,68 @@ namespace N2
         {
             public record struct Accelerometer(short X, short Y, short Z);
         }
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task TaskOfT()
+    {
+        var source = """
+using System.Threading.Tasks;
+using System.Drawing;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<Point> GetPointAsync()
+    {
+        return await Task.FromResult(new Point(1, 2));
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task TaskOfTArray()
+    {
+        var source = """
+using System.Threading.Tasks;
+using System.Drawing;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<Point[]> GetPointAsync()
+    {
+        return await Task.FromResult(new[] { new Point(1, 2) });
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+
+    [Fact]
+    public Task TaskOfTIList()
+    {
+        var source = """
+using System.Collections.Generic;
+using System.Drawing;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<IList<Point>> GetPointAsync()
+    {
+        return await Task.FromResult(new[] { new Point(1, 2) });
     }
 }
 """;

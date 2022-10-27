@@ -29,11 +29,15 @@ public static class TestHelper
 
         var locations = new[] {
             typeof(IAsyncEnumerable<>).Assembly.Location,
+            typeof(System.Drawing.Point).Assembly.Location,
             typeof(object).Assembly.Location,
             typeof(Memory<>).Assembly.Location,
+            typeof(Queue<>).Assembly.Location,
         };
 
-        IEnumerable<PortableExecutableReference> references = locations.Distinct()
+        var distinct = locations.Distinct().ToArray();
+
+        IEnumerable<PortableExecutableReference> references = distinct
             .Select(l => MetadataReference.CreateFromFile(l));
 
         CSharpCompilation compilation = CSharpCompilation.Create(

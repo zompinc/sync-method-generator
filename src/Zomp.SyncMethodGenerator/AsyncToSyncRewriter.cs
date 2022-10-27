@@ -9,10 +9,20 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     readonly HashSet<string> removedParameters = new();
     readonly HashSet<string> memoryToSpan = new();
 
-    static readonly string TaskType = typeof(Task).ToString();
-    static readonly string MemoryType = "System.Memory";
-    static readonly string ValueTaskType = typeof(ValueTask).ToString();
-    static readonly string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
+    const string ReadOnlyMemory = "System.ReadOnlyMemory";
+    const string Memory = "System.Memory";
+    const string TaskType = "System.Threading.Tasks.Task";
+    const string ValueTaskType = "System.Threading.Tasks.ValueTask";
+
+    private readonly Dictionary<string, string?> Replacements = new()
+    {
+        { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
+        { "System.Collections.Generic.IAsyncEnumerator", "System.Collections.Generic.IEnumerator" },
+        { TaskType, null},
+        { ValueTaskType, null},
+        { ReadOnlyMemory, "System.ReadOnlySpan"},
+        { Memory, "System.Span"},
+    };
 
     /// <summary>
     /// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
@@ -23,27 +33,12 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         this.semanticModel = semanticModel;
     }
 
-    static string MakeType(string @namespace, string type)
-    {
-        return $"global::{@namespace}.{type}";
-    }
-
-    static string MakeType(INamedTypeSymbol symbol)
-    {
-        return $"global::{symbol.ToDisplayString()}";
-    }
-
-    TypeSyntax ReplaceWithGlobal(TypeSyntax ts)
-    {
-        if (semanticModel.GetTypeInfo(ts).Type is INamedTypeSymbol symbol)
+    static string MakeType(ISymbol symbol)
+        => "global::" + symbol switch
         {
-            var globalType = MakeType(symbol);
-            return SyntaxFactory.IdentifierName(globalType)
-                .WithLeadingTrivia(ts.GetLeadingTrivia())
-                .WithTrailingTrivia(ts.GetTrailingTrivia());
-        }
-        return ts;
-    }
+            INamedTypeSymbol nts when nts.IsGenericType is true => Regex.Replace(symbol.ToDisplayString(), "<.*", ""),
+            _ => symbol.ToDisplayString()
+        };
 
     TypeSyntax MakeGlobalIfNecessary(TypeSyntax type)
     {
@@ -74,81 +69,58 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         return type;
     }
 
-    TypeSyntax ReplaceType(TypeSyntax ts, string? variableName = null)
+    static TypeSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
     {
-        if (semanticModel.GetTypeInfo(ts).Type is not INamedTypeSymbol symbol)
-            return ts;
+        INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
+        IArrayTypeSymbol ats => SyntaxFactory.IdentifierName(MakeType(ats.ElementType) + "[]"),
+        _ => SyntaxFactory.IdentifierName(typeSymbol.Name),
+    };
 
-        if (ts is GenericNameSyntax genericType)
-        {
-            var typeParams = genericType.TypeArgumentList.Arguments;
+    private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
+    {
+        PredefinedTypeSyntax or TupleTypeSyntax or GenericNameSyntax or ArrayTypeSyntax => typeSyntax,
+        _ => semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax
+    };
 
-            var newTypeParams = new List<TypeSyntax>();
-
-            foreach (var param in typeParams)
-            {
-                if (param is PredefinedTypeSyntax or TupleTypeSyntax)
-                {
-                    newTypeParams.Add(param);
-                }
-                else
-                {
-                    var typeParam = semanticModel.GetTypeInfo(param).Type as INamedTypeSymbol;
-                    var zz = typeParam is not null
-                        ? SyntaxFactory.IdentifierName(MakeType(typeParam))
-                        : param;
-                    newTypeParams.Add(zz);
-                }
-            }
-
-            if (symbol.Name is "IAsyncEnumerable" or "IAsyncEnumerator"
-            && symbol.ContainingNamespace.ToDisplayString().Equals("System.Collections.Generic", StringComparison.Ordinal))
-            {
-                return SyntaxFactory
-                .GenericName(MakeType("System.Collections.Generic", RemoveAsync(symbol.Name)))
-                .AddTypeArgumentListArguments(newTypeParams[0])
-                .WithLeadingTrivia(ts.GetLeadingTrivia())
-                .WithTrailingTrivia(ts.GetTrailingTrivia());
-            }
-            else if (symbol.Name is "Task" or "ValueTask")
-            {
-                if (newTypeParams is { Count: > 0 })
-                {
-                    var newType = newTypeParams[0];
-                    if (newType is PredefinedTypeSyntax pts)
-                    {
-                        return pts
-                            .WithLeadingTrivia(ts.GetLeadingTrivia())
-                            .WithTrailingTrivia(ts.GetTrailingTrivia());
-                    }
-                }
-            }
-            else if (symbol.Name is "Memory" or "ReadOnlyMemory")
-            {
-                if (variableName is not null)
-                {
-                    memoryToSpan.Add(variableName);
-                }
-                return SyntaxFactory
-                .GenericName(MakeType("System", symbol.Name.Replace("Memory", "Span")))
-                .AddTypeArgumentListArguments(newTypeParams[0])
-                .WithLeadingTrivia(ts.GetLeadingTrivia())
-                .WithTrailingTrivia(ts.GetTrailingTrivia());
-            }
-        }
-        return ts;
-    }
+    static string GetNameWithoutTypeParams(ISymbol symbol)
+        => symbol.ContainingNamespace + "." + symbol.Name;
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitParameter(ParameterSyntax node)
+    public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
     {
-        var ps = (ParameterSyntax)base.VisitParameter(node)!;
+        var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
 
-        if (node.Type is not { } ts)
+        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+
+        string? convert(string key)
+            => Replacements.TryGetValue(key, out var replacement) ? replacement : key;
+
+        if (symbol is not INamedTypeSymbol)
         {
-            return ps;
+            return @base;
         }
-        return ps.WithType(ReplaceType(ts, ps.Identifier.ValueText));
+
+        var genericName = GetNameWithoutTypeParams(symbol);
+
+        var newType = convert(genericName);
+
+        if (node.Parent is ParameterSyntax ps && genericName is ReadOnlyMemory or Memory)
+        {
+            memoryToSpan.Add(ps.Identifier.ValueText);
+        }
+
+        if (newType is not null)
+        {
+            return @base.WithIdentifier(SyntaxFactory.Identifier("global::" + newType))
+                .WithLeadingTrivia(@base.GetLeadingTrivia())
+                .WithTrailingTrivia(@base.GetTrailingTrivia());
+        }
+        else
+        {
+            return @base.TypeArgumentList.Arguments[0]
+                .WithLeadingTrivia(@base.GetLeadingTrivia())
+                .WithTrailingTrivia(@base.GetTrailingTrivia());
+        }
     }
 
     static string RemoveAsync(string original)
@@ -223,39 +195,23 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var originalSymbol = node.Expression is MemberAccessExpressionSyntax zz ? semanticModel.GetSymbolInfo(zz).Symbol as IMethodSymbol : null;
 
-        if (IsAsyncMethod(maes))
+        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "WithCancellation" or "ConfigureAwait" })
         {
             return maes.Expression;
         }
 
-        var avava = semanticModel.GetTypeInfo(node);
-        var resultingType = avava.Type!;
-
-        if (resultingType is INamedTypeSymbol nts && nts.IsGenericType)
-        {
-            resultingType = nts.OriginalDefinition;
-        }
-
-        var typeStr = resultingType.ToString();
-
-        typeStr = Regex.Replace(typeStr, "<[^>]*>", "");
-
-
-        if (typeStr != TaskType && typeStr != ValueTaskType && typeStr != IAsyncEnumerator && typeStr != MemoryType)
-        {
-            return @base;
-        }
-
         string? newName = null;
-        if (originalSymbol is not null
-            && originalSymbol.ContainingNamespace.Name == "System"
-            && originalSymbol.Name == "AsMemory")
+        if (originalSymbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
         {
             newName = "AsSpan";
         }
         else if (ins.Identifier.ValueText.EndsWith("Async") || ins.Identifier.ValueText == "GetAsyncEnumerator")
         {
             newName = RemoveAsync(ins.Identifier.ValueText);
+        }
+        else if (ins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
+        {
+            return @base.ArgumentList.Arguments[0].Expression;
         }
 
         if (newName == null)
@@ -302,10 +258,35 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     }
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node)
+    public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
     {
-        var @base = (WhileStatementSyntax)base.VisitWhileStatement(node)!;
-        return @base;
+        var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
+        var elementType = @base.ElementType;
+        if (elementType is PredefinedTypeSyntax)
+        {
+            return @base;
+        }
+        var symbol = semanticModel.GetTypeInfo(elementType).Type;
+        if (symbol is null)
+        {
+            return @base;
+        }
+        var newType = SyntaxFactory.IdentifierName(MakeType(symbol));
+        return @base.WithElementType(newType);
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
+    {
+        var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
+        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+        if (symbol is null
+            or { ContainingType.IsGenericType: true }
+            or INamedTypeSymbol { IsGenericType: true })
+            return @base;
+
+        var newType = ProcessSymbol(symbol.ContainingType);
+        return newType == node.Type ? @base : @base.WithType(newType);
     }
 
     /// <inheritdoc/>
@@ -338,13 +319,27 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitTypeArgumentList(TypeArgumentListSyntax node)
+    {
+        var @base = (TypeArgumentListSyntax)base.VisitTypeArgumentList(node)!;
+        return @base.WithArguments(SyntaxFactory.SeparatedList(
+            @base.Arguments.Select(z
+                    => ProcessType(z)),
+            @base.Arguments.GetSeparators()
+            ));
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitTypeConstraint(TypeConstraintSyntax node)
     {
         var @base = (TypeConstraintSyntax)base.VisitTypeConstraint(node)!;
-        var type = @base.Type;
-        var newType = ReplaceWithGlobal(type);
-        var retval = @base.WithType(newType);
-        return retval;
+        var newType = ProcessType(@base.Type);
+        if (newType == @base.Type)
+            return @base;
+
+        return @base.WithType(newType)
+            .WithLeadingTrivia(@base.GetLeadingTrivia())
+            .WithTrailingTrivia(@base.GetTrailingTrivia());
     }
 
     /// <inheritdoc/>
@@ -356,29 +351,30 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             .WithTrailingTrivia(z.GetTrailingTrivia())
             );
 
-        var zz = SyntaxFactory.List(attrinutes.Where(z => z.Attributes.Any()));
+        var newAttributes = SyntaxFactory.List(attrinutes.Where(z => z.Attributes.Any()));
 
-        var newNode = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
+        var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
         var returnType = node.ReturnType;
 
         if (semanticModel.GetTypeInfo(returnType).Type is not INamedTypeSymbol symbol)
         {
-            return newNode;
+            return @base;
         }
 
-        var isTask = symbol.ToString() == TaskType;
+        var genericReturnType = returnType as GenericNameSyntax;
 
-        var hasAsync = newNode.Modifiers.Any(z => z.IsKind(SyntaxKind.AsyncKeyword));
+        var isTask = genericReturnType is null && symbol.ToString() is TaskType or ValueTaskType;
 
-        if (!isTask && !hasAsync
-            && returnType is not GenericNameSyntax genericReturnType)
+        var hasAsync = @base.Modifiers.Any(z => z.IsKind(SyntaxKind.AsyncKeyword));
+
+        if (!isTask && !hasAsync && genericReturnType is not null)
         {
-            return newNode;
+            return @base;
         }
 
-        var modifiers = newNode.Modifiers.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword));
+        var modifiers = @base.Modifiers.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword));
 
-        var originalName = newNode.Identifier.Text;
+        var originalName = @base.Identifier.Text;
         var newName = RemoveAsync(originalName);
 
         bool ShouldPreserveAttribute(AttributeSyntax attributeSyntax)
@@ -398,7 +394,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         // documenetation
 
         var trivia = node.GetLeadingTrivia();
-        SyntaxTriviaList newTriviaList = trivia;
+        var newTriviaList = trivia;
         var comments = trivia.FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia));
         var xml = comments.GetStructure();
 
@@ -432,17 +428,17 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             newTriviaList = trivia.Replace(comments, newTrivia);
         }
 
-        var newType = isTask
+        var newReturnType = isTask
             ? SyntaxFactory.IdentifierName("void")
                 .WithLeadingTrivia(returnType.GetLeadingTrivia())
                 .WithTrailingTrivia(returnType.GetTrailingTrivia())
-            : ReplaceType(node.ReturnType);
+            : @base.ReturnType;
 
-        var retval = newNode
+        var retval = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
-            .WithReturnType(newType)
+            .WithReturnType(newReturnType)
             .WithModifiers(SyntaxFactory.TokenList(modifiers))
-            .WithAttributeLists(zz)
+            .WithAttributeLists(newAttributes)
             .WithLeadingTrivia(newTriviaList)
             ;
 
@@ -494,9 +490,6 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             .WithTrailingTrivia(@foreach.GetTrailingTrivia());
     }
 
-    static bool IsAsyncMethod(MemberAccessExpressionSyntax maes)
-        => maes.Name is IdentifierNameSyntax { Identifier.ValueText: "WithCancellation" or "ConfigureAwait" };
-
     /// <inheritdoc/>
     public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node)
     {
@@ -511,7 +504,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node)!;
         var type = node.Type;
-        var newType = ReplaceType(type);
+        var newType = @base.Type;
 
         if (newType == type) // not replaced
         {
