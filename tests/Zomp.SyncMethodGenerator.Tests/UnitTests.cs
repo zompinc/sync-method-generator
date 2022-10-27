@@ -203,6 +203,26 @@ partial class Stuff
     }
 
     [Fact]
+    public Task DropBrackets()
+    {
+        var source = """
+using System.Threading.Tasks;
+using System.Drawing;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<int> GetIntAsync()
+    {
+        return (await Task.FromResult(new[] { 1, 2 }))[0];
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task TaskOfTIList()
     {
         var source = """

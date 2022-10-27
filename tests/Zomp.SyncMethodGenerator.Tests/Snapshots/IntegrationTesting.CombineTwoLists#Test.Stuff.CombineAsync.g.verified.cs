@@ -9,7 +9,7 @@ public partial class Stuff
         using var enumerator2 = list2.GetEnumerator();
         foreach (var item in list1)
         {
-            if (!(enumerator2.MoveNext()))
+            if (!enumerator2.MoveNext())
             {
                 throw new global::System.InvalidOperationException("Must have the same size");
             }

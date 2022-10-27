@@ -244,6 +244,14 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node)
+    {
+        var dropParentheses = node.Expression is AwaitExpressionSyntax;
+        var @base = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node)!;
+        return dropParentheses ? @base.Expression.WithTriviaFrom(@base) : @base;
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
     {
         var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
