@@ -173,8 +173,20 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
+        string? newName = null;
+        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async"))
+        {
+            newName = RemoveAsync(ins.Identifier.ValueText);
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                // Should Return diagnistics message
+                return @base;
+            }
+            return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
+        }
+
         if (@base.Expression is not MemberAccessExpressionSyntax maes
-            || maes.Name is not IdentifierNameSyntax ins)
+            || maes.Name is not IdentifierNameSyntax mins)
         {
             return @base;
         }
@@ -186,16 +198,15 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return maes.Expression;
         }
 
-        string? newName = null;
         if (originalSymbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
         {
             newName = "AsSpan";
         }
-        else if (ins.Identifier.ValueText.EndsWith("Async") || ins.Identifier.ValueText == "GetAsyncEnumerator")
+        else if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
         {
-            newName = RemoveAsync(ins.Identifier.ValueText);
+            newName = RemoveAsync(mins.Identifier.ValueText);
         }
-        else if (ins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
+        else if (mins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
         {
             return @base.ArgumentList.Arguments[0].Expression;
         }

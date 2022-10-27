@@ -129,6 +129,10 @@ namespace Test;
 public partial class Stuff
 {
     [CreateSyncVersion]
+    static async Task<int> HalfCheckSumAsync(Memory<byte> buffer, Stream stream, CancellationToken ct)
+        => (await ChecksumReadAsync(buffer, stream, ct).ConfigureAwait(false)) / 2;
+
+    [CreateSyncVersion]
     static async Task<int> ChecksumReadAsync(Memory<byte> buffer, Stream stream, CancellationToken ct)
     {
         int bytesRead = await stream.ReadAsync(buffer, ct).ConfigureAwait(true);
