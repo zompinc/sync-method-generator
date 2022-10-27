@@ -4,7 +4,7 @@
 namespace Test;
 public partial class Stuff
 {
-    private void ReadAsMemory(Stream stream, byte[] sampleBytes)
+    private void ReadAsMemory(global::System.IO.Stream stream, byte[] sampleBytes)
     {
         stream.Read(sampleBytes.AsSpan(0, 123));
     }

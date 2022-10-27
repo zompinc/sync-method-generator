@@ -40,35 +40,6 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             _ => symbol.Name,
         };
 
-    TypeSyntax MakeGlobalIfNecessary(TypeSyntax type)
-    {
-        if (type is PredefinedTypeSyntax
-            || type is TupleTypeSyntax
-            || type is IdentifierNameSyntax ins && ins.Identifier.ValueText == "var")
-        {
-            return type;
-        }
-
-        if (type is NullableTypeSyntax nuts)
-        {
-            var typeInside = MakeGlobalIfNecessary(nuts.ElementType);
-            if (typeInside == nuts.ElementType)
-                return type;
-            return nuts.WithElementType(typeInside);
-        }
-
-        if (semanticModel
-            .GetSymbolInfo(type)
-            .Symbol is INamedTypeSymbol nts)
-        {
-            return SyntaxFactory.IdentifierName(MakeType(nts))
-                .WithLeadingTrivia(type.GetLeadingTrivia())
-                .WithTrailingTrivia(type.GetTrailingTrivia());
-        }
-
-        return type;
-    }
-
     static TypeSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
     {
         INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
@@ -78,9 +49,18 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
     private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
     {
-        PredefinedTypeSyntax or TupleTypeSyntax or GenericNameSyntax or ArrayTypeSyntax => typeSyntax,
-        _ => semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax
+        IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
+        IdentifierNameSyntax or QualifiedNameSyntax => (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax),
+        _ => typeSyntax,
+
     };
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
+    {
+        var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
+        return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
+    }
 
     static string GetNameWithoutTypeParams(ISymbol symbol)
         => symbol.ContainingNamespace + "." + symbol.Name;
@@ -112,14 +92,11 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         if (newType is not null)
         {
             return @base.WithIdentifier(SyntaxFactory.Identifier("global::" + newType))
-                .WithLeadingTrivia(@base.GetLeadingTrivia())
-                .WithTrailingTrivia(@base.GetTrailingTrivia());
+                .WithTriviaFrom(@base);
         }
         else
         {
-            return @base.TypeArgumentList.Arguments[0]
-                .WithLeadingTrivia(@base.GetLeadingTrivia())
-                .WithTrailingTrivia(@base.GetTrailingTrivia());
+            return @base.TypeArgumentList.Arguments[0].WithTriviaFrom(@base);
         }
     }
 
@@ -163,6 +140,15 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var newParams = RemoveAtRange(newnode.Parameters, invalid);
         return newnode.WithParameters(newParams);
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitParameter(ParameterSyntax node)
+    {
+        var @base = (ParameterSyntax)base.VisitParameter(node)!;
+        if (@base.Type is null)
+            return @base;
+        return @base.WithType(ProcessType(@base.Type)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -254,27 +240,14 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitAwaitExpression(AwaitExpressionSyntax node)
     {
         var @base = (AwaitExpressionSyntax)base.VisitAwaitExpression(node)!;
-        return @base.Expression
-            .WithLeadingTrivia(@base.GetLeadingTrivia())
-            .WithTrailingTrivia(@base.GetTrailingTrivia());
+        return @base.Expression.WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
     {
         var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
-        var elementType = @base.ElementType;
-        if (elementType is PredefinedTypeSyntax or GenericNameSyntax)
-        {
-            return @base;
-        }
-        var symbol = semanticModel.GetTypeInfo(node.ElementType).Type;
-        if (symbol is null)
-        {
-            return @base;
-        }
-        var newType = SyntaxFactory.IdentifierName(MakeType(symbol));
-        return @base.WithElementType(newType);
+        return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -325,10 +298,8 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (TypeArgumentListSyntax)base.VisitTypeArgumentList(node)!;
         return @base.WithArguments(SyntaxFactory.SeparatedList(
-            @base.Arguments.Select(z
-                    => ProcessType(z)),
-            @base.Arguments.GetSeparators()
-            ));
+            @base.Arguments.Select(z => ProcessType(z)),
+            @base.Arguments.GetSeparators()));
     }
 
     /// <inheritdoc/>
@@ -339,9 +310,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         if (newType == @base.Type)
             return @base;
 
-        return @base.WithType(newType)
-            .WithLeadingTrivia(@base.GetLeadingTrivia())
-            .WithTrailingTrivia(@base.GetTrailingTrivia());
+        return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -349,8 +318,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var attrinutes = node.AttributeLists.Select(
             z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
-            .WithTrailingTrivia(z.GetLeadingTrivia())
-            .WithTrailingTrivia(z.GetTrailingTrivia())
+            .WithTriviaFrom(z)
             );
 
         var newAttributes = SyntaxFactory.List(attrinutes.Where(z => z.Attributes.Any()));
@@ -432,8 +400,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var newReturnType = isTask
             ? SyntaxFactory.IdentifierName("void")
-                .WithLeadingTrivia(returnType.GetLeadingTrivia())
-                .WithTrailingTrivia(returnType.GetTrailingTrivia())
+                .WithTriviaFrom(returnType)
             : @base.ReturnType;
 
         var retval = @base
@@ -485,20 +452,15 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     /// <inheritdoc/>
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
     {
-        var @foreach = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
-
-        return @foreach.WithAwaitKeyword(default)
-            .WithLeadingTrivia(@foreach.GetLeadingTrivia())
-            .WithTrailingTrivia(@foreach.GetTrailingTrivia());
+        var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
+        return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node)
     {
         var @base = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node)!;
-        return @base.WithAwaitKeyword(default)
-            .WithLeadingTrivia(@base.GetLeadingTrivia())
-            .WithTrailingTrivia(@base.GetTrailingTrivia());
+        return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -510,15 +472,13 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         if (newType == type) // not replaced
         {
-            newType = MakeGlobalIfNecessary(type);
+            newType = ProcessType(type);
 
             if (newType == type)
             {
                 return @base;
             }
         }
-        return @base.WithType(newType)
-            .WithLeadingTrivia(@base.GetLeadingTrivia())
-            .WithTrailingTrivia(@base.GetTrailingTrivia());
+        return @base.WithType(newType).WithTriviaFrom(@base);
     }
 }

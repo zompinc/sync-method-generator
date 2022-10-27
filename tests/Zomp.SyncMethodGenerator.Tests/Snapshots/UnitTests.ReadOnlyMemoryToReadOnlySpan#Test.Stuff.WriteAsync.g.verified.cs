@@ -4,6 +4,6 @@
 namespace Test;
 public partial class Stuff
 {
-    static void Write(global::System.ReadOnlySpan<byte> buffer, Stream stream)
+    static void Write(global::System.ReadOnlySpan<byte> buffer, global::System.IO.Stream stream)
         => stream.Write(buffer);
 }

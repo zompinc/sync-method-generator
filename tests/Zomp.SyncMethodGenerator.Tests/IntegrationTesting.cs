@@ -120,6 +120,7 @@ public partial class Stuff
         // The source code to test
         var source = """
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Zomp.SyncMethodGenerator;
 
