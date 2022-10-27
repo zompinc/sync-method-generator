@@ -80,6 +80,30 @@ public partial class Stuff
     }
 
     [Fact]
+    public Task MemoryToSpanWithBody()
+    {
+        // The source code to test
+        var source = """
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+public partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct = default)
+    {
+        await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task ReadOnlyMemoryToReadOnlySpan()
     {
         // The source code to test

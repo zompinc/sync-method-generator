@@ -254,7 +254,9 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitAwaitExpression(AwaitExpressionSyntax node)
     {
         var @base = (AwaitExpressionSyntax)base.VisitAwaitExpression(node)!;
-        return @base.Expression;
+        return @base.Expression
+            .WithLeadingTrivia(@base.GetLeadingTrivia())
+            .WithTrailingTrivia(@base.GetTrailingTrivia());
     }
 
     /// <inheritdoc/>
