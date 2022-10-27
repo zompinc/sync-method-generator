@@ -33,6 +33,7 @@ public static class TestHelper
             typeof(object).Assembly.Location,
             typeof(Memory<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
+            typeof(LinkedListNode<>).Assembly.Location,
         };
 
         var distinct = locations.Distinct().ToArray();

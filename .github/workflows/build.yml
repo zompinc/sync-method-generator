@@ -22,16 +22,13 @@ jobs:
         # os: [windows-latest]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
     - uses: dotnet/nbgv@master
       id: nbgv
       with:
         setAllVars: true
-    - uses: actions/setup-node@v3
-      with:
-        node-version: '18'
 
     - run: nbgv cloud
 

@@ -178,7 +178,6 @@ partial class Stuff
         return TestHelper.Verify(source);
     }
 
-
     [Fact]
     public Task TaskOfTIList()
     {
@@ -194,6 +193,48 @@ partial class Stuff
     public static async Task<IList<Point>> GetPointAsync()
     {
         return await Task.FromResult(new[] { new Point(1, 2) });
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task TaskOfT2IList()
+    {
+        var source = """
+using System.Collections.Generic;
+using System.Drawing;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<IList<T>> GetArrayOfTAsync<T>() where T: new()
+    {
+        return await Task.FromResult(new T[] { new T() });
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task TaskOfArayOfGeneric()
+    {
+        var source = """
+using System.Collections.Generic;
+using System.Drawing;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<LinkedListNode<Point>[]> GetArrayOfTAsync<T>() where T : new()
+    {
+        return await Task.FromResult(new LinkedListNode<Point>[] { });
     }
 }
 """;

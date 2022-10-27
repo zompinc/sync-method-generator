@@ -34,10 +34,10 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     }
 
     static string MakeType(ISymbol symbol)
-        => "global::" + symbol switch
+        => symbol switch
         {
-            INamedTypeSymbol nts when nts.IsGenericType is true => Regex.Replace(symbol.ToDisplayString(), "<.*", ""),
-            _ => symbol.ToDisplayString()
+            INamedTypeSymbol => "global::" + symbol.ToDisplayString(),
+            _ => symbol.Name,
         };
 
     TypeSyntax MakeGlobalIfNecessary(TypeSyntax type)
@@ -262,11 +262,11 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
         var elementType = @base.ElementType;
-        if (elementType is PredefinedTypeSyntax)
+        if (elementType is PredefinedTypeSyntax or GenericNameSyntax)
         {
             return @base;
         }
-        var symbol = semanticModel.GetTypeInfo(elementType).Type;
+        var symbol = semanticModel.GetTypeInfo(node.ElementType).Type;
         if (symbol is null)
         {
             return @base;
