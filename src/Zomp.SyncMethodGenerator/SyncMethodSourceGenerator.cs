@@ -82,7 +82,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         IEnumerable<MethodDeclarationSyntax> distinctMethods = methods.Distinct();
 
         // Convert each MethodDeclarationSyntax to an MethodToGenerate
-        List<MethodToGenerate> methodsToGenerate = GetTypesToGenerate(compilation, distinctMethods, context.CancellationToken);
+        List<MethodToGenerate> methodsToGenerate = GetTypesToGenerate(context, compilation, distinctMethods, context.CancellationToken);
 
         // If there were errors in the MethodDeclarationSyntax, we won't create an
         // MethodToGenerate for it, so make sure we have something to generate
@@ -99,7 +99,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         }
     }
 
-    static List<MethodToGenerate> GetTypesToGenerate(Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
+    static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
     {
         var methodsToGenerate = new List<MethodToGenerate>();
         INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(CreateSyncVersionAttribute);
@@ -140,7 +140,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var classes = new List<Class>();
             SyntaxNode? node = methodDeclarationSyntax;
-            var partialMissing = false;
+            ClassDeclarationSyntax? partialMissing = null;
             while (node.Parent is not null)
             {
                 node = node.Parent;
@@ -151,7 +151,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
                 if (!classSyntax.Modifiers.Any(SyntaxKind.PartialKeyword))
                 {
-                    partialMissing = true;
+                    partialMissing = classSyntax;
                     break;
                 }
 
@@ -167,15 +167,43 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers));
             }
 
-            if (classes.Count == 0 || partialMissing)
+            if (partialMissing is not null)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(ClassMustBePartial, partialMissing.GetLocation(), partialMissing.Identifier.ValueText));
+                continue;
+            }
+
+            if (classes.Count == 0)
             {
                 continue;
             }
 
-            var rewriter = new AsyncToSyncRewriter(semanticModel);
-            var sn = rewriter.Visit(methodDeclarationSyntax);
+            string content;
+            try
+            {
+                var rewriter = new AsyncToSyncRewriter(semanticModel);
+                var sn = rewriter.Visit(methodDeclarationSyntax);
+                content = sn.ToFullString();
 
-            var content = sn.ToFullString();
+                var diagnostics = rewriter.Diagnostics;
+
+                var hasErrors = false;
+                foreach (var diagnostic in diagnostics)
+                {
+                    context.ReportDiagnostic(diagnostic);
+                    hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
+                }
+
+                if (hasErrors)
+                {
+                    continue;
+                }
+            }
+            catch (Exception ex)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(ExceptionOccured, location: null, ex.ToString()));
+                continue;
+            }
 
             var isNamespaceFileScoped = false;
             var namespaces = new List<string>();

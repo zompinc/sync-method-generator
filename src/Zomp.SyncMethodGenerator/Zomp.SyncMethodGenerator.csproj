@@ -21,7 +21,7 @@
   <!-- This ensures the library will be packaged as a source generator when we use `dotnet pack` -->
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- https://stackoverflow.com/a/59893520/6461844 -->
@@ -57,6 +57,7 @@
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
+    <Using Include="Zomp.SyncMethodGenerator.DiagnosticMessages" Static="true" />
   </ItemGroup>
 
   <ItemGroup>

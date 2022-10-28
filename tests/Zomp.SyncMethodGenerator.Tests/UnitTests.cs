@@ -284,4 +284,23 @@ partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task WithAction()
+    {
+        var source = """
+using System;
+using System.Drawing;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task WithAction(Action<Point, IEnumerable<Point>>? action) { }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }

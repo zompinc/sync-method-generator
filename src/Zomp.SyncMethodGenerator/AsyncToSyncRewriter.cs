@@ -8,6 +8,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     private readonly SemanticModel semanticModel;
     readonly HashSet<string> removedParameters = new();
     readonly HashSet<string> memoryToSpan = new();
+    readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
     const string ReadOnlyMemory = "System.ReadOnlyMemory";
     const string Memory = "System.Memory";
@@ -23,6 +24,11 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         { ReadOnlyMemory, "System.ReadOnlySpan"},
         { Memory, "System.Span"},
     };
+
+    /// <summary>
+    /// Diagnostics
+    /// </summary>
+    public ImmutableArray<Diagnostic> Diagnostics => diagnostics.ToImmutable();
 
     /// <summary>
     /// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
@@ -47,10 +53,25 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         _ => SyntaxFactory.IdentifierName(typeSymbol.Name),
     };
 
+    TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
+    {
+        try
+        {
+            return (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax);
+        }
+        catch (ArgumentException ex)
+        {
+            var message = Regex.Replace(ex.ToString(), "[\r\n]+", "", RegexOptions.Multiline);
+            var diag = Diagnostic.Create(CannotRetrieveSymbol, typeSyntax.GetLocation(), typeSyntax.ToString(), message);
+            diagnostics.Add(diag);
+            return typeSyntax;
+        }
+    }
+
     private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
     {
         IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
-        IdentifierNameSyntax or QualifiedNameSyntax => (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax),
+        IdentifierNameSyntax or QualifiedNameSyntax => ProcessSyntaxUsingSymbol(typeSyntax),
         _ => typeSyntax,
 
     };
@@ -317,7 +338,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (TypeArgumentListSyntax)base.VisitTypeArgumentList(node)!;
         return @base.WithArguments(SyntaxFactory.SeparatedList(
-            @base.Arguments.Select(z => ProcessType(z)),
+            @base.Arguments.Select(z => z.SyntaxTree == node.SyntaxTree ? ProcessType(z) : z),
             @base.Arguments.GetSeparators()));
     }
 
