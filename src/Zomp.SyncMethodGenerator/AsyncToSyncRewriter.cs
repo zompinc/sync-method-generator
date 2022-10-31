@@ -198,6 +198,18 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async"))
         {
             newName = RemoveAsync(ins.Identifier.ValueText);
+
+            if (semanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol symbol)
+                throw new InvalidOperationException($"Could not get symbol of {ins.Identifier.ValueText}");
+
+            var siblings = symbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
+            var hasSync = siblings.Any(z => z.Name == newName);
+            var hasAsyncWithAttr = siblings.Any(z => z.Name == ins.Identifier.ValueText
+                && z.GetAttributes().Any(z
+                    => z.AttributeClass is not null && IsCreateSyncVerionAttribute(z.AttributeClass)));
+
+            //if (symbol.con)
+
             if (string.IsNullOrWhiteSpace(newName))
             {
                 // Should Return diagnistics message
@@ -353,6 +365,9 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
+    bool IsCreateSyncVerionAttribute(INamedTypeSymbol s)
+        => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
@@ -395,10 +410,8 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             }
 
             var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
-            var fullName = attributeContainingTypeSymbol.ToDisplayString();
-
             // Is the attribute [CreateSyncVersion] attribute?
-            return fullName != SyncMethodSourceGenerator.CreateSyncVersionAttribute;
+            return !IsCreateSyncVerionAttribute(attributeContainingTypeSymbol);
         }
 
         // documenetation
