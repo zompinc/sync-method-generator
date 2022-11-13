@@ -303,4 +303,30 @@ partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task LocalFunction()
+    {
+        var source = """
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)
+    {
+        static async Task<int> Internal(Stream stream, CancellationToken ct)
+        {
+            var buf = new byte[1];
+            return await stream.ReadAsync(buf, 0, 1, ct);
+        }
+        return await Internal(stream, ct);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }

@@ -122,7 +122,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!methodSymbol.IsAsync)
+            if (!methodSymbol.IsAsync && !AsyncToSyncRewriter.IsTypeOfInterest(methodSymbol.ReturnType))
             {
                 continue;
             }

@@ -15,7 +15,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     const string TaskType = "System.Threading.Tasks.Task";
     const string ValueTaskType = "System.Threading.Tasks.ValueTask";
 
-    private readonly Dictionary<string, string?> Replacements = new()
+    private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
         { "System.Collections.Generic.IAsyncEnumerator", "System.Collections.Generic.IEnumerator" },
@@ -86,6 +86,12 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     static string GetNameWithoutTypeParams(ISymbol symbol)
         => symbol.ContainingNamespace + "." + symbol.Name;
 
+    internal static bool IsTypeOfInterest(ITypeSymbol symbol)
+    {
+        var genericName = GetNameWithoutTypeParams(symbol);
+        return Replacements.ContainsKey(genericName);
+    }
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
     {
@@ -119,6 +125,26 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         {
             return @base.TypeArgumentList.Arguments[0].WithTriviaFrom(@base);
         }
+    }
+
+    static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
+        => SyntaxFactory.TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
+    {
+        var @base = (LocalFunctionStatementSyntax)base.VisitLocalFunctionStatement(node)!;
+
+        var newNode = @base;
+
+        if (@base.Identifier.ValueText.EndsWith("Async"))
+        {
+            newNode = @base.WithIdentifier(SyntaxFactory.Identifier(RemoveAsync(@base.Identifier.ValueText)));
+        }
+
+        return newNode
+            .WithModifiers(StripAsyncModifier(@base.Modifiers))
+            .WithTriviaFrom(@base);
     }
 
     static string RemoveAsync(string original)
@@ -177,6 +203,17 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
 
+        var symbol = semanticModel.GetSymbolInfo(node.Expression).Symbol;
+        if (symbol is ITypeSymbol && node.Expression is TypeSyntax type)
+        {
+            // Rewrite static invocation (eg. File.ReadAllTextAsync)
+            var newType = ProcessType(type);
+            if (newType != type)
+            {
+                @base = @base.WithExpression(newType);
+            }
+        }
+
         if (@base.Name.Identifier.ValueText == "Span"
             && @base.Expression is IdentifierNameSyntax ins && memoryToSpan.Contains(ins.Identifier.ValueText))
         {
@@ -186,6 +223,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         {
             return @base.WithName(SyntaxFactory.IdentifierName(RemoveAsync(@base.Name.Identifier.ValueText)));
         }
+
         return @base;
     }
 
@@ -392,7 +430,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var hasAsync = @base.Modifiers.Any(z => z.IsKind(SyntaxKind.AsyncKeyword));
 
-        if (!isTask && !hasAsync && genericReturnType is not null)
+        if (!hasAsync && !IsTypeOfInterest(symbol))
         {
             return @base;
         }
@@ -459,7 +497,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var retval = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
             .WithReturnType(newReturnType)
-            .WithModifiers(SyntaxFactory.TokenList(modifiers))
+            .WithModifiers(StripAsyncModifier(@base.Modifiers))
             .WithAttributeLists(newAttributes)
             .WithLeadingTrivia(newTriviaList)
             ;

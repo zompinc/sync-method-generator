@@ -31,6 +31,7 @@ public static class TestHelper
             typeof(IAsyncEnumerable<>).Assembly.Location,
             typeof(System.Drawing.Point).Assembly.Location,
             typeof(object).Assembly.Location,
+            typeof(Console).Assembly.Location,
             typeof(Memory<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,

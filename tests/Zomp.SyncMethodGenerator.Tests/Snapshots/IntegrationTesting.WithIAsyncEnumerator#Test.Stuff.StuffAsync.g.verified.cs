@@ -9,7 +9,7 @@ public partial class Stuff
         global::System.Collections.Generic.IEnumerator<int> e = range.GetEnumerator();
         try
         {
-            while (e.MoveNext()) Console.Write(e.Current + " ");
+            while (e.MoveNext()) global::System.Console.Write(e.Current + " ");
         }
         finally { if (e != null) e.Dispose(); }
     }

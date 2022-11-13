@@ -145,4 +145,85 @@ public partial class Stuff
         // Pass the source code to our helper and snapshot test the output
         return TestHelper.Verify(source);
     }
+
+#if NETCOREAPP1_0_OR_GREATER
+    [Fact]
+    public Task EagerPreconditionsInAsyncMethod()
+    {
+        // From: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-2-eager-preconditions-in-async-methods
+        var source = """
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Zomp.SyncMethodGenerator;
+
+namespace Test;
+
+public partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static Task<string> GetAllTextAsync(string fileName)
+    {
+        // Eager argument validation
+        if (string.IsNullOrEmpty(fileName)) throw new ArgumentNullException(nameof(fileName));
+        return GetAllTextAsync();
+
+        async Task<string> GetAllTextAsync()
+        {
+            var result = await File.ReadAllTextAsync(fileName);
+            return result;
+        }
+    }
+}
+""";
+
+        // Pass the source code to our helper and snapshot test the output
+        return TestHelper.Verify(source);
+    }
+#endif
+
+    [Fact]
+    public Task EagerPreconditionInIteratorBlock()
+    {
+        // Moodified from: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-1-eager-preconditions-in-iterator-blocks
+        var source = """
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using Zomp.SyncMethodGenerator;
+
+namespace Test;
+
+public partial class Stuff
+{
+    [CreateSyncVersion]
+    public static IAsyncEnumerable<string> ReadLineByLineAsync(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) throw new ArgumentNullException(nameof(fileName));
+
+        return ReadLineByLineImpl();
+
+        async IAsyncEnumerable<string> ReadLineByLineImpl()
+        {
+            await foreach (var line in CreateAsyncEnumerable())
+            {
+                yield return line;
+            }
+        }
+
+        async IAsyncEnumerable<string> CreateAsyncEnumerable()
+        {
+            foreach (var i in new[] { "a", "b" })
+            {
+                yield return await Task.FromResult(i);
+            }
+        }
+    }
+}
+""";
+
+        // Pass the source code to our helper and snapshot test the output
+        return TestHelper.Verify(source);
+    }
 }
