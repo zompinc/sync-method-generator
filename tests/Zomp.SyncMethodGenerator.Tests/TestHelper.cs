@@ -54,6 +54,13 @@ public static class TestHelper
 
         driver = driver.RunGenerators(compilation);
 
+        // Ensure that at least two sources are generated
+        var results = driver.GetRunResult();
+        if (results.GeneratedTrees.Length < 2)
+        {
+            throw new InvalidOperationException("Nothing generated");
+        }
+
         var verifier = Verifier
             .Verify(driver)
             .UseDirectory("Snapshots");
