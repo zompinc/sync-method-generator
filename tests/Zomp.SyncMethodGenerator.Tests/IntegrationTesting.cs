@@ -192,6 +192,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Zomp.SyncMethodGenerator;
+using System.Collections.Generic;
 
 namespace Test;
 
