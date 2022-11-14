@@ -11,14 +11,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        /*
-        #if DEBUG
-                if (!Debugger.IsAttached)
-                {
-                    Debugger.Launch();
-                }
-        #endif
-        */
+        // To start debygger compile with /p:DefineConstants=DEBUG_SMG
+#if DEBUG_SMG
+        if (!Debugger.IsAttached)
+        {
+            Debugger.Launch();
+        }
+#endif
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             "CreateSyncVersionAttribute.g.cs", SourceText.From(SourceGenerationHelper.Attribute, Encoding.UTF8)));
 
