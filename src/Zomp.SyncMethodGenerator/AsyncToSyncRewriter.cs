@@ -193,9 +193,9 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
-        if (@base.Type is null)
+        if (node.Type is null or NullableTypeSyntax or GenericNameSyntax)
             return @base;
-        return @base.WithType(ProcessType(@base.Type)).WithTriviaFrom(@base);
+        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>

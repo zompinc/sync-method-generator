@@ -265,6 +265,25 @@ partial class Stuff
     }
 
     [Fact]
+    public Task DefaultParameter()
+    {
+        var source = """
+using System.IO;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    [CreateSyncVersion]
+    public async Task<int> GetColorAsync(FileAccess access = FileAccess.Read)
+        => await Task.FromResult(1);
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task TaskOfArayOfGeneric()
     {
         var source = """

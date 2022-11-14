@@ -56,7 +56,7 @@ public static class TestHelper
 
         // Ensure that at least two sources are generated
         var results = driver.GetRunResult();
-        if (results.GeneratedTrees.Length < 2)
+        if (results.Diagnostics.Length == 0 && results.GeneratedTrees.Length < 2)
         {
             throw new InvalidOperationException("Nothing generated");
         }
