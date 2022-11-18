@@ -8,6 +8,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
     private readonly SemanticModel semanticModel;
     readonly HashSet<string> removedParameters = new();
     readonly HashSet<string> memoryToSpan = new();
+    readonly Dictionary<string, string> renamedLocalFunctions = new();
     readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
     const string ReadOnlyMemory = "System.ReadOnlyMemory";
@@ -99,7 +100,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var symbol = semanticModel.GetSymbolInfo(node).Symbol;
 
-        string? convert(string key)
+        static string? convert(string key)
             => Replacements.TryGetValue(key, out var replacement) ? replacement : key;
 
         if (symbol is not INamedTypeSymbol)
@@ -127,6 +128,17 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         }
     }
 
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+    {
+        var @base = (IdentifierNameSyntax)base.VisitIdentifierName(node)!;
+        if (renamedLocalFunctions.TryGetValue(@base.Identifier.ValueText, out var newName))
+        {
+            return @base.WithIdentifier(SyntaxFactory.Identifier(newName));
+        }
+        return @base;
+    }
+
     static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
         => SyntaxFactory.TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
 
@@ -137,9 +149,12 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var newNode = @base;
 
-        if (@base.Identifier.ValueText.EndsWith("Async"))
+        var identifier = @base.Identifier;
+        if (identifier.ValueText.EndsWith("Async"))
         {
-            newNode = @base.WithIdentifier(SyntaxFactory.Identifier(RemoveAsync(@base.Identifier.ValueText)));
+            var newName = RemoveAsync(identifier.ValueText);
+            renamedLocalFunctions.Add(identifier.ValueText, newName);
+            newNode = @base.WithIdentifier(SyntaxFactory.Identifier(newName));
         }
 
         return newNode
@@ -403,7 +418,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
-    bool IsCreateSyncVerionAttribute(INamedTypeSymbol s)
+    static bool IsCreateSyncVerionAttribute(INamedTypeSymbol s)
         => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
 
     /// <inheritdoc/>

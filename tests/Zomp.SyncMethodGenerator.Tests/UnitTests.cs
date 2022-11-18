@@ -348,4 +348,35 @@ partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task LocalFunctionDelegateWithEndingAsync()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    static async Task<int> SomeMethodAsync(Func<CancellationToken, Task<int>> _)
+        => await Task.FromResult(0);
+
+    static int SomeMethod(Func<int> _) => 0;
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task DoItAsync()
+    {
+        static async Task<int> LocalAsync(CancellationToken ct)
+        {
+            return await Task.FromResult(0);
+        }
+
+        _ = await SomeMethodAsync(LocalAsync);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }
