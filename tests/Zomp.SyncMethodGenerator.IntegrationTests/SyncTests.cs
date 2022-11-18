@@ -1,4 +1,7 @@
-﻿namespace Zomp.SyncMethodGenerator.IntegrationTests;
+﻿using System.Linq;
+using Xunit;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
 public class SyncTests
 {
     [Fact]

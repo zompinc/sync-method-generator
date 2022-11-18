@@ -6,6 +6,6 @@ public partial class Stuff
 {
     private void ReadAsMemory(global::System.IO.Stream stream, byte[] sampleBytes)
     {
-        stream.Read(sampleBytes.AsSpan(0, 123));
+        stream.Read(global::System.MemoryExtensions.AsSpan(sampleBytes, 0, 123));
     }
 }

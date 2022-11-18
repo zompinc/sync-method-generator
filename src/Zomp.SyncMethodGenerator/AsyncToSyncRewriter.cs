@@ -248,14 +248,15 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
         string? newName = null;
+        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async"))
         {
+            if (symbol is not IMethodSymbol methodSymbol)
+                throw new InvalidOperationException($"Could not get symbol of {node}");
+
             newName = RemoveAsync(ins.Identifier.ValueText);
 
-            if (semanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol symbol)
-                throw new InvalidOperationException($"Could not get symbol of {ins.Identifier.ValueText}");
-
-            var siblings = symbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
+            var siblings = methodSymbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
             var hasSync = siblings.Any(z => z.Name == newName);
             var hasAsyncWithAttr = siblings.Any(z => z.Name == ins.Identifier.ValueText
                 && z.GetAttributes().Any(z
@@ -284,17 +285,48 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return maes.Expression;
         }
 
-        if (originalSymbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
-        {
-            newName = "AsSpan";
-        }
-        else if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
+        if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
         {
             newName = RemoveAsync(mins.Identifier.ValueText);
         }
         else if (mins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
         {
             return @base.ArgumentList.Arguments[0].Expression;
+        }
+        else if (originalSymbol is { IsExtensionMethod: true, ReducedFrom: { } r })
+        {
+            var arguments = @base.ArgumentList.Arguments;
+            var separators = arguments.GetSeparators();
+
+            var newSeparators = arguments.Count < 2 ? Array.Empty<SyntaxToken>()
+                : new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) }
+                .Union(separators);
+
+            ArgumentSyntax @as;
+            if (node.Expression is MemberAccessExpressionSyntax maes2)
+            {
+                @as = SyntaxFactory.Argument(maes2.Expression);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Need to handle {node.Expression}");
+            }
+
+            var newList = SyntaxFactory.SeparatedList(new[] { @as }.Union(arguments), newSeparators);
+
+            newName = r.Name;
+            if (originalSymbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
+            {
+                newName = "AsSpan";
+            }
+            else
+            {
+                newName = RemoveAsync(newName);
+            }
+
+            return @base
+                .WithExpression(SyntaxFactory.IdentifierName($"{MakeType(r.ContainingType)}.{newName}"))
+                .WithArgumentList(SyntaxFactory.ArgumentList(newList));
         }
 
         if (newName == null)
