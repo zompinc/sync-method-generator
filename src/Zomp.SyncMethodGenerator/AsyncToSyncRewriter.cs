@@ -272,33 +272,14 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
         }
 
-        if (@base.Expression is not MemberAccessExpressionSyntax maes
-            || maes.Name is not IdentifierNameSyntax mins)
-        {
-            return @base;
-        }
-
         var originalSymbol = node.Expression is MemberAccessExpressionSyntax zz ? semanticModel.GetSymbolInfo(zz).Symbol as IMethodSymbol : null;
 
-        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "WithCancellation" or "ConfigureAwait" })
-        {
-            return maes.Expression;
-        }
-
-        if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
-        {
-            newName = RemoveAsync(mins.Identifier.ValueText);
-        }
-        else if (mins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
-        {
-            return @base.ArgumentList.Arguments[0].Expression;
-        }
-        else if (originalSymbol is { IsExtensionMethod: true, ReducedFrom: { } r })
+        if (originalSymbol is { IsExtensionMethod: true, ReducedFrom: { } r })
         {
             var arguments = @base.ArgumentList.Arguments;
             var separators = arguments.GetSeparators();
 
-            var newSeparators = arguments.Count < 2 ? Array.Empty<SyntaxToken>()
+            var newSeparators = arguments.Count < 1 ? Array.Empty<SyntaxToken>()
                 : new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) }
                 .Union(separators);
 
@@ -327,6 +308,26 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base
                 .WithExpression(SyntaxFactory.IdentifierName($"{MakeType(r.ContainingType)}.{newName}"))
                 .WithArgumentList(SyntaxFactory.ArgumentList(newList));
+        }
+
+        if (@base.Expression is not MemberAccessExpressionSyntax maes
+            || maes.Name is not IdentifierNameSyntax mins)
+        {
+            return @base;
+        }
+
+        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "WithCancellation" or "ConfigureAwait" })
+        {
+            return maes.Expression;
+        }
+
+        if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
+        {
+            newName = RemoveAsync(mins.Identifier.ValueText);
+        }
+        else if (mins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
+        {
+            return @base.ArgumentList.Arguments[0].Expression;
         }
 
         if (newName == null)

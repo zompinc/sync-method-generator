@@ -379,4 +379,41 @@ partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task UnwrapExtensionMethod()
+    {
+        var source = """
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests
+{
+    using Extensi.ons123;
+    internal partial class ExtensionMethods
+    {
+        [CreateSyncVersion]
+        public static async Task ZeroParamsAsync(object o, CancellationToken ct) => await o.SomeMethodAsync(ct);
+        [CreateSyncVersion]
+        public static async Task OneParamsAsync(object o, string s, CancellationToken ct) => await o.SomeMethodAsync(s, ct);
+        [CreateSyncVersion]
+        public static async Task TwoParamsAsync(object o, string s, int i, CancellationToken ct) => await o.SomeMethodAsync(s, i, ct);
+    }
+}
+
+namespace Extensi.ons123
+{
+    internal static class MyExtensionClass
+    {
+        public static async Task SomeMethodAsync(this object _, CancellationToken _1) => await Task.CompletedTask;
+        public static void SomeMethod(this object _) { }
+        public static async Task SomeMethodAsync(this object _, string _2, CancellationToken _1) => await Task.CompletedTask;
+        public static void SomeMethod(this object _, string _2) { }
+        public static async Task SomeMethodAsync(this object _, string _2, int _3, CancellationToken _1) => await Task.CompletedTask;
+        public static void SomeMethod(this object _, string _2, int _3) { }
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }
