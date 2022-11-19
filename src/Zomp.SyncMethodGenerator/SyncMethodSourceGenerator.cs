@@ -1,7 +1,7 @@
 ﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
-/// Generates synchronous code from asyncronous
+/// Generates synchronous code from asynchronous
 /// </summary>
 [Generator]
 public class SyncMethodSourceGenerator : IIncrementalGenerator
@@ -11,7 +11,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // To start debygger compile with /p:DefineConstants=DEBUG_SMG
+        // To start debugger compile with /p:DefineConstants=DEBUG_SMG
 #if DEBUG_SMG
         if (!Debugger.IsAttached)
         {
