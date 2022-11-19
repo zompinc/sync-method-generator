@@ -22,10 +22,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             "CreateSyncVersionAttribute.g.cs", SourceText.From(SourceGenerationHelper.Attribute, Encoding.UTF8)));
 
         IncrementalValuesProvider<MethodDeclarationSyntax> methodDeclarations = context.SyntaxProvider
-            .CreateSyntaxProvider(
+            .ForAttributeWithMetadataName(CreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
-            .Where(static m => m is not null)!;
+                transform: static (ctx, _) => (MethodDeclarationSyntax)ctx.TargetNode);
 
         IncrementalValueProvider<(Compilation, ImmutableArray<MethodDeclarationSyntax>)> compilationAndMethods
             = context.CompilationProvider.Combine(methodDeclarations.Collect());
@@ -36,38 +35,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     static bool IsSyntaxTargetForGeneration(SyntaxNode node)
         => node is MethodDeclarationSyntax m && m.AttributeLists.Count > 0;
-
-    static MethodDeclarationSyntax? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
-    {
-        // we know the node is a MethodDeclarationSyntax thanks to IsSyntaxTargetForGeneration
-        var MethodDeclarationSyntax = (MethodDeclarationSyntax)context.Node;
-
-        // loop through all the attributes on the method
-        foreach (var attributeListSyntax in MethodDeclarationSyntax.AttributeLists)
-        {
-            foreach (var attributeSyntax in attributeListSyntax.Attributes)
-            {
-                if (context.SemanticModel.GetSymbolInfo(attributeSyntax).Symbol is not IMethodSymbol attributeSymbol)
-                {
-                    // weird, we couldn't get the symbol, ignore it
-                    continue;
-                }
-
-                var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
-                var fullName = attributeContainingTypeSymbol.ToDisplayString();
-
-                // Is the attribute the [CreateSyncVersion] attribute?
-                if (fullName == CreateSyncVersionAttribute)
-                {
-                    // return the method
-                    return MethodDeclarationSyntax;
-                }
-            }
-        }
-
-        // we didn't find the attribute we were looking for
-        return null;
-    }
 
     static void Execute(Compilation compilation, ImmutableArray<MethodDeclarationSyntax> methods, SourceProductionContext context)
     {
