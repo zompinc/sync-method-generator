@@ -416,4 +416,53 @@ namespace Extensi.ons123
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task UnwrapGenericExtensionMethod()
+    {
+        var source = """
+using System.Drawing;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests
+{
+    using Extensi.ons123;
+    internal partial class Extensions
+    {
+        [CreateSyncVersion]
+        public static async Task HasGenericExtensionAsync(object o, CancellationToken ct)
+        {
+            var z = o.TryGetValue<Point>(out var item);
+        }
+
+        [CreateSyncVersion]
+        public static async Task HasGeneric2ExtensionAsync(object o, CancellationToken ct)
+        {
+            var z = o.TryGetValue<Point, PointF>(out var _, out var _1);
+        }
+    }
+}
+
+namespace Extensi.ons123
+{
+    internal static class MyExtensionClass
+    {
+        public static bool TryGetValue<T>(this object _, out T? item)
+        {
+            item = default;
+            return false;
+        }
+
+        public static bool TryGetValue<T1, T2>(this object _, out T1? item1, out T2? item2)
+        {
+            item1 = default;
+            item2 = default;
+            return false;
+        }
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }

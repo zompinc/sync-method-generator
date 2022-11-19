@@ -305,8 +305,14 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 newName = RemoveAsync(newName);
             }
 
+            var id = SyntaxFactory.Identifier($"{MakeType(r.ContainingType)}.{newName}");
+
+            ExpressionSyntax es = @base.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax gns }
+                ? SyntaxFactory.GenericName(id, gns.TypeArgumentList)
+                : SyntaxFactory.IdentifierName(id);
+
             return @base
-                .WithExpression(SyntaxFactory.IdentifierName($"{MakeType(r.ContainingType)}.{newName}"))
+                .WithExpression(es)
                 .WithArgumentList(SyntaxFactory.ArgumentList(newList));
         }
 
