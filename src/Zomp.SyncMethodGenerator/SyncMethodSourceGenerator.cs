@@ -87,13 +87,32 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         // MethodToGenerate for it, so make sure we have something to generate
         if (methodsToGenerate.Count > 0)
         {
-            // generate the source code and add it to the output
+            // Generate the source code and add it to the output
+
+            var sourceDictionary = new Dictionary<string, string>();
             foreach (var m in methodsToGenerate)
             {
-                context.AddSource($"{string.Join(".", m.Namespaces)}" +
-                    $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
-                    $".{m.MethodName}.g.cs"
-                    , SourceText.From(SourceGenerationHelper.GenerateExtensionClass(m), Encoding.UTF8));
+                // Ensure there are no collisions in generated names
+                var i = 1;
+                for (; ; )
+                {
+                    var sourcePath = $"{string.Join(".", m.Namespaces)}" +
+                        $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
+                        $".{m.MethodName + (i == 1 ? string.Empty : "_" + i)}.g.cs";
+
+                    if (!sourceDictionary.ContainsKey(sourcePath))
+                    {
+                        sourceDictionary.Add(sourcePath, SourceGenerationHelper.GenerateExtensionClass(m));
+                        break;
+                    }
+
+                    ++i;
+                }
+            }
+
+            foreach (var entry in sourceDictionary)
+            {
+                context.AddSource(entry.Key, SourceText.From(entry.Value, Encoding.UTF8));
             }
         }
     }

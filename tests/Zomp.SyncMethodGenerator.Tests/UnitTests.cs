@@ -465,4 +465,29 @@ namespace Extensi.ons123
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task Overloads()
+    {
+        var source = """
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class OverloadsNS
+{
+    [CreateSyncVersion]
+    async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct)
+        => await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
+
+    [CreateSyncVersion]
+    async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes)
+        => await stream.ReadAsync(sampleBytes.AsMemory(0, 123)).ConfigureAwait(false);
+
+""";
+        return TestHelper.Verify(source);
+    }
 }
