@@ -84,9 +84,11 @@ jobs:
     - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.2
 
     - name: Sign Nuget Files
+      if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
       run: .\NuGetKeyVaultSignTool sign packages\*.nupkg -kvt ${{ secrets.AZURE_TENANT_ID }} -kvu ${{ secrets.AZURE_KEY_VAULT_URL }} -kvi ${{ secrets.AZURE_KEY_VAULT_CLIENT_ID }} -kvs ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }} -kvc ${{ secrets.AZURE_KEY_VAULT_CERTIFICATE }} -tr ${{ secrets.TIMESTAMP_RFC3161 }}
 
     - name: Verify signatures
+      if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
       run: .\NuGetKeyVaultSignTool verify packages\*.nupkg
 
     - name: Push to MyGet
@@ -95,4 +97,3 @@ jobs:
     - name: Push to NuGet
       if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
       run: dotnet nuget push packages\*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
-
