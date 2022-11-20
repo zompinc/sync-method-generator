@@ -19,11 +19,24 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Directory.Build.props = Directory.Build.props
 		Directory.Packages.props = Directory.Packages.props
 		NuGet.Config = NuGet.Config
+		package.json = package.json
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Zomp.SyncMethodGenerator.Tests", "tests\Zomp.SyncMethodGenerator.Tests\Zomp.SyncMethodGenerator.Tests.csproj", "{DEB7DF97-43ED-49D6-8C05-6B2681208610}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zomp.SyncMethodGenerator.IntegrationTests", "tests\Zomp.SyncMethodGenerator.IntegrationTests\Zomp.SyncMethodGenerator.IntegrationTests.csproj", "{BDEA21AD-6081-44AC-AD85-63803FDBED89}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Zomp.SyncMethodGenerator.IntegrationTests", "tests\Zomp.SyncMethodGenerator.IntegrationTests\Zomp.SyncMethodGenerator.IntegrationTests.csproj", "{BDEA21AD-6081-44AC-AD85-63803FDBED89}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{12C22879-AE16-4BD4-ADE5-1F97DDEF9E11}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{1C91E12D-2680-4E7D-9A8F-8E4548F49C62}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\build.yml = .github\workflows\build.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".husky", ".husky", "{D10EEA31-447A-4D33-A305-E5274E1B4240}"
+	ProjectSection(SolutionItems) = preProject
+		.husky\pre-commit = .husky\pre-commit
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +64,9 @@ Global
 		{9C4836A5-FD48-4563-AFAF-EC32AD1859BD} = {120EB42D-886C-4640-9C40-89104F84BABE}
 		{DEB7DF97-43ED-49D6-8C05-6B2681208610} = {AE4C95B5-1D26-4B3F-9459-4D0F70099FD5}
 		{BDEA21AD-6081-44AC-AD85-63803FDBED89} = {AE4C95B5-1D26-4B3F-9459-4D0F70099FD5}
+		{12C22879-AE16-4BD4-ADE5-1F97DDEF9E11} = {0504B10E-4B5F-45E9-8661-05057A232157}
+		{1C91E12D-2680-4E7D-9A8F-8E4548F49C62} = {12C22879-AE16-4BD4-ADE5-1F97DDEF9E11}
+		{D10EEA31-447A-4D33-A305-E5274E1B4240} = {0504B10E-4B5F-45E9-8661-05057A232157}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0CDD8FAE-3E18-41AF-8A3B-3E12A09E0E41}
