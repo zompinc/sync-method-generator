@@ -57,6 +57,7 @@ namespace NsOne
         return TestHelper.Verify(source);
     }
 
+#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task MemoryToSpan()
     {
@@ -124,6 +125,7 @@ public partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+#endif
 
 
     [Fact]
@@ -466,6 +468,7 @@ namespace Extensi.ons123
         return TestHelper.Verify(source);
     }
 
+#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task Overloads()
     {
@@ -490,4 +493,5 @@ internal partial class OverloadsNS
 """;
         return TestHelper.Verify(source);
     }
+#endif
 }

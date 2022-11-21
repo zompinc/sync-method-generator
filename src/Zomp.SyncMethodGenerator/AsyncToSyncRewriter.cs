@@ -249,6 +249,17 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         string? newName = null;
         var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+
+        if (symbol is null)
+        {
+            if (@base.Expression is not IdentifierNameSyntax { Identifier.ValueText: "nameof" })
+            {
+                var diag = Diagnostic.Create(CannotRetrieveSymbol, node.GetLocation(), node.ToString(), $"Could not get symbol out of {node}");
+                diagnostics.Add(diag);
+            }
+            return @base;
+        }
+
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async"))
         {
             if (symbol is not IMethodSymbol methodSymbol)
@@ -272,9 +283,8 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
         }
 
-        var originalSymbol = node.Expression is MemberAccessExpressionSyntax zz ? semanticModel.GetSymbolInfo(zz).Symbol as IMethodSymbol : null;
-
-        if (originalSymbol is { IsExtensionMethod: true, ReducedFrom: { } r })
+        if (symbol is IMethodSymbol { IsExtensionMethod: true, ReducedFrom: { } r }
+            && node.Expression is MemberAccessExpressionSyntax zz)
         {
             var arguments = @base.ArgumentList.Arguments;
             var separators = arguments.GetSeparators();
@@ -296,9 +306,13 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             var newList = SyntaxFactory.SeparatedList(new[] { @as }.Union(arguments), newSeparators);
 
             newName = r.Name;
-            if (originalSymbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
+            if (symbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
             {
                 newName = "AsSpan";
+            }
+            else if (symbol is { Name: "WithCancellation", ContainingNamespace.Name: "Tasks" })
+            {
+                return zz.Expression;
             }
             else
             {

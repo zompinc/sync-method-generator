@@ -3,6 +3,7 @@
 [UsesVerify]
 public class IntegrationTesting
 {
+#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task GeneratesSyncMethodCorrectly()
     {
@@ -11,6 +12,8 @@ public class IntegrationTesting
 using System;
 using System.Collections.Generic;
 using Zomp.SyncMethodGenerator;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Test
 {
@@ -56,6 +59,7 @@ namespace Test
         var source = """
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Zomp.SyncMethodGenerator;
 
@@ -64,7 +68,7 @@ namespace Test;
 public partial class Stuff
 {
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    async Task StuffAsync(IAsyncEnumerable<int> range, CancellationToken ct)
+    async Task EnumeratorTestAsync(IAsyncEnumerable<int> range, CancellationToken ct)
     {
         IAsyncEnumerator<int> e = range.GetAsyncEnumerator(ct);
         try
@@ -87,6 +91,7 @@ public partial class Stuff
         var source = """
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Zomp.SyncMethodGenerator;
 
@@ -121,6 +126,7 @@ public partial class Stuff
         var source = """
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Zomp.SyncMethodGenerator;
 
@@ -146,7 +152,6 @@ public partial class Stuff
         return TestHelper.Verify(source);
     }
 
-#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task EagerPreconditionsInAsyncMethod()
     {

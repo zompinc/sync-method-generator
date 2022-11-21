@@ -10,6 +10,8 @@ public class GenericMathTests
         var source = $$"""
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 #if NET7_0_OR_GREATER
 using System.Numerics;
 #endif
