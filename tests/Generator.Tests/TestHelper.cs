@@ -1,4 +1,6 @@
-﻿namespace Zomp.SyncMethodGenerator.Tests;
+﻿using Zomp.SyncMethodGenerator;
+
+namespace Generator.Tests;
 
 public static class TestHelper
 {

@@ -1,4 +1,4 @@
-﻿namespace Zomp.SyncMethodGenerator.Tests;
+﻿namespace Generator.Tests;
 
 [UsesVerify]
 public class UnitTests
@@ -275,7 +275,7 @@ namespace Test;
 partial class Stuff
 {
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    [CreateSyncVersion]
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public async Task<int> GetColorAsync(FileAccess access = FileAccess.Read)
         => await Task.FromResult(1);
 }
@@ -392,11 +392,11 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     using Extensi.ons123;
     internal partial class ExtensionMethods
     {
-        [CreateSyncVersion]
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         public static async Task ZeroParamsAsync(object o, CancellationToken ct) => await o.SomeMethodAsync(ct);
-        [CreateSyncVersion]
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         public static async Task OneParamsAsync(object o, string s, CancellationToken ct) => await o.SomeMethodAsync(s, ct);
-        [CreateSyncVersion]
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         public static async Task TwoParamsAsync(object o, string s, int i, CancellationToken ct) => await o.SomeMethodAsync(s, i, ct);
     }
 }
@@ -430,13 +430,13 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     using Extensi.ons123;
     internal partial class Extensions
     {
-        [CreateSyncVersion]
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         public static async Task HasGenericExtensionAsync(object o, CancellationToken ct)
         {
             var z = o.TryGetValue<Point>(out var item);
         }
 
-        [CreateSyncVersion]
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         public static async Task HasGeneric2ExtensionAsync(object o, CancellationToken ct)
         {
             var z = o.TryGetValue<Point, PointF>(out var _, out var _1);
@@ -479,11 +479,11 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests;
 
 internal partial class OverloadsNS
 {
-    [CreateSyncVersion]
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
     async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct)
         => await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
 
-    [CreateSyncVersion]
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
     async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes)
         => await stream.ReadAsync(sampleBytes.AsMemory(0, 123)).ConfigureAwait(false);
 

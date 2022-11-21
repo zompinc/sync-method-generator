@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-namespace Zomp.SyncMethodGenerator.IntegrationTests;
+namespace GenerationSandbox.Tests;
 
 public static partial class AsyncExtensions
 {
@@ -18,7 +18,7 @@ public static partial class AsyncExtensions
     /// <remarks>
     /// Credit: modified from https://www.codeguru.co.in/2021/06/moving-average-in-c-using-linq.html
     /// </remarks>
-    [CreateSyncVersion]
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public static async IAsyncEnumerable<double> MovingAverageAsync(this IAsyncEnumerable<double> source, int windowSize, IProgress<int>? progress = null, [EnumeratorCancellation] CancellationToken ct = default)
     {
         var queue = new Queue<double>(windowSize);

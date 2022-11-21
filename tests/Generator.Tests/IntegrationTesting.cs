@@ -1,4 +1,4 @@
-﻿namespace Zomp.SyncMethodGenerator.Tests;
+﻿namespace Generator.Tests;
 
 [UsesVerify]
 public class IntegrationTesting

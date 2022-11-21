@@ -1,7 +1,7 @@
 ﻿using System.Linq;
 using Xunit;
 
-namespace Zomp.SyncMethodGenerator.IntegrationTests;
+namespace GenerationSandbox.Tests;
 public class SyncTests
 {
     [Fact]

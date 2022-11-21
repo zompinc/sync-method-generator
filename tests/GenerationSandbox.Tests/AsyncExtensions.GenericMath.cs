@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Zomp.SyncMethodGenerator.IntegrationTests;
+namespace GenerationSandbox.Tests;
 public static partial class AsyncExtensions
 {
     /// <summary>

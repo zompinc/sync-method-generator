@@ -22,9 +22,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		package.json = package.json
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Zomp.SyncMethodGenerator.Tests", "tests\Zomp.SyncMethodGenerator.Tests\Zomp.SyncMethodGenerator.Tests.csproj", "{DEB7DF97-43ED-49D6-8C05-6B2681208610}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Generator.Tests", "tests\Generator.Tests\Generator.Tests.csproj", "{DEB7DF97-43ED-49D6-8C05-6B2681208610}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Zomp.SyncMethodGenerator.IntegrationTests", "tests\Zomp.SyncMethodGenerator.IntegrationTests\Zomp.SyncMethodGenerator.IntegrationTests.csproj", "{BDEA21AD-6081-44AC-AD85-63803FDBED89}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GenerationSandbox.Tests", "tests\GenerationSandbox.Tests\GenerationSandbox.Tests.csproj", "{BDEA21AD-6081-44AC-AD85-63803FDBED89}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{12C22879-AE16-4BD4-ADE5-1F97DDEF9E11}"
 EndProject
