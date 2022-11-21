@@ -31,7 +31,7 @@ namespace Zomp.SyncMethodGenerator
                 SyntaxKind.SealedKeyword => "sealed",
                 SyntaxKind.ProtectedKeyword => "protected",
                 SyntaxKind.StaticKeyword => "static",
-                _ => throw new InvalidOperationException($"Can't parse {sk}"),
+                _ => throw new InvalidOperationException($"{sk} is not supported"),
             };
         }
 

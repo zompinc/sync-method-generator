@@ -69,7 +69,17 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
                     if (!sourceDictionary.ContainsKey(sourcePath))
                     {
-                        sourceDictionary.Add(sourcePath, SourceGenerationHelper.GenerateExtensionClass(m));
+                        string source;
+                        try
+                        {
+                            source = SourceGenerationHelper.GenerateExtensionClass(m);
+                        }
+                        catch (Exception ex)
+                        {
+                            context.ReportDiagnostic(Diagnostic.Create(ExceptionOccured, location: null, ex.ToString()));
+                            break;
+                        }
+                        sourceDictionary.Add(sourcePath, source);
                         break;
                     }
 
