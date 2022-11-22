@@ -31,6 +31,7 @@ public static class TestHelper
 
         var locations = new[] {
             typeof(IAsyncEnumerable<>).Assembly.Location,
+            typeof(ValueTask<>).Assembly.Location,
             typeof(System.Drawing.Point).Assembly.Location,
             typeof(object).Assembly.Location,
             typeof(Console).Assembly.Location,

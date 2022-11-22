@@ -51,6 +51,7 @@ namespace Test
         // Pass the source code to our helper and snapshot test the output
         return TestHelper.Verify(source);
     }
+#endif
 
     [Fact]
     public Task WithIAsyncEnumerator()
@@ -119,6 +120,7 @@ public partial class Stuff
         return TestHelper.Verify(source);
     }
 
+#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task ChecksumRead()
     {
