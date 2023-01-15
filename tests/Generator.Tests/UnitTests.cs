@@ -420,6 +420,35 @@ namespace Extensi.ons123
     }
 
     [Fact]
+    public Task Preprocessor()
+    {
+        var source = """
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+public partial class Stuff
+{
+#if true
+#else
+#endif
+#region R1
+#if true
+    /// <summary>
+    /// A summary
+    /// </summary>
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task WrappedAsync() => await Task.CompletedTask;
+#endif
+#endregion
+}
+
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task UnwrapGenericExtensionMethod()
     {
         var source = """

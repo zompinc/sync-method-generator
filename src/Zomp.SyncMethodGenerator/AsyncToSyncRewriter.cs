@@ -557,6 +557,24 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             newTriviaList = trivia.Replace(comments, newTrivia);
         }
 
+        bool preprocessors(SyntaxTrivia st)
+        {
+            return st.IsKind(SyntaxKind.IfDirectiveTrivia)
+                || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
+                || st.IsKind(SyntaxKind.ElseDirectiveTrivia)
+                || st.IsKind(SyntaxKind.EndIfDirectiveTrivia)
+                || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
+                || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia);
+        }
+
+        var z = newTriviaList.Where(preprocessors).ToList();
+
+        while (newTriviaList.FirstOrDefault(preprocessors) is { } preprocessor
+            && preprocessor != default)
+        {
+            newTriviaList = newTriviaList.Remove(preprocessor);
+        }
+
         var newReturnType = isTask
             ? SyntaxFactory.IdentifierName("void")
                 .WithTriviaFrom(returnType)
