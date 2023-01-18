@@ -3,7 +3,7 @@
 /// <summary>
 /// Rewrites a method synchronously
 /// </summary>
-public class AsyncToSyncRewriter : CSharpSyntaxRewriter
+internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 {
     private readonly SemanticModel semanticModel;
     readonly HashSet<string> removedParameters = new();
@@ -150,7 +150,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var newNode = @base;
 
         var identifier = @base.Identifier;
-        if (identifier.ValueText.EndsWith("Async"))
+        if (identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
         {
             var newName = RemoveAsync(identifier.ValueText);
             renamedLocalFunctions.Add(identifier.ValueText, newName);
@@ -234,7 +234,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
         {
             return @base.Expression;
         }
-        else if (@base.Name.Identifier.ValueText.EndsWith("Async"))
+        else if (@base.Name.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
         {
             return @base.WithName(SyntaxFactory.IdentifierName(RemoveAsync(@base.Name.Identifier.ValueText)));
         }
@@ -260,7 +260,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base;
         }
 
-        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async"))
+        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
         {
             if (symbol is not IMethodSymbol methodSymbol)
                 throw new InvalidOperationException($"Could not get symbol of {node}");
@@ -341,7 +341,7 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return maes.Expression;
         }
 
-        if (mins.Identifier.ValueText.EndsWith("Async") || mins.Identifier.ValueText == "GetAsyncEnumerator")
+        if (mins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase) || mins.Identifier.ValueText == "GetAsyncEnumerator")
         {
             newName = RemoveAsync(mins.Identifier.ValueText);
         }
