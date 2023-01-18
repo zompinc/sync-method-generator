@@ -564,7 +564,8 @@ public class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 || st.IsKind(SyntaxKind.ElseDirectiveTrivia)
                 || st.IsKind(SyntaxKind.EndIfDirectiveTrivia)
                 || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
-                || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia);
+                || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
+                || st.IsKind(SyntaxKind.DisabledTextTrivia);
         }
 
         var z = newTriviaList.Where(preprocessors).ToList();

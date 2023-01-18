@@ -430,6 +430,9 @@ namespace Test;
 
 public partial class Stuff
 {
+#if false
+These comments shouldn't show
+#endif
 #if true
 #else
 #endif
