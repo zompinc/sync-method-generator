@@ -80,6 +80,34 @@ public partial class Stuff
         return TestHelper.Verify(source);
     }
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public Task MemorySpanProperty(bool explicitType)
+    {
+        var typeName = explicitType ? "Memory<byte>" : "var";
+        // The source code to test
+        var source = $$"""
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+public partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    private async Task MakeArray(byte[] sampleBytes, CancellationToken ct = default)
+    {
+        {{typeName}} mem = sampleBytes.AsMemory(0, 123);
+        var arr = mem.Span.ToArray();
+    }
+}
+""";
+        return TestHelper.Verify(source, false, explicitType);
+    }
+
     [Fact]
     public Task MemoryToSpanWithBody()
     {

@@ -4,7 +4,7 @@ namespace Generator.Tests;
 
 public static class TestHelper
 {
-    public static Task Verify(string source, bool uniqueForFramework = false)
+    public static Task Verify(string source, bool uniqueForFramework = false, params object?[] parameters)
     {
         var preprocessorSymbols = new string[]
         {
@@ -71,6 +71,11 @@ public static class TestHelper
         if (uniqueForFramework)
         {
             verifier = verifier.UniqueForTargetFrameworkAndVersion();
+        }
+
+        if (parameters.Length > 0)
+        {
+            verifier = verifier.UseParameters(parameters);
         }
 
         return verifier;

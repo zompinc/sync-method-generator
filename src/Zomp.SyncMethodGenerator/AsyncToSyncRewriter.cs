@@ -638,6 +638,25 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node)
     {
         var @base = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node)!;
+
+        var variableTypeName = node.Declaration.Type;
+
+        var variableType = semanticModel
+            .GetSymbolInfo(variableTypeName)
+            .Symbol;
+
+        if (variableType is INamedTypeSymbol { IsGenericType: true } n)
+        {
+            var name = n.ToString();
+            if (name.StartsWith(ReadOnlyMemory) || name.StartsWith(Memory))
+            {
+                foreach (var variable in node.Declaration.Variables)
+                {
+                    memoryToSpan.Add(variable.Identifier.Text);
+                }
+            }
+        }
+
         return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
     }
 
