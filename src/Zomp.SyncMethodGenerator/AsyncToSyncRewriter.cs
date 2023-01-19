@@ -294,7 +294,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 .Union(separators);
 
             ArgumentSyntax @as;
-            if (node.Expression is MemberAccessExpressionSyntax maes2)
+            if (@base.Expression is MemberAccessExpressionSyntax maes2)
             {
                 @as = SyntaxFactory.Argument(maes2.Expression);
             }
