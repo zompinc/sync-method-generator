@@ -260,11 +260,11 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base;
         }
 
+        if (symbol is not IMethodSymbol methodSymbol)
+            throw new InvalidOperationException($"Could not get symbol of {node}");
+
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
         {
-            if (symbol is not IMethodSymbol methodSymbol)
-                throw new InvalidOperationException($"Could not get symbol of {node}");
-
             newName = RemoveAsync(ins.Identifier.ValueText);
 
             var siblings = methodSymbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
@@ -283,7 +283,22 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
         }
 
-        if (symbol is IMethodSymbol { IsExtensionMethod: true, ReducedFrom: { } r }
+        var returnType = methodSymbol.ReturnType;
+        var typeString = returnType.ToString();
+
+        var isMemory = typeString.StartsWith(ReadOnlyMemory) || typeString.StartsWith(Memory);
+
+        string? GetNewName(string name)
+        {
+            var containingType = methodSymbol.ContainingType;
+            var replacement = Regex.Replace(name, "Memory", "Span");
+            var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
+            if (newSymbol is null)
+                return null;
+            return replacement;
+        }
+
+        if (methodSymbol is { IsExtensionMethod: true, ReducedFrom: { } reducedFrom }
             && node.Expression is MemberAccessExpressionSyntax zz)
         {
             var arguments = @base.ArgumentList.Arguments;
@@ -305,10 +320,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
             var newList = SyntaxFactory.SeparatedList(new[] { @as }.Union(arguments), newSeparators);
 
-            newName = r.Name;
-            if (symbol is { Name: "AsMemory", ContainingNamespace.Name: "System" })
+            newName = reducedFrom.Name;
+            if (isMemory)
             {
-                newName = "AsSpan";
+                newName = GetNewName(symbol.Name);
             }
             else if (symbol is { Name: "WithCancellation", ContainingNamespace.Name: "Tasks" })
             {
@@ -319,7 +334,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 newName = RemoveAsync(newName);
             }
 
-            var id = SyntaxFactory.Identifier($"{MakeType(r.ContainingType)}.{newName}");
+            var id = SyntaxFactory.Identifier($"{MakeType(reducedFrom.ContainingType)}.{newName}");
 
             ExpressionSyntax es = @base.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax gns }
                 ? SyntaxFactory.GenericName(id, gns.TypeArgumentList)
@@ -330,13 +345,18 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 .WithArgumentList(SyntaxFactory.ArgumentList(newList));
         }
 
+        if (isMemory)
+        {
+            newName = GetNewName(symbol.Name);
+        }
+
         if (@base.Expression is not MemberAccessExpressionSyntax maes
             || maes.Name is not IdentifierNameSyntax mins)
         {
             return @base;
         }
 
-        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "WithCancellation" or "ConfigureAwait" })
+        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "ConfigureAwait" })
         {
             return maes.Expression;
         }

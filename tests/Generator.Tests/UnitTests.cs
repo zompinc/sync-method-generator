@@ -549,7 +549,38 @@ internal partial class OverloadsNS
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes)
         => await stream.ReadAsync(sampleBytes.AsMemory(0, 123)).ConfigureAwait(false);
+}
+""";
+        return TestHelper.Verify(source);
+    }
 
+    [Fact]
+    public Task FindsASpan()
+    {
+        var source = """
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class Stuff
+{
+    class ClassThatReturnsMemoryAndSpan
+    {
+        public Memory<byte> GetMemory(int sizeHint = 0) => throw new NotImplementedException();
+        public Span<byte> GetSpan(int sizeHint = 0) => throw new NotImplementedException();
+    }
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    private async Task GetMemoryOrSpanAsync()
+    {
+        var instance = new ClassThatReturnsMemoryAndSpan();
+        Memory<byte> mem = instance.GetMemory();
+        var arr = mem.Span.ToArray();
+    }
+}
 """;
         return TestHelper.Verify(source);
     }
