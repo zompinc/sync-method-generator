@@ -2,9 +2,8 @@
 
 public static class ModuleInitializer
 {
-#if NET5_0_OR_GREATER
     [System.Runtime.CompilerServices.ModuleInitializer]
-#endif
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2255:The 'ModuleInitializer' attribute should not be used in libraries", Justification = "This is a testing project")]
     public static void Initialize()
     {
         VerifySourceGenerators.Enable();
