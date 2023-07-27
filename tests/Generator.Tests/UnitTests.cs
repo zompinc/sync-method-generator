@@ -29,6 +29,23 @@ namespace NsOne
     }
 
     [Fact]
+    public Task GenericClass()
+    {
+        // The source code to test
+        var source = """
+namespace Test;
+partial class GenericClass<T1, T2> where T1 : struct where T2 : class
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    async void EmptyAsync()
+    {
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task MultipleClasses()
     {
         // The source code to test

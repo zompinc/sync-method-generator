@@ -66,7 +66,8 @@ namespace Zomp.SyncMethodGenerator
             var indent = new string(' ', 4 * i);
 
             var modifiers = string.Join(string.Empty, @class.Modifiers.Select(z => GetKeyword(z) + " "));
-            var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}";
+            var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}{(@class.TypeParameterListSyntax is null ? ""
+                : "<" + string.Join(", ", @class.TypeParameterListSyntax.Parameters.Select(z => z.ToString())) + ">")}";
 
             sbBegin.Append($$"""
 {{indent}}{{classDeclarationLine}}

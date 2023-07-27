@@ -159,7 +159,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                         continue;
                     modifiers.Add((SyntaxKind)kind);
                 }
-                classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers));
+
+                classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers, classSyntax.TypeParameterList));
             }
 
             if (partialMissing is not null)

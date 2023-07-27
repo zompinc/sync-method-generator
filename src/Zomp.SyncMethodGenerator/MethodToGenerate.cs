@@ -20,4 +20,5 @@ public record MethodToGenerate(
 /// </summary>
 /// <param name="ClassName">Class name</param>
 /// <param name="Modifiers">A list of modifiers</param>
-public record Class(string ClassName, IEnumerable<SyntaxKind> Modifiers);
+/// <param name="TypeParameterListSyntax">A list of type parameters</param>
+public record Class(string ClassName, IEnumerable<SyntaxKind> Modifiers, TypeParameterListSyntax? TypeParameterListSyntax);

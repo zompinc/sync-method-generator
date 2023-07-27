@@ -8,7 +8,7 @@ namespace GenerationSandbox.Tests;
 public static partial class AsyncExtensions
 {
     /// <summary>
-    /// Calulates rolling average
+    /// Calculates rolling average
     /// </summary>
     /// <param name="source">Items to average</param>
     /// <param name="windowSize">Size of averaging window</param>
