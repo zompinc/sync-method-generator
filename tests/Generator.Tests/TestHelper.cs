@@ -1,4 +1,5 @@
 ﻿using Zomp.SyncMethodGenerator;
+using static Generator.Tests.ModuleInitializer;
 
 namespace Generator.Tests;
 
@@ -64,8 +65,14 @@ public static class TestHelper
             throw new InvalidOperationException("Nothing generated");
         }
 
+        var target = new RunResultWithIgnoreList
+        {
+            Result = driver.GetRunResult(),
+            IgnoredFiles = { "CreateSyncVersionAttribute.g.cs" }
+        };
+
         var verifier = Verifier
-            .Verify(driver)
+            .Verify(target)
             .UseDirectory("Snapshots");
 
         if (uniqueForFramework)
