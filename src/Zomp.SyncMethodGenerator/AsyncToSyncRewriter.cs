@@ -15,7 +15,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     const string Memory = "System.Memory";
     const string TaskType = "System.Threading.Tasks.Task";
     const string ValueTaskType = "System.Threading.Tasks.ValueTask";
+    const string IProgressType = "System.IProgress";
+    const string CancellationTokenType = "System.Threading.CancellationToken";
 
+    private static readonly HashSet<string> Drops = new(new[] { IProgressType, CancellationTokenType });
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
@@ -25,6 +28,8 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         { ReadOnlyMemory, "System.ReadOnlySpan"},
         { Memory, "System.Span"},
     };
+
+    ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
 
     /// <summary>
     /// Diagnostics
@@ -47,7 +52,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             _ => symbol.Name,
         };
 
-    static TypeSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
+    static IdentifierNameSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
     {
         INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
         IArrayTypeSymbol ats => SyntaxFactory.IdentifierName(MakeType(ats.ElementType) + "[]"),
@@ -98,7 +103,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
 
-        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+        var symbol = GetSymbol(node);
 
         static string? convert(string key)
             => Replacements.TryGetValue(key, out var replacement) ? replacement : key;
@@ -186,7 +191,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 return true;
             }
 
-            if (nts.Name is "CancellationToken" or "IProgress")
+            if (ShouldRemoveType(nts))
             {
                 removedParameters.Add(ps.Identifier.ValueText);
                 return false;
@@ -195,11 +200,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return true;
         }
 
-        var invalid = node.Parameters
-            .Select((ps, i) => new { ps, i })
-            .Where(v => !isValidParameter(v.ps))
-            .Select(t => t.i);
-
+        var invalid = node.Parameters.GetIndices(v => !isValidParameter(v));
         var newParams = RemoveAtRange(newnode.Parameters, invalid);
         return newnode.WithParameters(newParams);
     }
@@ -248,7 +249,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
         string? newName = null;
-        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+        var symbol = GetSymbol(node);
 
         if (symbol is null)
         {
@@ -376,28 +377,14 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     }
 
     bool NeedToDrop(ExpressionSyntax expr)
-    {
-        if (expr is IdentifierNameSyntax ins)
+        => expr switch
         {
-            var result = removedParameters.Contains(ins.Identifier.ValueText);
-            return result;
-        }
-
-        if (expr is ConditionalAccessExpressionSyntax cae)
-        {
-            return NeedToDrop(cae.Expression);
-        }
-
-        if (expr is InvocationExpressionSyntax ies)
-        {
-            return NeedToDrop(ies.Expression);
-        }
-        if (expr is MemberAccessExpressionSyntax mes)
-        {
-            return NeedToDrop(mes.Expression);
-        }
-        return false;
-    }
+            IdentifierNameSyntax ins => removedParameters.Contains(ins.Identifier.ValueText),
+            ConditionalAccessExpressionSyntax cae => NeedToDrop(cae.Expression),
+            InvocationExpressionSyntax ie => NeedToDrop(ie.Expression),
+            MemberAccessExpressionSyntax me => NeedToDrop(me.Expression),
+            _ => false,
+        };
 
     static bool CanDropIf(IfStatementSyntax ifst)
     {
@@ -432,7 +419,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
     {
         var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
-        var symbol = semanticModel.GetSymbolInfo(node).Symbol;
+        var symbol = GetSymbol(node);
         if (symbol is null
             or { ContainingType.IsGenericType: true }
             or INamedTypeSymbol { IsGenericType: true })
@@ -445,9 +432,26 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var @base = (BlockSyntax)base.VisitBlock(node)!;
         var i = 0;
-        var indicies = new List<int>();
+        var indicies = new HashSet<int>();
+
+        foreach (var statement in node.Statements)
+        {
+            if (statement is LocalDeclarationStatementSyntax { Declaration.Variables: { Count: 1 } vars } lds)
+            {
+                var first = vars[0];
+                var symbol = GetSymbol(lds.Declaration.Type);
+                if (symbol is not null && ShouldRemoveArgument(symbol))
+                {
+                    indicies.Add(i);
+                }
+            }
+            ++i;
+        }
+
+        var @base = (BlockSyntax)base.VisitBlock(node)!;
+
+        i = 0;
         foreach (var statement in @base.Statements)
         {
             if (statement is ExpressionStatementSyntax ess)
@@ -634,14 +638,39 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         return newContent;
     }
 
+    static bool ShouldRemoveType(ITypeSymbol symbol)
+    {
+        foreach (var @interface in symbol.Interfaces)
+        {
+            var genericName = GetNameWithoutTypeParams(@interface);
+            if (genericName == IProgressType)
+                return true;
+        }
+        var @base = GetNameWithoutTypeParams(symbol);
+        return Drops.Contains(@base);
+    }
+
+    static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
+    {
+        ITypeSymbol ts => ShouldRemoveType(ts),
+        ILocalSymbol ls => ShouldRemoveType(ls.Type),
+        IParameterSymbol ps => ShouldRemoveType(ps.Type),
+        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType),
+        _ => false,
+    };
+
+    bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
+    {
+        IdentifierNameSyntax or InvocationExpressionSyntax => semanticModel.GetSymbolInfo(expr).Symbol is ISymbol symbol && ShouldRemoveArgument(symbol),
+        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
+        _ => false,
+    };
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
     {
         var @base = (ArgumentListSyntax)base.VisitArgumentList(node)!;
-        var invalid = node.Arguments
-            .Select((ps, i) => new { ps, i })
-            .Where(v => removedParameters.Contains(v.ps.ToString()))
-            .Select(t => t.i);
+        var invalid = node.Arguments.GetIndices(v => ShouldRemoveArgument(v.Expression));
 
         var newList = RemoveAtRange(@base.Arguments, invalid);
         return @base.WithArguments(newList);

@@ -602,4 +602,101 @@ internal partial class Stuff
         return TestHelper.Verify(source);
     }
 #endif
+
+    [Fact]
+    public Task DropIProgressArgument()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class Stuff
+{
+    public static async Task WithIProgress()
+    {
+    }
+
+    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+    {
+    }
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task CallWithIProgressAsync()
+    {
+        var progress = new Progress<float>();
+        await WithIProgressAsync(progress);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task DropIProgressExpressionArgument()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class Stuff
+{
+    public static async Task WithIProgress()
+    {
+    }
+
+    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+    {
+    }
+
+    bool someBool = true;
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task CallWithIProgressAsync()
+    {
+        var progress = new Progress<float>();
+        await WithIProgressAsync((someBool) ? progress : null);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task DropIProgressMethodArgument()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class Stuff
+{
+    public static async Task WithIProgress()
+    {
+    }
+
+    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+    {
+    }
+
+    static IProgress<T> SomeMethod<T>(IProgress<T> p) => p;
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task CallWithIProgressAsync()
+    {
+        var progress = new Progress<float>();
+        await WithIProgressAsync(SomeMethod(progress));
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 }
