@@ -219,7 +219,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
 
-        var symbol = semanticModel.GetSymbolInfo(node.Expression).Symbol;
+        var symbol = GetSymbol(node.Expression);
         if (symbol is ITypeSymbol && node.Expression is TypeSyntax type)
         {
             // Rewrite static invocation (eg. File.ReadAllTextAsync)
@@ -439,7 +439,6 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         {
             if (statement is LocalDeclarationStatementSyntax { Declaration.Variables: { Count: 1 } vars } lds)
             {
-                var first = vars[0];
                 var symbol = GetSymbol(lds.Declaration.Type);
                 if (symbol is not null && ShouldRemoveArgument(symbol))
                 {
@@ -534,7 +533,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         bool ShouldPreserveAttribute(AttributeSyntax attributeSyntax)
         {
-            if (semanticModel.GetSymbolInfo(attributeSyntax).Symbol is not IMethodSymbol attributeSymbol)
+            if (GetSymbol(attributeSyntax) is not IMethodSymbol attributeSymbol)
             {
                 return false;
             }
@@ -640,6 +639,11 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
     static bool ShouldRemoveType(ITypeSymbol symbol)
     {
+        if (symbol is IArrayTypeSymbol at)
+        {
+            return ShouldRemoveType(at.ElementType);
+        }
+
         foreach (var @interface in symbol.Interfaces)
         {
             var genericName = GetNameWithoutTypeParams(@interface);
@@ -652,6 +656,8 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
     static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
+        IFieldSymbol fs => ShouldRemoveType(fs.Type),
+        IPropertySymbol ps => ShouldRemoveType(ps.Type),
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
@@ -659,10 +665,21 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         _ => false,
     };
 
+    bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
+        => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
+
     bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
     {
-        IdentifierNameSyntax or InvocationExpressionSyntax => semanticModel.GetSymbolInfo(expr).Symbol is ISymbol symbol && ShouldRemoveArgument(symbol),
+        ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
+        BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left) || ShouldRemoveArgument(be.Right),
+        CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression),
+        ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
+        IdentifierNameSyntax or InvocationExpressionSyntax => HasSymbolAndShouldBeRemoved(expr),
         ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
+        MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
+        PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
+        PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
+        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
         _ => false,
     };
 

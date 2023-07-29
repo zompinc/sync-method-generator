@@ -19,6 +19,12 @@
     <None Include="GenericMathTests.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="Snapshots\.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Snapshots\.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="PolySharp">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

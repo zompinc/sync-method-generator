@@ -122,7 +122,7 @@ public partial class Stuff
     }
 }
 """;
-        return TestHelper.Verify(source, false, explicitType);
+        return TestHelper.Verify(source, false, false, explicitType);
     }
 
     [Fact]
@@ -603,10 +603,24 @@ internal partial class Stuff
     }
 #endif
 
-    [Fact]
-    public Task DropIProgressArgument()
+    [Theory]
+    [InlineData("progress")]
+    [InlineData("progress as IProgress<float>")]
+    [InlineData("ProgressFunc(progress)")]
+    [InlineData("(Progress<float>)progress")]
+    [InlineData("(progress)")]
+    [InlineData("someBool ? progress : null")]
+    [InlineData("someBool ? null : progress")]
+    [InlineData("classWithProgress.Property")]
+    [InlineData("array[0]")]
+    [InlineData("customProgress++")]
+    [InlineData("customProgress + customProgress")]
+    [InlineData("(Progress<float>)classWithProgress")]
+    [InlineData("new CustomProgress()")]
+    [InlineData("SomeMethod(progress)")]
+    public Task DropIProgressExpressionArgument(string callArgument)
     {
-        var source = """
+        var source = $$"""
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -623,69 +637,29 @@ internal partial class Stuff
     {
     }
 
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public static async Task CallWithIProgressAsync()
-    {
-        var progress = new Progress<float>();
-        await WithIProgressAsync(progress);
-    }
-}
-""";
-        return TestHelper.Verify(source);
-    }
-
-    [Fact]
-    public Task DropIProgressExpressionArgument()
-    {
-        var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Zomp.SyncMethodGenerator.IntegrationTests;
-
-internal partial class Stuff
-{
-    public static async Task WithIProgress()
-    {
-    }
-
-    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
-    {
-    }
+    static Func<IProgress<float>?, IProgress<float>?> ProgressFunc = (p) => p;
 
     bool someBool = true;
 
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public static async Task CallWithIProgressAsync()
+    class ClassWithProgress
     {
-        var progress = new Progress<float>();
-        await WithIProgressAsync((someBool) ? progress : null);
-    }
-}
-""";
-        return TestHelper.Verify(source);
+        Progress<float> pg = new();
+        public Progress<float> Property => pg;
+        public static implicit operator Progress<float>(ClassWithProgress a) => a.pg;
     }
 
-    [Fact]
-    public Task DropIProgressMethodArgument()
+    class CustomProgress : IProgress<float>
     {
-        var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Zomp.SyncMethodGenerator.IntegrationTests;
-
-internal partial class Stuff
-{
-    public static async Task WithIProgress()
-    {
+        public static CustomProgress operator ++(CustomProgress a) => a;
+        public static CustomProgress operator +(CustomProgress a, CustomProgress b) => a;
+        public void Report(float value) => throw new NotImplementedException();
     }
 
-    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
-    {
-    }
+    static CustomProgress customProgress = new();
+
+    static Progress<float>[] array = Array.Empty<Progress<float>>();
+
+    static ClassWithProgress classWithProgress = new();
 
     static IProgress<T> SomeMethod<T>(IProgress<T> p) => p;
 
@@ -693,10 +667,10 @@ internal partial class Stuff
     public static async Task CallWithIProgressAsync()
     {
         var progress = new Progress<float>();
-        await WithIProgressAsync(SomeMethod(progress));
+        await WithIProgressAsync({{callArgument}});
     }
 }
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, false, true);
     }
 }
