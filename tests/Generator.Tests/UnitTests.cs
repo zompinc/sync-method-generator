@@ -103,6 +103,7 @@ public partial class Stuff
     public Task MemorySpanProperty(bool explicitType)
     {
         var typeName = explicitType ? "Memory<byte>" : "var";
+
         // The source code to test
         var source = $$"""
 using System;
@@ -171,7 +172,6 @@ public partial class Stuff
         return TestHelper.Verify(source);
     }
 #endif
-
 
     [Fact]
     public Task NonPredefinedTypes()
@@ -331,7 +331,7 @@ partial class Stuff
     }
 
     [Fact]
-    public Task TaskOfArayOfGeneric()
+    public Task TaskOfArrayOfGeneric()
     {
         var source = """
 using System.Collections.Generic;

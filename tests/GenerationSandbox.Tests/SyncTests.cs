@@ -2,6 +2,7 @@
 using Xunit;
 
 namespace GenerationSandbox.Tests;
+
 public class SyncTests
 {
     [Fact]

@@ -1,7 +1,7 @@
 ﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
-/// Generates synchronous code from asynchronous
+/// Generates synchronous code from asynchronous.
 /// </summary>
 [Generator]
 public class SyncMethodSourceGenerator : IIncrementalGenerator
@@ -22,21 +22,23 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             "CreateSyncVersionAttribute.g.cs", SourceText.From(SourceGenerationHelper.Attribute, Encoding.UTF8)));
 
         IncrementalValuesProvider<MethodDeclarationSyntax> methodDeclarations = context.SyntaxProvider
-            .ForAttributeWithMetadataName(CreateSyncVersionAttribute,
+            .ForAttributeWithMetadataName(
+                CreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
                 transform: static (ctx, _) => (MethodDeclarationSyntax)ctx.TargetNode);
 
         IncrementalValueProvider<(Compilation, ImmutableArray<MethodDeclarationSyntax>)> compilationAndMethods
             = context.CompilationProvider.Combine(methodDeclarations.Collect());
 
-        context.RegisterSourceOutput(compilationAndMethods,
+        context.RegisterSourceOutput(
+            compilationAndMethods,
             static (spc, source) => Execute(source.Item1, source.Item2, spc));
     }
 
-    static bool IsSyntaxTargetForGeneration(SyntaxNode node)
+    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
         => node is MethodDeclarationSyntax m && m.AttributeLists.Count > 0;
 
-    static void Execute(Compilation compilation, ImmutableArray<MethodDeclarationSyntax> methods, SourceProductionContext context)
+    private static void Execute(Compilation compilation, ImmutableArray<MethodDeclarationSyntax> methods, SourceProductionContext context)
     {
         if (methods.IsDefaultOrEmpty)
         {
@@ -55,13 +57,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         if (methodsToGenerate.Count > 0)
         {
             // Generate the source code and add it to the output
-
             var sourceDictionary = new Dictionary<string, string>();
             foreach (var m in methodsToGenerate)
             {
                 // Ensure there are no collisions in generated names
                 var i = 1;
-                for (; ; )
+                while (true)
                 {
                     var sourcePath = $"{string.Join(".", m.Namespaces)}" +
                         $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
@@ -69,16 +70,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
                     if (!sourceDictionary.ContainsKey(sourcePath))
                     {
-                        string source;
-                        try
-                        {
-                            source = SourceGenerationHelper.GenerateExtensionClass(m);
-                        }
-                        catch (Exception ex)
-                        {
-                            context.ReportDiagnostic(Diagnostic.Create(ExceptionOccured, location: null, ex.ToString()));
-                            break;
-                        }
+                        var source = SourceGenerationHelper.GenerateExtensionClass(m);
                         sourceDictionary.Add(sourcePath, source);
                         break;
                     }
@@ -94,7 +86,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         }
     }
 
-    static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
+    private static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
     {
         var methodsToGenerate = new List<MethodToGenerate>();
         INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(CreateSyncVersionAttribute);
@@ -130,23 +122,17 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 {
                     continue;
                 }
+
                 break;
             }
 
-            var classes = new List<Class>();
+            var classes = new List<ClassDeclaration>();
             SyntaxNode? node = methodDeclarationSyntax;
-            ClassDeclarationSyntax? partialMissing = null;
             while (node.Parent is not null)
             {
                 node = node.Parent;
                 if (node is not ClassDeclarationSyntax classSyntax)
                 {
-                    break;
-                }
-
-                if (!classSyntax.Modifiers.Any(SyntaxKind.PartialKeyword))
-                {
-                    partialMissing = classSyntax;
                     break;
                 }
 
@@ -156,17 +142,14 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 {
                     var kind = mod.RawKind;
                     if (kind == (int)SyntaxKind.PartialKeyword)
+                    {
                         continue;
+                    }
+
                     modifiers.Add((SyntaxKind)kind);
                 }
 
                 classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers, classSyntax.TypeParameterList));
-            }
-
-            if (partialMissing is not null)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(ClassMustBePartial, partialMissing.GetLocation(), partialMissing.Identifier.ValueText));
-                continue;
             }
 
             if (classes.Count == 0)
@@ -174,30 +157,21 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            string content;
-            try
+            var rewriter = new AsyncToSyncRewriter(semanticModel);
+            var sn = rewriter.Visit(methodDeclarationSyntax);
+            var content = sn.ToFullString();
+
+            var diagnostics = rewriter.Diagnostics;
+
+            var hasErrors = false;
+            foreach (var diagnostic in diagnostics)
             {
-                var rewriter = new AsyncToSyncRewriter(semanticModel);
-                var sn = rewriter.Visit(methodDeclarationSyntax);
-                content = sn.ToFullString();
-
-                var diagnostics = rewriter.Diagnostics;
-
-                var hasErrors = false;
-                foreach (var diagnostic in diagnostics)
-                {
-                    context.ReportDiagnostic(diagnostic);
-                    hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
-                }
-
-                if (hasErrors)
-                {
-                    continue;
-                }
+                context.ReportDiagnostic(diagnostic);
+                hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
             }
-            catch (Exception ex)
+
+            if (hasErrors)
             {
-                context.ReportDiagnostic(Diagnostic.Create(ExceptionOccured, location: null, ex.ToString()));
                 continue;
             }
 
@@ -210,13 +184,14 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     case NamespaceDeclarationSyntax nds:
                         namespaces.Insert(0, nds.Name.ToString());
                         break;
-                    case FileScopedNamespaceDeclarationSyntax fsnds:
-                        namespaces.Add(fsnds.Name.ToString());
+                    case FileScopedNamespaceDeclarationSyntax file:
+                        namespaces.Add(file.Name.ToString());
                         isNamespaceFileScoped = true;
                         break;
                     default:
                         throw new InvalidOperationException($"Cannot handle {node}");
                 }
+
                 node = node.Parent;
             }
 

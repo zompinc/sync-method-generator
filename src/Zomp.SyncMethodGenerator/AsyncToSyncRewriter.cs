@@ -1,101 +1,47 @@
 ﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
-/// Rewrites a method synchronously
+/// Rewrites a method synchronously.
 /// </summary>
-internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
+/// <remarks>
+/// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
+/// </remarks>
+/// <param name="semanticModel">The semantic model.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
 {
-    private readonly SemanticModel semanticModel;
-    readonly HashSet<string> removedParameters = new();
-    readonly HashSet<string> memoryToSpan = new();
-    readonly Dictionary<string, string> renamedLocalFunctions = new();
-    readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
-
-    const string ReadOnlyMemory = "System.ReadOnlyMemory";
-    const string Memory = "System.Memory";
-    const string TaskType = "System.Threading.Tasks.Task";
-    const string ValueTaskType = "System.Threading.Tasks.ValueTask";
-    const string IProgressType = "System.IProgress";
-    const string CancellationTokenType = "System.Threading.CancellationToken";
-
+    private const string ReadOnlyMemory = "System.ReadOnlyMemory";
+    private const string Memory = "System.Memory";
+    private const string TaskType = "System.Threading.Tasks.Task";
+    private const string ValueTaskType = "System.Threading.Tasks.ValueTask";
+    private const string IProgressType = "System.IProgress";
+    private const string CancellationTokenType = "System.Threading.CancellationToken";
     private static readonly HashSet<string> Drops = new(new[] { IProgressType, CancellationTokenType });
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
         { "System.Collections.Generic.IAsyncEnumerator", "System.Collections.Generic.IEnumerator" },
-        { TaskType, null},
-        { ValueTaskType, null},
-        { ReadOnlyMemory, "System.ReadOnlySpan"},
-        { Memory, "System.Span"},
+        { TaskType, null },
+        { ValueTaskType, null },
+        { ReadOnlyMemory, "System.ReadOnlySpan" },
+        { Memory, "System.Span" },
     };
 
-    ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
+    private readonly SemanticModel semanticModel = semanticModel;
+    private readonly HashSet<string> removedParameters = new();
+    private readonly HashSet<string> memoryToSpan = new();
+    private readonly Dictionary<string, string> renamedLocalFunctions = new();
+    private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
     /// <summary>
-    /// Diagnostics
+    /// Gets the diagnostics messages.
     /// </summary>
     public ImmutableArray<Diagnostic> Diagnostics => diagnostics.ToImmutable();
-
-    /// <summary>
-    /// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
-    /// </summary>
-    /// <param name="semanticModel"></param>
-    public AsyncToSyncRewriter(SemanticModel semanticModel)
-    {
-        this.semanticModel = semanticModel;
-    }
-
-    static string MakeType(ISymbol symbol)
-        => symbol switch
-        {
-            INamedTypeSymbol => "global::" + symbol.ToDisplayString(),
-            _ => symbol.Name,
-        };
-
-    static IdentifierNameSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
-    {
-        INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
-        IArrayTypeSymbol ats => SyntaxFactory.IdentifierName(MakeType(ats.ElementType) + "[]"),
-        _ => SyntaxFactory.IdentifierName(typeSymbol.Name),
-    };
-
-    TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
-    {
-        try
-        {
-            return (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax);
-        }
-        catch (ArgumentException ex)
-        {
-            var message = Regex.Replace(ex.ToString(), "[\r\n]+", "", RegexOptions.Multiline);
-            var diag = Diagnostic.Create(CannotRetrieveSymbol, typeSyntax.GetLocation(), typeSyntax.ToString(), message);
-            diagnostics.Add(diag);
-            return typeSyntax;
-        }
-    }
-
-    private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
-    {
-        IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
-        IdentifierNameSyntax or QualifiedNameSyntax => ProcessSyntaxUsingSymbol(typeSyntax),
-        _ => typeSyntax,
-
-    };
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
     {
         var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
         return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
-    }
-
-    static string GetNameWithoutTypeParams(ISymbol symbol)
-        => symbol.ContainingNamespace + "." + symbol.Name;
-
-    internal static bool IsTypeOfInterest(ITypeSymbol symbol)
-    {
-        var genericName = GetNameWithoutTypeParams(symbol);
-        return Replacements.ContainsKey(genericName);
     }
 
     /// <inheritdoc/>
@@ -105,7 +51,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var symbol = GetSymbol(node);
 
-        static string? convert(string key)
+        static string? Convert(string key)
             => Replacements.TryGetValue(key, out var replacement) ? replacement : key;
 
         if (symbol is not INamedTypeSymbol)
@@ -115,7 +61,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         var genericName = GetNameWithoutTypeParams(symbol);
 
-        var newType = convert(genericName);
+        var newType = Convert(genericName);
 
         if (node.Parent is ParameterSyntax ps && genericName is ReadOnlyMemory or Memory)
         {
@@ -141,13 +87,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         {
             return @base.WithIdentifier(SyntaxFactory.Identifier(newName));
         }
+
         return @base;
     }
 
-    static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
-        => SyntaxFactory.TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
     {
         var @base = (LocalFunctionStatementSyntax)base.VisitLocalFunctionStatement(node)!;
@@ -167,14 +110,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             .WithTriviaFrom(@base);
     }
 
-    static string RemoveAsync(string original)
-        => Regex.Replace(original, "Async", string.Empty);
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitParameterList(ParameterListSyntax node)
     {
-        var newnode = (ParameterListSyntax)base.VisitParameterList(node)!;
-        bool isValidParameter(ParameterSyntax ps)
+        var newNode = (ParameterListSyntax)base.VisitParameterList(node)!;
+        bool IsValidParameter(ParameterSyntax ps)
         {
             if (ps.Type is not { } type1)
             {
@@ -200,9 +139,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             return true;
         }
 
-        var invalid = node.Parameters.GetIndices(v => !isValidParameter(v));
-        var newParams = RemoveAtRange(newnode.Parameters, invalid);
-        return newnode.WithParameters(newParams);
+        var invalid = node.Parameters.GetIndices(v => !IsValidParameter(v));
+        var newParams = RemoveAtRange(newNode.Parameters, invalid);
+        return newNode.WithParameters(newParams);
     }
 
     /// <inheritdoc/>
@@ -210,7 +149,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
         if (node.Type is null or NullableTypeSyntax or GenericNameSyntax)
+        {
             return @base;
+        }
+
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
@@ -253,16 +195,13 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         if (symbol is null)
         {
-            if (@base.Expression is not IdentifierNameSyntax { Identifier.ValueText: "nameof" })
-            {
-                var diag = Diagnostic.Create(CannotRetrieveSymbol, node.GetLocation(), node.ToString(), $"Could not get symbol out of {node}");
-                diagnostics.Add(diag);
-            }
             return @base;
         }
 
         if (symbol is not IMethodSymbol methodSymbol)
+        {
             throw new InvalidOperationException($"Could not get symbol of {node}");
+        }
 
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
         {
@@ -272,22 +211,20 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             var hasSync = siblings.Any(z => z.Name == newName);
             var hasAsyncWithAttr = siblings.Any(z => z.Name == ins.Identifier.ValueText
                 && z.GetAttributes().Any(z
-                    => z.AttributeClass is not null && IsCreateSyncVerionAttribute(z.AttributeClass)));
-
-            //if (symbol.con)
+                    => z.AttributeClass is not null && IsCreateSyncVersionAttribute(z.AttributeClass)));
 
             if (string.IsNullOrWhiteSpace(newName))
             {
-                // Should Return diagnistics message
+                // Should Return diagnostics message
                 return @base;
             }
+
             return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
         }
 
         var returnType = methodSymbol.ReturnType;
-        var typeString = returnType.ToString();
-
-        var isMemory = typeString.StartsWith(ReadOnlyMemory) || typeString.StartsWith(Memory);
+        var typeString = GetNameWithoutTypeParams(returnType);
+        var isMemory = typeString is ReadOnlyMemory or Memory;
 
         string? GetNewName(string name)
         {
@@ -295,7 +232,10 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             var replacement = Regex.Replace(name, "Memory", "Span");
             var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
             if (newSymbol is null)
+            {
                 return null;
+            }
+
             return replacement;
         }
 
@@ -310,9 +250,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 .Union(separators);
 
             ArgumentSyntax @as;
-            if (@base.Expression is MemberAccessExpressionSyntax maes2)
+            if (@base.Expression is MemberAccessExpressionSyntax memberAccess2)
             {
-                @as = SyntaxFactory.Argument(maes2.Expression);
+                @as = SyntaxFactory.Argument(memberAccess2.Expression);
             }
             else
             {
@@ -351,15 +291,15 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             newName = GetNewName(symbol.Name);
         }
 
-        if (@base.Expression is not MemberAccessExpressionSyntax maes
-            || maes.Name is not IdentifierNameSyntax mins)
+        if (@base.Expression is not MemberAccessExpressionSyntax memberAccess
+            || memberAccess.Name is not IdentifierNameSyntax mins)
         {
             return @base;
         }
 
-        if (maes.Name is IdentifierNameSyntax { Identifier.ValueText: "ConfigureAwait" })
+        if (memberAccess.Name is IdentifierNameSyntax { Identifier.ValueText: "ConfigureAwait" })
         {
-            return maes.Expression;
+            return memberAccess.Expression;
         }
 
         if (mins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase) || mins.Identifier.ValueText == "GetAsyncEnumerator")
@@ -372,25 +312,11 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         }
 
         if (newName == null)
-            return @base;
-        return @base.WithExpression(maes.WithName(SyntaxFactory.IdentifierName(newName)));
-    }
-
-    bool NeedToDrop(ExpressionSyntax expr)
-        => expr switch
         {
-            IdentifierNameSyntax ins => removedParameters.Contains(ins.Identifier.ValueText),
-            ConditionalAccessExpressionSyntax cae => NeedToDrop(cae.Expression),
-            InvocationExpressionSyntax ie => NeedToDrop(ie.Expression),
-            MemberAccessExpressionSyntax me => NeedToDrop(me.Expression),
-            _ => false,
-        };
+            return @base;
+        }
 
-    static bool CanDropIf(IfStatementSyntax ifst)
-    {
-        return ifst.Statement is BlockSyntax { Statements.Count: 0 } or null
-            && ifst.Condition is BinaryExpressionSyntax
-            && ifst.Else is null;
+        return @base.WithExpression(memberAccess.WithName(SyntaxFactory.IdentifierName(newName)));
     }
 
     /// <inheritdoc/>
@@ -423,7 +349,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         if (symbol is null
             or { ContainingType.IsGenericType: true }
             or INamedTypeSymbol { IsGenericType: true })
+        {
             return @base;
+        }
 
         var newType = ProcessSymbol(symbol.ContainingType);
         return newType == node.Type ? @base : @base.WithType(newType);
@@ -433,18 +361,19 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
         var i = 0;
-        var indicies = new HashSet<int>();
+        var indices = new HashSet<int>();
 
         foreach (var statement in node.Statements)
         {
-            if (statement is LocalDeclarationStatementSyntax { Declaration.Variables: { Count: 1 } vars } lds)
+            if (statement is LocalDeclarationStatementSyntax { Declaration: { Variables.Count: 1 } declaration })
             {
-                var symbol = GetSymbol(lds.Declaration.Type);
+                var symbol = GetSymbol(declaration.Type);
                 if (symbol is not null && ShouldRemoveArgument(symbol))
                 {
-                    indicies.Add(i);
+                    indices.Add(i);
                 }
             }
+
             ++i;
         }
 
@@ -457,20 +386,21 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             {
                 if (NeedToDrop(ess.Expression))
                 {
-                    indicies.Add(i);
+                    indices.Add(i);
                 }
             }
             else if (statement is IfStatementSyntax @if)
             {
                 if (CanDropIf(@if))
                 {
-                    indicies.Add(i);
+                    indices.Add(i);
                 }
             }
+
             ++i;
         }
 
-        var newStatements = RemoveAtRange(@base.Statements, indicies);
+        var newStatements = RemoveAtRange(@base.Statements, indices);
         return @base.WithStatements(newStatements);
     }
 
@@ -489,23 +419,21 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var @base = (TypeConstraintSyntax)base.VisitTypeConstraint(node)!;
         var newType = ProcessType(@base.Type);
         if (newType == @base.Type)
+        {
             return @base;
+        }
 
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
-    static bool IsCreateSyncVerionAttribute(INamedTypeSymbol s)
-        => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
-
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        var attrinutes = node.AttributeLists.Select(
+        var attributes = node.AttributeLists.Select(
             z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
-            .WithTriviaFrom(z)
-            );
+            .WithTriviaFrom(z));
 
-        var newAttributes = SyntaxFactory.List(attrinutes.Where(z => z.Attributes.Any()));
+        var newAttributes = SyntaxFactory.List(attributes.Where(z => z.Attributes.Any()));
 
         var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
         var returnType = node.ReturnType;
@@ -539,25 +467,25 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             }
 
             var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
+
             // Is the attribute [CreateSyncVersion] attribute?
-            return !IsCreateSyncVerionAttribute(attributeContainingTypeSymbol);
+            return !IsCreateSyncVersionAttribute(attributeContainingTypeSymbol);
         }
 
-        // documenetation
-
+        // Documentation
         var trivia = node.GetLeadingTrivia();
         var newTriviaList = trivia;
         var comments = trivia.FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia));
         var xml = comments.GetStructure();
 
-        DocumentationCommentTriviaSyntax? dcts = null;
+        DocumentationCommentTriviaSyntax? comment = null;
         if (xml is DocumentationCommentTriviaSyntax syntax)
         {
-            dcts = syntax;
+            comment = syntax;
             var i = 0;
             var indicesToRemove = new List<int>();
 
-            foreach (var commentLine in dcts.Content)
+            foreach (var commentLine in comment.Content)
             {
                 if (commentLine is XmlElementSyntax xes)
                 {
@@ -571,16 +499,17 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                         }
                     }
                 }
+
                 ++i;
             }
 
-            var newContent = RemoveAtRange(dcts.Content, indicesToRemove);
-            dcts = dcts.WithContent(newContent);
-            var newTrivia = SyntaxFactory.Trivia(dcts);
+            var newContent = RemoveAtRange(comment.Content, indicesToRemove);
+            comment = comment.WithContent(newContent);
+            var newTrivia = SyntaxFactory.Trivia(comment);
             newTriviaList = trivia.Replace(comments, newTrivia);
         }
 
-        bool preprocessors(SyntaxTrivia st)
+        bool Preprocessors(SyntaxTrivia st)
         {
             return st.IsKind(SyntaxKind.IfDirectiveTrivia)
                 || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
@@ -591,9 +520,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 || st.IsKind(SyntaxKind.DisabledTextTrivia);
         }
 
-        var z = newTriviaList.Where(preprocessors).ToList();
+        var z = newTriviaList.Where(Preprocessors).ToList();
 
-        while (newTriviaList.FirstOrDefault(preprocessors) is { } preprocessor
+        while (newTriviaList.FirstOrDefault(Preprocessors) is { } preprocessor
             && preprocessor != default)
         {
             newTriviaList = newTriviaList.Remove(preprocessor);
@@ -604,7 +533,7 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 .WithTriviaFrom(returnType)
             : @base.ReturnType;
 
-        var retval = @base
+        var retVal = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
             .WithReturnType(newReturnType)
             .WithModifiers(StripAsyncModifier(@base.Modifiers))
@@ -612,78 +541,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
             .WithLeadingTrivia(newTriviaList)
             ;
 
-        return retval;
+        return retVal;
     }
 
-    /// <inheritdoc/>
-    public static SyntaxList<TNode> RemoveAtRange<TNode>(SyntaxList<TNode> list, IEnumerable<int> indices) where TNode : SyntaxNode
-    {
-        var newContent = list;
-
-        foreach (var z in indices.OrderByDescending(z => z))
-        {
-            newContent = newContent.RemoveAt(z);
-        }
-        return newContent;
-    }
-
-    static SeparatedSyntaxList<TNode> RemoveAtRange<TNode>(SeparatedSyntaxList<TNode> list, IEnumerable<int> indices) where TNode : SyntaxNode
-    {
-        var newContent = list;
-        foreach (var z in indices.OrderByDescending(z => z))
-        {
-            newContent = newContent.RemoveAt(z);
-        }
-        return newContent;
-    }
-
-    static bool ShouldRemoveType(ITypeSymbol symbol)
-    {
-        if (symbol is IArrayTypeSymbol at)
-        {
-            return ShouldRemoveType(at.ElementType);
-        }
-
-        foreach (var @interface in symbol.Interfaces)
-        {
-            var genericName = GetNameWithoutTypeParams(@interface);
-            if (genericName == IProgressType)
-                return true;
-        }
-        var @base = GetNameWithoutTypeParams(symbol);
-        return Drops.Contains(@base);
-    }
-
-    static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
-    {
-        IFieldSymbol fs => ShouldRemoveType(fs.Type),
-        IPropertySymbol ps => ShouldRemoveType(ps.Type),
-        ITypeSymbol ts => ShouldRemoveType(ts),
-        ILocalSymbol ls => ShouldRemoveType(ls.Type),
-        IParameterSymbol ps => ShouldRemoveType(ps.Type),
-        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType),
-        _ => false,
-    };
-
-    bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
-        => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
-
-    bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
-    {
-        ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
-        BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left) || ShouldRemoveArgument(be.Right),
-        CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression),
-        ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
-        IdentifierNameSyntax or InvocationExpressionSyntax => HasSymbolAndShouldBeRemoved(expr),
-        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
-        MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
-        PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
-        _ => false,
-    };
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
     {
         var @base = (ArgumentListSyntax)base.VisitArgumentList(node)!;
@@ -713,8 +573,8 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
 
         if (variableType is INamedTypeSymbol { IsGenericType: true } n)
         {
-            var name = n.ToString();
-            if (name.StartsWith(ReadOnlyMemory) || name.StartsWith(Memory))
+            var name = GetNameWithoutTypeParams(n);
+            if (name is ReadOnlyMemory or Memory)
             {
                 foreach (var variable in node.Declaration.Variables)
                 {
@@ -733,8 +593,9 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
         var type = node.Type;
         var newType = @base.Type;
 
-        if (newType == type) // not replaced
+        if (newType == type)
         {
+            // not replaced
             newType = ProcessType(type);
 
             if (newType == type)
@@ -742,6 +603,143 @@ internal class AsyncToSyncRewriter : CSharpSyntaxRewriter
                 return @base;
             }
         }
+
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
+
+    internal static bool IsTypeOfInterest(ITypeSymbol symbol)
+    {
+        var genericName = GetNameWithoutTypeParams(symbol);
+        return Replacements.ContainsKey(genericName);
+    }
+
+    private static string MakeType(ISymbol symbol)
+        => symbol switch
+        {
+            INamedTypeSymbol => "global::" + symbol.ToDisplayString(),
+            _ => symbol.Name,
+        };
+
+    private static IdentifierNameSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
+    {
+        INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
+        IArrayTypeSymbol ats => SyntaxFactory.IdentifierName(MakeType(ats.ElementType) + "[]"),
+        _ => SyntaxFactory.IdentifierName(typeSymbol.Name),
+    };
+
+    private static string GetNameWithoutTypeParams(ISymbol symbol)
+        => symbol.ContainingNamespace + "." + symbol.Name;
+
+    private static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
+        => SyntaxFactory.TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
+
+    private static string RemoveAsync(string original)
+        => Regex.Replace(original, "Async", string.Empty);
+
+    private static bool CanDropIf(IfStatementSyntax ifStatement)
+    {
+        return ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
+            && ifStatement.Condition is BinaryExpressionSyntax
+            && ifStatement.Else is null;
+    }
+
+    private static bool IsCreateSyncVersionAttribute(INamedTypeSymbol s)
+        => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
+
+    private static SyntaxList<TNode> RemoveAtRange<TNode>(SyntaxList<TNode> list, IEnumerable<int> indices)
+        where TNode : SyntaxNode
+    {
+        var newContent = list;
+
+        foreach (var z in indices.OrderByDescending(z => z))
+        {
+            newContent = newContent.RemoveAt(z);
+        }
+
+        return newContent;
+    }
+
+    private static SeparatedSyntaxList<TNode> RemoveAtRange<TNode>(SeparatedSyntaxList<TNode> list, IEnumerable<int> indices)
+        where TNode : SyntaxNode
+    {
+        var newContent = list;
+        foreach (var z in indices.OrderByDescending(z => z))
+        {
+            newContent = newContent.RemoveAt(z);
+        }
+
+        return newContent;
+    }
+
+    private static bool ShouldRemoveType(ITypeSymbol symbol)
+    {
+        if (symbol is IArrayTypeSymbol at)
+        {
+            return ShouldRemoveType(at.ElementType);
+        }
+
+        foreach (var @interface in symbol.Interfaces)
+        {
+            var genericName = GetNameWithoutTypeParams(@interface);
+            if (genericName == IProgressType)
+            {
+                return true;
+            }
+        }
+
+        var @base = GetNameWithoutTypeParams(symbol);
+        return Drops.Contains(@base);
+    }
+
+    private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
+    {
+        IFieldSymbol fs => ShouldRemoveType(fs.Type),
+        IPropertySymbol ps => ShouldRemoveType(ps.Type),
+        ITypeSymbol ts => ShouldRemoveType(ts),
+        ILocalSymbol ls => ShouldRemoveType(ls.Type),
+        IParameterSymbol ps => ShouldRemoveType(ps.Type),
+        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType),
+        _ => false,
+    };
+
+    private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
+
+    private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
+        => (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax);
+
+    private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
+    {
+        IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
+        IdentifierNameSyntax or QualifiedNameSyntax => ProcessSyntaxUsingSymbol(typeSyntax),
+        _ => typeSyntax,
+
+    };
+
+    private bool NeedToDrop(ExpressionSyntax expr)
+        => expr switch
+        {
+            IdentifierNameSyntax ins => removedParameters.Contains(ins.Identifier.ValueText),
+            ConditionalAccessExpressionSyntax cae => NeedToDrop(cae.Expression),
+            InvocationExpressionSyntax ie => NeedToDrop(ie.Expression),
+            MemberAccessExpressionSyntax me => NeedToDrop(me.Expression),
+            _ => false,
+        };
+
+    private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
+        => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
+
+    private bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
+    {
+        ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
+        BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left) || ShouldRemoveArgument(be.Right),
+        CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression),
+        ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
+        IdentifierNameSyntax or InvocationExpressionSyntax => HasSymbolAndShouldBeRemoved(expr),
+        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
+        MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
+        PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
+        PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
+        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
+        _ => false,
+    };
 }

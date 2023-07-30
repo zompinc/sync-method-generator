@@ -14,7 +14,6 @@
     <PackageIcon>icon.png</PackageIcon>
     <Deterministic>true</Deterministic>
     <EnablePackageValidation>true</EnablePackageValidation>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

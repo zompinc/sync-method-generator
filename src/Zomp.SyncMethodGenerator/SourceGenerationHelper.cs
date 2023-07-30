@@ -1,7 +1,7 @@
 ﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
-/// Contains routinge to construct a generated source file with a synchronized method
+/// Contains routines to construct a generated source file with a synchronized method.
 /// </summary>
 public static class SourceGenerationHelper
 {
@@ -10,7 +10,7 @@ public static class SourceGenerationHelper
 namespace Zomp.SyncMethodGenerator
 {
     /// <summary>
-    /// An attribute that can be used to automatically generate a synchronous version of an async method. Must be used in a parital class.
+    /// An attribute that can be used to automatically generate a synchronous version of an async method. Must be used in a partial class.
     /// </summary>
     [System.AttributeUsage(System.AttributeTargets.Method)]
     internal class CreateSyncVersionAttribute : System.Attribute
@@ -36,7 +36,6 @@ namespace Zomp.SyncMethodGenerator
         }
 
         // Handle namespaces
-
         var sbBegin = new StringBuilder();
         var sbEnd = new StringBuilder();
         var i = 0;
@@ -60,13 +59,12 @@ namespace Zomp.SyncMethodGenerator
         }
 
         // Handle classes
-
         foreach (var @class in methodToGenerate.Classes)
         {
             var indent = new string(' ', 4 * i);
 
             var modifiers = string.Join(string.Empty, @class.Modifiers.Select(z => GetKeyword(z) + " "));
-            var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}{(@class.TypeParameterListSyntax is null ? ""
+            var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}{(@class.TypeParameterListSyntax is null ? string.Empty
                 : "<" + string.Join(", ", @class.TypeParameterListSyntax.Parameters.Select(z => z.ToString())) + ">")}";
 
             sbBegin.Append($$"""

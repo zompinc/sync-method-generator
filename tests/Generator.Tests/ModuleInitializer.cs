@@ -42,7 +42,7 @@ public static class ModuleInitializer
         {
             var info = new
             {
-                target.Result.Diagnostics
+                target.Result.Diagnostics,
             };
             return new(info, targets);
         }
@@ -59,9 +59,10 @@ public static class ModuleInitializer
         return new("cs", data, Path.GetFileNameWithoutExtension(source.HintName));
     }
 
-    public sealed class RunResultWithIgnoreList
+    internal sealed class RunResultWithIgnoreList
     {
         public required GeneratorDriverRunResult Result { get; init; }
+
         public List<string> IgnoredFiles { get; init; } = new();
     }
 }

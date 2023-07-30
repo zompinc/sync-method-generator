@@ -42,7 +42,6 @@
 
   <ItemGroup>
     <PackageReference Include="IsExternalInit" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" Pack="false" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />
     <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
   </ItemGroup>
@@ -57,7 +56,6 @@
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
-    <Using Include="Zomp.SyncMethodGenerator.DiagnosticMessages" Static="true" />
   </ItemGroup>
 
   <ItemGroup>

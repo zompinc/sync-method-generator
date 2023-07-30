@@ -82,7 +82,7 @@ jobs:
         name: packages_ubuntu-latest
         path: packages
 
-    - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.2
+    - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.3
 
     - name: Sign Nuget Files
       if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}

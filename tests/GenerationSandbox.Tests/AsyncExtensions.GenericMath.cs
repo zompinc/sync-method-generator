@@ -3,16 +3,20 @@ using System.Collections.Generic;
 using System.Threading;
 
 namespace GenerationSandbox.Tests;
+
+/// <summary>
+/// Test class.
+/// </summary>
 public static partial class AsyncExtensions
 {
     /// <summary>
-    /// Finds maximum value so far and returns its 0 based index
+    /// Finds maximum value so far and returns its 0 based index.
     /// </summary>
-    /// <typeparam name="T">Numeric type</typeparam>
+    /// <typeparam name="T">Numeric type.</typeparam>
     /// <param name="items">Items to scan.</param>
-    /// <param name="progress">The progress</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Max indices</returns>
+    /// <param name="progress">The progress.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Max indices.</returns>
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public static async IAsyncEnumerable<int> IndexOfMaxSoFarAsync<T>(this IAsyncEnumerable<T> items, IProgress<int>? progress = null, [EnumeratorCancellation] CancellationToken ct = default)
 #if NET7_0_OR_GREATER
@@ -21,6 +25,15 @@ public static partial class AsyncExtensions
         where T : IComparisonOperators<T, T>
 #endif
     {
+#if NET6_0_OR_GREATER
+        ArgumentNullException.ThrowIfNull(items);
+#else
+        if (source is null)
+        {
+            throw new ArgumentNullException(nameof(items));
+        }
+#endif
+
         var i = 0;
 
         T? largestSoFar = default;

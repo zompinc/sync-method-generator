@@ -1,10 +1,11 @@
 ﻿namespace Zomp.SyncMethodGenerator;
+
 internal static class Extensions
 {
     /// <summary>
-    /// Gets array of indices that match a predicate
+    /// Gets array of indices that match a predicate.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="T">The type.</typeparam>
     /// <param name="elements">Original elements.</param>
     /// <param name="predicate">The predicate.</param>
     /// <returns>Array of indices that match a predicate.</returns>
@@ -13,5 +14,4 @@ internal static class Extensions
         .Where((elem, i) => predicate(elem.ps))
         .Select(t => t.i)
         .ToArray();
-
 }

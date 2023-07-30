@@ -5,32 +5,38 @@ namespace Generator.Tests;
 
 public static class TestHelper
 {
-    public static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, params object?[] parameters)
+    private static readonly string[] PreprocessorSymbols
+#if NETFRAMEWORK
+        = Array.Empty<string>();
+#else
+        = new string[]
     {
-        var preprocessorSymbols = new string[]
-        {
 #if NET7_0
-            "NET7_0",
+        "NET7_0",
 #endif
 #if NET7_0_OR_GREATER
-            "NET7_0_OR_GREATER",
+        "NET7_0_OR_GREATER",
 #endif
 #if NET6_0
-            "NET6_0",
+        "NET6_0",
 #endif
 #if NET6_0_OR_GREATER
-            "NET6_0_OR_GREATER",
+        "NET6_0_OR_GREATER",
 #endif
-        };
+    };
+#endif
 
+    public static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, params object?[] parameters)
+    {
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(LanguageVersion.Preview)
-            .WithPreprocessorSymbols(preprocessorSymbols);
+            .WithPreprocessorSymbols(PreprocessorSymbols);
 
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
-        //SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
 
-        var locations = new[] {
+        // SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
+        var locations = new[]
+        {
             typeof(IAsyncEnumerable<>).Assembly.Location,
             typeof(ValueTask<>).Assembly.Location,
             typeof(System.Drawing.Point).Assembly.Location,
@@ -68,7 +74,7 @@ public static class TestHelper
         var target = new RunResultWithIgnoreList
         {
             Result = driver.GetRunResult(),
-            IgnoredFiles = { "CreateSyncVersionAttribute.g.cs" }
+            IgnoredFiles = { "CreateSyncVersionAttribute.g.cs" },
         };
 
         var verifier = Verifier
@@ -85,7 +91,7 @@ public static class TestHelper
             verifier = verifier.DisableRequireUniquePrefix();
         }
 
-        if (parameters.Length > 0)
+        if (parameters is { Length: > 0 })
         {
             verifier = verifier.UseParameters(parameters);
         }

@@ -193,7 +193,7 @@ public partial class Stuff
     [Fact]
     public Task EagerPreconditionInIteratorBlock()
     {
-        // Moodified from: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-1-eager-preconditions-in-iterator-blocks
+        // Modified from: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-1-eager-preconditions-in-iterator-blocks
         var source = """
 using System;
 using System.IO;
