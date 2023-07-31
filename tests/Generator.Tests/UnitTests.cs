@@ -46,6 +46,29 @@ partial class GenericClass<T1, T2> where T1 : struct where T2 : class
     }
 
     [Fact]
+    public Task DropCompletedTask()
+    {
+        // The source code to test
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+internal partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task ExecAsync(CancellationToken ct)
+    {
+        await Task.CompletedTask;
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task MultipleClasses()
     {
         // The source code to test

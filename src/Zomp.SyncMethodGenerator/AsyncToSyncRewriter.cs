@@ -13,9 +13,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string Memory = "System.Memory";
     private const string TaskType = "System.Threading.Tasks.Task";
     private const string ValueTaskType = "System.Threading.Tasks.ValueTask";
-    private const string IProgressType = "System.IProgress";
+    private const string CompletedTask = "System.Threading.Tasks.Task.CompletedTask";
+    private const string IProgressInterface = "System.IProgress";
     private const string CancellationTokenType = "System.Threading.CancellationToken";
-    private static readonly HashSet<string> Drops = new(new[] { IProgressType, CancellationTokenType });
+    private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
+    private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface });
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
@@ -703,7 +705,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         foreach (var @interface in symbol.Interfaces)
         {
             var genericName = GetNameWithoutTypeParams(@interface);
-            if (genericName == IProgressType)
+            if (InterfacesToDrop.Contains(genericName))
             {
                 return true;
             }
@@ -716,7 +718,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
         IFieldSymbol fs => ShouldRemoveType(fs.Type),
-        IPropertySymbol ps => ShouldRemoveType(ps.Type),
+        IPropertySymbol ps => ps.ToString() == CompletedTask || ShouldRemoveType(ps.Type),
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
@@ -793,6 +795,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
         ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
+        AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
         _ => false,
     };
 }
