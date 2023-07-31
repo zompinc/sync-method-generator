@@ -13,11 +13,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string Memory = "System.Memory";
     private const string TaskType = "System.Threading.Tasks.Task";
     private const string ValueTaskType = "System.Threading.Tasks.ValueTask";
-    private const string CompletedTask = "System.Threading.Tasks.Task.CompletedTask";
     private const string IProgressInterface = "System.IProgress";
+    private const string IAsyncResultInterface = "System.IAsyncResult";
     private const string CancellationTokenType = "System.Threading.CancellationToken";
     private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
-    private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface });
+    private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface, IAsyncResultInterface });
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
@@ -100,7 +100,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var newNode = @base;
 
         var identifier = @base.Identifier;
-        if (identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
+        if (identifier.ValueText.EndsWithAsync())
         {
             var newName = RemoveAsync(identifier.ValueText);
             renamedLocalFunctions.Add(identifier.ValueText, newName);
@@ -179,7 +179,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             return @base.Expression;
         }
-        else if (@base.Name.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
+        else if (@base.Name.Identifier.ValueText.EndsWithAsync())
         {
             return @base.WithName(SyntaxFactory.IdentifierName(RemoveAsync(@base.Name.Identifier.ValueText)));
         }
@@ -205,7 +205,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             throw new InvalidOperationException($"Could not get symbol of {node}");
         }
 
-        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase))
+        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWithAsync())
         {
             newName = RemoveAsync(ins.Identifier.ValueText);
 
@@ -304,7 +304,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return memberAccess.Expression;
         }
 
-        if (mins.Identifier.ValueText.EndsWith("Async", StringComparison.OrdinalIgnoreCase) || mins.Identifier.ValueText == "GetAsyncEnumerator")
+        if (mins.Identifier.ValueText.EndsWithAsync() || mins.Identifier.ValueText == "GetAsyncEnumerator")
         {
             newName = RemoveAsync(mins.Identifier.ValueText);
         }
@@ -695,6 +695,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return newContent;
     }
 
+    private static List<INamedTypeSymbol> GetInterfaces(ITypeSymbol symbol)
+    {
+        var list = new List<INamedTypeSymbol>(symbol.Interfaces);
+        if (symbol.BaseType is { } baseType)
+        {
+            list.AddRange(GetInterfaces(baseType));
+        }
+
+        return list;
+    }
+
     private static bool ShouldRemoveType(ITypeSymbol symbol)
     {
         if (symbol is IArrayTypeSymbol at)
@@ -702,7 +713,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return ShouldRemoveType(at.ElementType);
         }
 
-        foreach (var @interface in symbol.Interfaces)
+        foreach (var @interface in GetInterfaces(symbol))
         {
             var genericName = GetNameWithoutTypeParams(@interface);
             if (InterfacesToDrop.Contains(genericName))
@@ -718,7 +729,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
         IFieldSymbol fs => ShouldRemoveType(fs.Type),
-        IPropertySymbol ps => ps.ToString() == CompletedTask || ShouldRemoveType(ps.Type),
+        IPropertySymbol ps => ShouldRemoveType(ps.Type),
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
@@ -751,11 +762,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
         IdentifierNameSyntax or QualifiedNameSyntax => ProcessSyntaxUsingSymbol(typeSyntax),
         _ => typeSyntax,
-
     };
 
     private bool CanDropStatement(StatementSyntax statement) => statement switch
     {
+        IfStatementSyntax @if => ShouldRemoveArgument(@if.Condition),
         ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
         _ => false,
@@ -782,13 +793,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
 
+    private bool EndsWithAsync(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
+        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name),
+        _ => false,
+    };
+
+    private bool DropInvocation(InvocationExpressionSyntax invocation)
+    {
+        if (EndsWithAsync(invocation.Expression))
+        {
+            return false;
+        }
+
+        return HasSymbolAndShouldBeRemoved(invocation);
+    }
+
     private bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
     {
         ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
         BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left) || ShouldRemoveArgument(be.Right),
         CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression),
         ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
-        IdentifierNameSyntax or InvocationExpressionSyntax => HasSymbolAndShouldBeRemoved(expr),
+        IdentifierNameSyntax id => !id.Identifier.ValueText.EndsWithAsync() && HasSymbolAndShouldBeRemoved(id),
+        InvocationExpressionSyntax ie => DropInvocation(ie),
         ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
         MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
         PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),

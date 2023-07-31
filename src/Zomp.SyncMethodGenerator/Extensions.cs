@@ -14,4 +14,7 @@ internal static class Extensions
         .Where((elem, i) => predicate(elem.ps))
         .Select(t => t.i)
         .ToArray();
+
+    internal static bool EndsWithAsync(this string str)
+        => str.EndsWith("Async", StringComparison.Ordinal);
 }

@@ -374,6 +374,100 @@ partial class Stuff
         return TestHelper.Verify(source);
     }
 
+    [Theory]
+    [InlineData("await w.AsyncCondition(ct);")]
+    [InlineData("if (await w.AsyncCondition(ct)){}")]
+    [InlineData("if (!await w.AsyncCondition(ct)){}")]
+    public Task DoNotCallPropertiesReturningGenericTasks(string invocation)
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    private readonly ClassWithAsyncFunc w = new();
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task MyMethodAsync(CancellationToken ct)
+    {
+        {{invocation}}
+    }
+
+    private class ClassWithAsyncFunc
+    {
+        internal Func<CancellationToken, Task<bool>> AsyncCondition
+            => (ct) => Task.FromResult(false);
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
+
+    [Fact]
+    public Task DoNotCallPropertiesReturningTasks()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    private readonly ClassWithAsyncFunc w = new();
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task MyMethodAsync()
+    {
+        await w.AsyncAction(CancellationToken.None);
+    }
+
+    private class ClassWithAsyncFunc
+    {
+        internal Func<CancellationToken, Task> AsyncAction
+            => (ct) => Task.CompletedTask;
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
+    public Task CallPropertiesReturningTasksWithAsync()
+    {
+        var source = """
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    private readonly ClassWithAsyncFunc w = new();
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task MyMethodAsync()
+    {
+        await w.ActionAsync(CancellationToken.None);
+    }
+
+    private class ClassWithAsyncFunc
+    {
+        internal Func<CancellationToken, Task> ActionAsync
+            => (ct) => Task.CompletedTask;
+
+        internal void Action()
+        {
+        }
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
     [Fact]
     public Task WithAction()
     {
