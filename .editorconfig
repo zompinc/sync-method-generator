@@ -26,5 +26,11 @@ dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1819.severity = none
 dotnet_diagnostic.CA2255.severity = none
 
+# SA1005: Single line comments should begin with single space
+dotnet_diagnostic.SA1005.severity = none
+
+# SA1512: Single-line comments should not be followed by blank line
+dotnet_diagnostic.SA1512.severity = none
+
 [*.sh]
 end_of_line = lf

@@ -14,6 +14,12 @@ public class SyncTests
         Assert.Equal(expected, result);
     }
 
+    [Fact]
+    public void TestStaticAsyncWithIProgress()
+    {
+        AsyncWithIProgress.CallWithIProgress();
+    }
+
 #if NET6_0_OR_GREATER
     [Fact]
     public void TestIndexOfMaxSoFar()

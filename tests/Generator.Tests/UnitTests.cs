@@ -673,4 +673,53 @@ internal partial class Stuff
 """;
         return TestHelper.Verify(source, false, true);
     }
+
+    [Theory]
+    [InlineData("progress++;")]
+    [InlineData("if (true) { progress++; }")]
+    [InlineData("if (true) progress++;")]
+    [InlineData("if (true) { } else progress++;")]
+    [InlineData("if (false) { } else if (true) progress++;")]
+    [InlineData("if (false) { } else if (true) progress++; else { }")]
+
+    public Task DropIProgressStatement(string statement)
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests;
+
+internal partial class Stuff
+{
+    public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+    {
+        await Task.CompletedTask;
+    }
+
+    public static void WithIProgress()
+    {
+    }
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task CallWithIProgressAsync()
+    {
+        CustomProgress progress = new();
+
+        {{statement}}
+
+        await WithIProgressAsync(progress);
+    }
+
+    private sealed class CustomProgress : IProgress<float>
+    {
+        public static CustomProgress operator ++(CustomProgress a) => a;
+
+        public void Report(float value) => throw new NotImplementedException();
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
 }

@@ -357,6 +357,26 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return newType == node.Type ? @base : @base.WithType(newType);
     }
 
+    public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
+    {
+        var substituteIfWithEmpty = node.Statement is ExpressionStatementSyntax es && ShouldRemoveArgument(es.Expression);
+        var substituteElseWithEmpty = node.Else is ElseClauseSyntax { Statement: ExpressionStatementSyntax { Expression: { } e } } && ShouldRemoveArgument(e);
+
+        var retVal = (IfStatementSyntax)base.VisitIfStatement(node)!;
+
+        if (substituteIfWithEmpty)
+        {
+            retVal = retVal.WithStatement(SyntaxFactory.Block());
+        }
+
+        if (substituteElseWithEmpty)
+        {
+            retVal = retVal.WithElse(SyntaxFactory.ElseClause(SyntaxFactory.Block()));
+        }
+
+        return retVal;
+    }
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
@@ -365,7 +385,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         foreach (var statement in node.Statements)
         {
-            if (statement is LocalDeclarationStatementSyntax { Declaration: { Variables.Count: 1 } declaration })
+            if (statement is ExpressionStatementSyntax ess)
+            {
+                if (ShouldRemoveArgument(ess.Expression))
+                {
+                    indices.Add(i);
+                }
+            }
+            else if (statement is LocalDeclarationStatementSyntax { Declaration: { Variables.Count: 1 } declaration })
             {
                 var symbol = GetSymbol(declaration.Type);
                 if (symbol is not null && ShouldRemoveArgument(symbol))
@@ -382,14 +409,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         i = 0;
         foreach (var statement in @base.Statements)
         {
-            if (statement is ExpressionStatementSyntax ess)
-            {
-                if (NeedToDrop(ess.Expression))
-                {
-                    indices.Add(i);
-                }
-            }
-            else if (statement is IfStatementSyntax @if)
+            if (statement is IfStatementSyntax @if)
             {
                 if (CanDropIf(@if))
                 {
@@ -637,11 +657,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         => Regex.Replace(original, "Async", string.Empty);
 
     private static bool CanDropIf(IfStatementSyntax ifStatement)
-    {
-        return ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
-            && ifStatement.Condition is BinaryExpressionSyntax
-            && ifStatement.Else is null;
-    }
+        => ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
+        && (ifStatement.Else is null || CanDropElse(ifStatement.Else))
+        && ifStatement.Condition is BinaryExpressionSyntax or LiteralExpressionSyntax;
+
+    private static bool CanDropElse(ElseClauseSyntax @else)
+        => @else.Statement switch
+        {
+            BlockSyntax { Statements.Count: 0 } => true,
+            IfStatementSyntax @if => CanDropIf(@if),
+            _ => false,
+        };
 
     private static bool IsCreateSyncVersionAttribute(INamedTypeSymbol s)
         => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
@@ -698,7 +724,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
-        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType),
+        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType)
+            || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
         _ => false,
     };
 
@@ -715,16 +742,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     };
 
-    private bool NeedToDrop(ExpressionSyntax expr)
-        => expr switch
-        {
-            IdentifierNameSyntax ins => removedParameters.Contains(ins.Identifier.ValueText),
-            ConditionalAccessExpressionSyntax cae => NeedToDrop(cae.Expression),
-            InvocationExpressionSyntax ie => NeedToDrop(ie.Expression),
-            MemberAccessExpressionSyntax me => NeedToDrop(me.Expression),
-            _ => false,
-        };
-
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
 
@@ -740,6 +757,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
+        ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
         _ => false,
     };
 }
