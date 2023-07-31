@@ -357,6 +357,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return newType == node.Type ? @base : @base.WithType(newType);
     }
 
+    public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
+    {
+        var indices = DropStatements(node.Statements);
+
+        var @base = (SwitchSectionSyntax)base.VisitSwitchSection(node)!;
+
+        if (indices.Count > 0)
+        {
+            var newStatements = RemoveAtRange(@base.Statements, indices);
+            @base = @base.WithStatements(newStatements);
+        }
+
+        return @base;
+    }
+
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
     {
         var substituteIfWithEmpty = node.Statement is ExpressionStatementSyntax es && ShouldRemoveArgument(es.Expression);
@@ -380,41 +395,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var i = 0;
-        var indices = new HashSet<int>();
-
-        foreach (var statement in node.Statements)
-        {
-            if (statement is ExpressionStatementSyntax ess)
-            {
-                if (ShouldRemoveArgument(ess.Expression))
-                {
-                    indices.Add(i);
-                }
-            }
-            else if (statement is LocalDeclarationStatementSyntax { Declaration: { Variables.Count: 1 } declaration })
-            {
-                var symbol = GetSymbol(declaration.Type);
-                if (symbol is not null && ShouldRemoveArgument(symbol))
-                {
-                    indices.Add(i);
-                }
-            }
-
-            ++i;
-        }
+        var indices = DropStatements(node.Statements);
 
         var @base = (BlockSyntax)base.VisitBlock(node)!;
 
-        i = 0;
+        var i = 0;
         foreach (var statement in @base.Statements)
         {
-            if (statement is IfStatementSyntax @if)
+            if (CanDropEmptyStatement(statement))
             {
-                if (CanDropIf(@if))
-                {
-                    indices.Add(i);
-                }
+                indices.Add(i);
             }
 
             ++i;
@@ -661,6 +651,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         && (ifStatement.Else is null || CanDropElse(ifStatement.Else))
         && ifStatement.Condition is BinaryExpressionSyntax or LiteralExpressionSyntax;
 
+    private static bool CanDropSwitch(SwitchStatementSyntax switchStatement)
+        => switchStatement.Sections.All(CanDropSwitchSection);
+
+    private static bool CanDropSwitchSection(SwitchSectionSyntax section)
+        => section.Statements is { Count: 0 } || section.Statements[0] is BreakStatementSyntax;
+
     private static bool CanDropElse(ElseClauseSyntax @else)
         => @else.Statement switch
         {
@@ -729,7 +725,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => false,
     };
 
+    private static bool CanDropEmptyStatement(StatementSyntax statement)
+        => statement switch
+        {
+            IfStatementSyntax @if => CanDropIf(@if),
+            SwitchStatementSyntax s => CanDropSwitch(s),
+            _ => false,
+        };
+
     private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
+
+    private bool CanDropDeclaration(LocalDeclarationStatementSyntax local)
+    {
+        var symbol = GetSymbol(local.Declaration.Type);
+        return symbol is not null && ShouldRemoveArgument(symbol);
+    }
 
     private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
         => (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax);
@@ -741,6 +751,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => typeSyntax,
 
     };
+
+    private bool CanDropStatement(StatementSyntax statement) => statement switch
+    {
+        ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
+        LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
+        _ => false,
+    };
+
+    private HashSet<int> DropStatements(SyntaxList<StatementSyntax> statements)
+    {
+        var i = 0;
+        var indices = new HashSet<int>();
+
+        foreach (var statement in statements)
+        {
+            if (CanDropStatement(statement))
+            {
+                indices.Add(i);
+            }
+
+            ++i;
+        }
+
+        return indices;
+    }
 
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);

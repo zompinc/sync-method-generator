@@ -681,6 +681,18 @@ internal partial class Stuff
     [InlineData("if (true) { } else progress++;")]
     [InlineData("if (false) { } else if (true) progress++;")]
     [InlineData("if (false) { } else if (true) progress++; else { }")]
+    [InlineData("""
+        switch (k)
+        {
+            case 1:
+                progress++;
+                break;
+            default:
+                progress++;
+                progress++;
+                break;
+        }
+        """)]
 
     public Task DropIProgressStatement(string statement)
     {
@@ -701,6 +713,8 @@ internal partial class Stuff
     public static void WithIProgress()
     {
     }
+
+    static int k = 2;
 
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public static async Task CallWithIProgressAsync()
