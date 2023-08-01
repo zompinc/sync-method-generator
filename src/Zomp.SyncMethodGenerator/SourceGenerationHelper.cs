@@ -21,19 +21,17 @@ namespace Zomp.SyncMethodGenerator
 
     internal static string GenerateExtensionClass(MethodToGenerate methodToGenerate)
     {
-        static string GetKeyword(SyntaxKind sk)
+        static string GetKeyword(SyntaxKind sk) => sk switch
         {
-            return sk switch
-            {
-                SyntaxKind.PublicKeyword => "public",
-                SyntaxKind.InternalKeyword => "internal",
-                SyntaxKind.PrivateKeyword => "private",
-                SyntaxKind.SealedKeyword => "sealed",
-                SyntaxKind.ProtectedKeyword => "protected",
-                SyntaxKind.StaticKeyword => "static",
-                _ => throw new InvalidOperationException($"{sk} is not supported"),
-            };
-        }
+            SyntaxKind.PublicKeyword => "public",
+            SyntaxKind.InternalKeyword => "internal",
+            SyntaxKind.PrivateKeyword => "private",
+            SyntaxKind.SealedKeyword => "sealed",
+            SyntaxKind.ProtectedKeyword => "protected",
+            SyntaxKind.StaticKeyword => "static",
+            SyntaxKind.AbstractKeyword => "abstract",
+            _ => throw new InvalidOperationException($"{sk} is not supported"),
+        };
 
         // Handle namespaces
         var sbBegin = new StringBuilder();

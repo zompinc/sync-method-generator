@@ -825,6 +825,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
         ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
         AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
+        AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
         _ => false,
     };
 }

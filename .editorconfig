@@ -20,6 +20,9 @@ indent_size = 4
 csharp_style_expression_bodied_methods = true:silent
 csharp_style_namespace_declarations = file_scoped
 
+# SA1005: Single line comments should begin with single space
+dotnet_diagnostic.SA1005.severity = none
+
 [tests/**.cs]
 # CS1591: Missing XML comment for publicly visible type or member
 dotnet_diagnostic.CS1591.severity = none
