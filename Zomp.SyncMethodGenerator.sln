@@ -11,6 +11,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{120EB42D-886
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AE4C95B5-1D26-4B3F-9459-4D0F70099FD5}"
+	ProjectSection(SolutionItems) = preProject
+		tests\coverlet.runsettings = tests\coverlet.runsettings
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{0504B10E-4B5F-45E9-8661-05057A232157}"
 	ProjectSection(SolutionItems) = preProject
