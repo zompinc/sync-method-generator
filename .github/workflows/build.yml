@@ -58,6 +58,10 @@ jobs:
       run: dotnet test --no-build --verbosity normal --settings tests/coverlet.runsettings
     - name: Generate code coverage report
       run: dotnet tool run reportgenerator -reports:**/coverage.cobertura.xml -targetdir:./reports/coverage
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     - name: Upload artifacts (code coverage)
       uses: actions/upload-artifact@v3
       with:
