@@ -439,6 +439,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitCatchDeclaration(CatchDeclarationSyntax node)
+    {
+        var @base = (CatchDeclarationSyntax)base.VisitCatchDeclaration(node)!;
+        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
         var attributes = node.AttributeLists.Select(
@@ -569,7 +576,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
     {
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
-        return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
+        return @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -628,15 +635,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static string MakeType(ISymbol symbol)
         => symbol switch
         {
-            INamedTypeSymbol => "global::" + symbol.ToDisplayString(),
+            INamedTypeSymbol => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             _ => symbol.Name,
         };
 
-    private static IdentifierNameSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
+    private static IdentifierNameSyntax ProcessSymbol(ITypeSymbol typeSymbol)
+        => SyntaxFactory.IdentifierName(ProcessSymbolInternal(typeSymbol));
+
+    private static string ProcessSymbolInternal(ITypeSymbol typeSymbol) => typeSymbol switch
     {
-        INamedTypeSymbol nts => SyntaxFactory.IdentifierName(MakeType(nts)),
-        IArrayTypeSymbol ats => SyntaxFactory.IdentifierName(MakeType(ats.ElementType) + "[]"),
-        _ => SyntaxFactory.IdentifierName(typeSymbol.Name),
+        INamedTypeSymbol nts => MakeType(nts),
+        IArrayTypeSymbol ats => MakeType(ats.ElementType) + "[]",
+        _ => typeSymbol.Name,
     };
 
     private static string GetNameWithoutTypeParams(ISymbol symbol)
@@ -755,7 +765,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
-        => (semanticModel.GetTypeInfo(typeSyntax).Type is { } symbol ? ProcessSymbol(symbol) : typeSyntax).WithTriviaFrom(typeSyntax);
+    {
+        var typeSymbol = semanticModel.GetTypeInfo(typeSyntax).Type;
+        if (typeSymbol is null)
+        {
+            return typeSyntax;
+        }
+
+        return ProcessSymbol(typeSymbol).WithTriviaFrom(typeSyntax);
+    }
 
     private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
     {

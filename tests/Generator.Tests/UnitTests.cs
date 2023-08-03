@@ -853,4 +853,86 @@ internal partial class Stuff
 """;
         return TestHelper.Verify(source, false, true);
     }
+
+    [Fact]
+    public Task ConvertExceptionType()
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+internal partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task CatchException()
+    {
+        try
+        {
+            await Task.CompletedTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
+
+    [Fact]
+    public Task ConvertForeachType()
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+internal partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task ForeachLoop()
+    {
+        foreach (Int32 i in new Int32[] { 1 })
+        {
+        }
+
+        await Task.CompletedTask;
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
+
+    [Fact]
+    public Task TestTypes()
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+internal partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task TypeDeclarations()
+    {
+        String myStr;
+        string myStrPredefined;
+        Exception ex;
+        Int16 myShort;
+        long myLong;
+
+        await Task.CompletedTask;
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
 }

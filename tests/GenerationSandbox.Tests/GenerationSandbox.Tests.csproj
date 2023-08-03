@@ -3,7 +3,7 @@
   <PropertyGroup>
     <NoWarn>$(NoWarn);CA1812;CA1852;SA1402;CA1822;SA1201</NoWarn>
     <ImplicitUsings>false</ImplicitUsings>
-    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' != 'net472'">
