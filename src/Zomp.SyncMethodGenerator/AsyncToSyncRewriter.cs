@@ -28,6 +28,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         { Memory, "System.Span" },
     };
 
+    private static readonly SymbolDisplayFormat GlobalDisplayFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.None,
+        miscellaneousOptions:
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    private static readonly SymbolDisplayFormat NamespaceDisplayFormat = new(
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.None,
+        miscellaneousOptions:
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly HashSet<string> removedParameters = new();
     private readonly HashSet<string> memoryToSpan = new();
@@ -53,9 +68,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var symbol = GetSymbol(node);
 
-        static string? Convert(string key)
-            => Replacements.TryGetValue(key, out var replacement) ? replacement : key;
-
         if (symbol is not INamedTypeSymbol)
         {
             return @base;
@@ -63,7 +75,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var genericName = GetNameWithoutTypeParams(symbol);
 
-        var newType = Convert(genericName);
+        string? newType = null;
+        if (Replacements.TryGetValue(genericName, out var replacement))
+        {
+            if (replacement is not null)
+            {
+                newType = "global::" + replacement;
+            }
+        }
+        else
+        {
+            newType = symbol.ToDisplayString(GlobalDisplayFormat);
+        }
 
         if (node.Parent is ParameterSyntax ps && genericName is ReadOnlyMemory or Memory)
         {
@@ -72,7 +95,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         if (newType is not null)
         {
-            return @base.WithIdentifier(SyntaxFactory.Identifier("global::" + newType))
+            return @base.WithIdentifier(SyntaxFactory.Identifier(newType))
                 .WithTriviaFrom(@base);
         }
         else
@@ -650,7 +673,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     };
 
     private static string GetNameWithoutTypeParams(ISymbol symbol)
-        => symbol.ContainingNamespace + "." + symbol.Name;
+        => symbol.ToDisplayString(NamespaceDisplayFormat);
 
     private static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
         => SyntaxFactory.TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
