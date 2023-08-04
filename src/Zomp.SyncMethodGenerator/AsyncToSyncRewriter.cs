@@ -16,6 +16,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string IProgressInterface = "System.IProgress";
     private const string IAsyncResultInterface = "System.IAsyncResult";
     private const string CancellationTokenType = "System.Threading.CancellationToken";
+    private const string FromResult = "FromResult";
     private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
     private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface, IAsyncResultInterface });
     private static readonly Dictionary<string, string?> Replacements = new()
@@ -331,7 +332,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             newName = RemoveAsync(mins.Identifier.ValueText);
         }
-        else if (mins.Identifier.ValueText == "FromResult" && @base.ArgumentList.Arguments.Count > 0)
+        else if (mins.Identifier.ValueText == FromResult && @base.ArgumentList.Arguments.Count > 0)
         {
             return @base.ArgumentList.Arguments[0].Expression;
         }
@@ -471,6 +472,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
+        bool makeEmpty = node.ExpressionBody is { } arr && ShouldRemoveArgument(arr.Expression);
+
         var attributes = node.AttributeLists.Select(
             z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
             .WithTriviaFrom(z));
@@ -574,6 +577,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             ? SyntaxFactory.IdentifierName("void")
                 .WithTriviaFrom(returnType)
             : @base.ReturnType;
+
+        if (makeEmpty)
+        {
+            @base = @base
+                .WithExpressionBody(null)
+                .WithBody(SyntaxFactory.Block())
+                .WithSemicolonToken(default);
+        }
 
         var retVal = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
@@ -766,7 +777,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
-        IMethodSymbol ms => ShouldRemoveType(ms.ReturnType)
+        IMethodSymbol { Name: not FromResult } ms => ShouldRemoveType(ms.ReturnType)
             || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
         _ => false,
     };
@@ -837,7 +848,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private bool EndsWithAsync(ExpressionSyntax expression) => expression switch
     {
         IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
-        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name),
+        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
+        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
         _ => false,
     };
 

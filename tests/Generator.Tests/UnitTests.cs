@@ -194,6 +194,31 @@ public partial class Stuff
 """;
         return TestHelper.Verify(source);
     }
+
+    [Fact]
+    public Task DoNotDropInvocationChainThatHasAsyncAnywhere()
+    {
+        // The source code to test
+        var source = """
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+
+public partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task WriteAllTextAsync(string file, string contents,
+CancellationToken ct)
+    {
+        await File.WriteAllTextAsync(file, contents, ct).ConfigureAwait(true);
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
 #endif
 
     [Fact]
@@ -345,7 +370,6 @@ namespace Test;
 partial class Stuff
 {
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public async Task<int> GetColorAsync(FileAccess access = FileAccess.Read)
         => await Task.FromResult(1);
 }
@@ -395,6 +419,33 @@ partial class Stuff
     {
         {{invocation}}
     }
+
+    private class ClassWithAsyncFunc
+    {
+        internal Func<CancellationToken, Task<bool>> AsyncCondition
+            => (ct) => Task.FromResult(false);
+    }
+}
+""";
+        return TestHelper.Verify(source, false, true);
+    }
+
+    [Fact]
+    public Task DoNotCallPropertiesReturningGenericTasksExpression()
+    {
+        var source = $$"""
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    private readonly ClassWithAsyncFunc w = new();
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task MyMethodAsync(CancellationToken ct)
+        => await w.AsyncCondition(ct);
 
     private class ClassWithAsyncFunc
     {

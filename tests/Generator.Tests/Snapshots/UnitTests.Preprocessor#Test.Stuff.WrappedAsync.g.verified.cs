@@ -7,5 +7,5 @@ public partial class Stuff
     /// <summary>
     /// A summary
     /// </summary>
-    public void Wrapped() => global::System.Threading.Tasks.Task.CompletedTask;
+    public void Wrapped() {}
 }
