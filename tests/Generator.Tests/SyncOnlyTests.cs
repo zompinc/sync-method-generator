@@ -176,10 +176,18 @@ internal partial class SimpleMacro
         return TestHelper.Verify(source);
     }
 
-    [Fact]
-    public Task NotSyncOnlyInsideSyncOnly()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task NotSyncOnlyInsideSyncOnly(bool atLastToken)
     {
-        var source = """
+        var lastStatement = string.Empty;
+        if (!atLastToken)
+        {
+            lastStatement = "await Task.CompletedTask;";
+        }
+
+        var source = $$"""
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -191,16 +199,17 @@ internal partial class SimpleMacro
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public async Task ExecAsync(CancellationToken ct)
     {
+        if (true) { }
 #if SYNC_ONLY
 #if !SYNC_ONLY
         Console.Write("Async");
 #endif
 #endif
-        await Task.CompletedTask;
+{{lastStatement}}
     }
 }
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, disableUnique: true);
     }
 
     [Fact]

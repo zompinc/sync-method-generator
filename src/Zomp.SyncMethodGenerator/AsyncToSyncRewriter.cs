@@ -471,7 +471,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(lastToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange(newStatements2.ToList());
