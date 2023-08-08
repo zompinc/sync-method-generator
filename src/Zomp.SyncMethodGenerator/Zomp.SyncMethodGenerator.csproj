@@ -59,6 +59,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Zomp.SyncMethodGenerator.DiagnosticMessages" Static="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
   </ItemGroup>
 </Project>

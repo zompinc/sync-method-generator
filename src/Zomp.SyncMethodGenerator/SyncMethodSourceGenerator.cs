@@ -114,7 +114,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            string methodName = methodSymbol.ToString();
+            var methodName = methodSymbol.ToString();
 
             foreach (AttributeData attributeData in methodSymbol.GetAttributes())
             {

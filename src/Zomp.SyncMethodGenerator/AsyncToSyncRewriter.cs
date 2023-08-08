@@ -9,6 +9,7 @@
 /// <param name="semanticModel">The semantic model.</param>
 internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
 {
+    public const string SyncOnly = "SYNC_ONLY";
     private const string ReadOnlyMemory = "System.ReadOnlyMemory";
     private const string Memory = "System.Memory";
     private const string TaskType = "System.Threading.Tasks.Task";
@@ -49,6 +50,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private readonly HashSet<string> memoryToSpan = new();
     private readonly Dictionary<string, string> renamedLocalFunctions = new();
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+
+    private enum SyncOnlyDirectiveType
+    {
+        None,
+        SyncOnly,
+        NotSyncOnly,
+        Invalid,
+    }
 
     /// <summary>
     /// Gets the diagnostics messages.
@@ -385,17 +394,32 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
     {
-        var indices = DropStatements(node.Statements);
+        var directiveStack = new DirectiveStack();
+        var extraNodeInfoList = new Dictionary<int, ExtraNodeInfo>();
+
+        var dropIndices = DropStatements(node.Statements);
+
+        if (!ProcessDirectivesInStatements(node.Statements, extraNodeInfoList, directiveStack, dropIndices))
+        {
+            return node;
+        }
 
         var @base = (SwitchSectionSyntax)base.VisitSwitchSection(node)!;
 
-        if (indices.Count > 0)
+        for (var i = 0; i < @base.Statements.Count; ++i)
         {
-            var newStatements = RemoveAtRange(@base.Statements, indices);
-            @base = @base.WithStatements(newStatements);
+            var statement = @base.Statements[i];
+            if (CanDropEmptyStatement(statement))
+            {
+                dropIndices.Add(i);
+            }
         }
 
-        return @base;
+        var newStatements = ProcessStatements(@base.Statements, dropIndices, extraNodeInfoList);
+
+        var retVal = @base.WithStatements(newStatements);
+
+        return retVal;
     }
 
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
@@ -421,23 +445,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var indices = DropStatements(node.Statements);
+        var directiveStack = new DirectiveStack();
+        var extraNodeInfoList = new Dictionary<int, ExtraNodeInfo>();
+
+        var dropIndices = DropStatements(node.Statements);
+
+        if (!ProcessDirectivesInStatements(node.Statements, extraNodeInfoList, directiveStack, dropIndices))
+        {
+            return node;
+        }
 
         var @base = (BlockSyntax)base.VisitBlock(node)!;
 
-        var i = 0;
-        foreach (var statement in @base.Statements)
+        for (var i = 0; i < @base.Statements.Count; ++i)
         {
+            var statement = @base.Statements[i];
             if (CanDropEmptyStatement(statement))
             {
-                indices.Add(i);
+                dropIndices.Add(i);
             }
-
-            ++i;
         }
 
-        var newStatements = RemoveAtRange(@base.Statements, indices);
-        return @base.WithStatements(newStatements);
+        var newStatements = ProcessStatements(@base.Statements, dropIndices, extraNodeInfoList);
+
+        var retVal = @base.WithStatements(newStatements);
+
+        var lastToken = retVal.CloseBraceToken;
+        if (ProcessTrivia(lastToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
+        {
+            var oldStatements = retVal.Statements.ToList();
+            oldStatements.AddRange(newStatements2.ToList());
+            retVal = retVal.WithStatements(SyntaxFactory.List(oldStatements)).WithCloseBraceToken(lastToken.WithLeadingTrivia(newTrivia));
+        }
+
+        return retVal;
     }
 
     /// <inheritdoc/>
@@ -472,7 +513,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        bool makeEmpty = node.ExpressionBody is { } arr && ShouldRemoveArgument(arr.Expression);
+        var makeEmpty = node.ExpressionBody is { } arr && ShouldRemoveArgument(arr.Expression);
 
         var attributes = node.AttributeLists.Select(
             z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
@@ -683,6 +724,49 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => typeSymbol.Name,
     };
 
+    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, HashSet<int> dropIndices, Dictionary<int, ExtraNodeInfo> extraNodeInfoList)
+    {
+        var newStatements = new List<StatementSyntax>();
+
+        for (var i = 0; i < list.Count; ++i)
+        {
+            var statement = list[i];
+
+            var statementGetsDropped = dropIndices.Contains(i);
+            if (extraNodeInfoList.TryGetValue(i, out var extra))
+            {
+                var (statements, trivia) = extra;
+                for (var j = 0; j < statements.Count; ++j)
+                {
+                    var syncOnlyStatement = statements[j];
+                    var syncOnlyStatementWithTrivia = syncOnlyStatement;
+
+                    if (j == statements.Count - 1 && trivia.Count > 0)
+                    {
+                        var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
+                        trailingTrivia.AddRange(trivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
+                        syncOnlyStatementWithTrivia = syncOnlyStatementWithTrivia.WithTrailingTrivia(trailingTrivia);
+                    }
+
+                    newStatements.Add(syncOnlyStatementWithTrivia);
+                }
+            }
+
+            if (!dropIndices.Contains(i))
+            {
+                var newStatement = statement;
+                if (extra is not null)
+                {
+                    newStatement = newStatement.WithLeadingTrivia(extra.Trivia);
+                }
+
+                newStatements.Add(newStatement);
+            }
+        }
+
+        return SyntaxFactory.List(newStatements);
+    }
+
     private static string GetNameWithoutTypeParams(ISymbol symbol)
         => symbol.ToDisplayString(NamespaceDisplayFormat);
 
@@ -790,6 +874,172 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             _ => false,
         };
 
+    private bool ProcessDirectivesInStatements(
+        SyntaxList<StatementSyntax> statements,
+        Dictionary<int, ExtraNodeInfo> extraNodeInfoList,
+        DirectiveStack directiveStack,
+        HashSet<int> dropIndices)
+    {
+        for (var i = 0; i < statements.Count; ++i)
+        {
+            var statement = statements[i];
+            if (ProcessTrivia(statement.GetLeadingTrivia(), directiveStack) is not { } eni)
+            {
+                return false;
+            }
+
+            if (directiveStack.IsSyncOnly == false)
+            {
+                dropIndices.Add(i);
+            }
+
+            extraNodeInfoList.Add(i, eni);
+        }
+
+        return true;
+    }
+
+    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    {
+        static SyncOnlyDirectiveType GetDirectiveType(ExpressionSyntax condition) => condition switch
+        {
+            IdentifierNameSyntax { Identifier.ValueText: SyncOnly } => SyncOnlyDirectiveType.SyncOnly,
+            PrefixUnaryExpressionSyntax { Operand: IdentifierNameSyntax { Identifier.ValueText: SyncOnly }, OperatorToken.RawKind: (int)SyntaxKind.ExclamationToken } => SyncOnlyDirectiveType.NotSyncOnly,
+            PrefixUnaryExpressionSyntax pue => GetDirectiveType(pue.Operand),
+            ParenthesizedExpressionSyntax pe => GetDirectiveType(pe.Expression),
+            BinaryExpressionSyntax be
+                => GetDirectiveType(be.Left) == SyncOnlyDirectiveType.None
+                && GetDirectiveType(be.Right) == SyncOnlyDirectiveType.None
+                ? SyncOnlyDirectiveType.None
+                : SyncOnlyDirectiveType.Invalid,
+            _ => SyncOnlyDirectiveType.None,
+        };
+
+        var triviaList = new List<SyntaxTrivia>();
+
+        // Remembers if the last #if was SYNC_ONLY
+        var ifDirectives = directiveStack.Stack;
+
+        var statements = new List<StatementSyntax>();
+        foreach (var trivia in syntaxTriviaList)
+        {
+            if (trivia.IsKind(SyntaxKind.IfDirectiveTrivia) && trivia.GetStructure() is IfDirectiveTriviaSyntax ifDirective)
+            {
+                SyncOnlyDirectiveType syncOnlyDirectiveType = GetDirectiveType(ifDirective.Condition);
+
+                if (syncOnlyDirectiveType == SyncOnlyDirectiveType.Invalid)
+                {
+                    var d = Diagnostic.Create(InvalidCondition, trivia.GetLocation(), trivia);
+                    diagnostics.Add(d);
+                    return null;
+                }
+
+                if (syncOnlyDirectiveType != SyncOnlyDirectiveType.None)
+                {
+                    if (directiveStack.IsSyncOnly is { } isStackSyncOnly)
+                    {
+                        if (isStackSyncOnly ^ syncOnlyDirectiveType == SyncOnlyDirectiveType.SyncOnly)
+                        {
+                            var d = Diagnostic.Create(InvalidNesting, trivia.GetLocation(), trivia);
+                            diagnostics.Add(d);
+                            return null;
+                        }
+                    }
+                    else
+                    {
+                        directiveStack.IsSyncOnly = syncOnlyDirectiveType == SyncOnlyDirectiveType.SyncOnly;
+                    }
+                }
+
+                ifDirectives.Push(syncOnlyDirectiveType != SyncOnlyDirectiveType.None);
+
+                if (syncOnlyDirectiveType == SyncOnlyDirectiveType.None)
+                {
+                    triviaList.Add(trivia);
+                }
+
+                continue;
+            }
+
+            if (trivia.IsKind(SyntaxKind.ElseDirectiveTrivia))
+            {
+                if (!ifDirectives.Peek())
+                {
+                    triviaList.Add(trivia);
+                    continue;
+                }
+
+                if (directiveStack.IsSyncOnly.HasValue)
+                {
+                    directiveStack.IsSyncOnly = !directiveStack.IsSyncOnly.Value;
+                }
+
+                continue;
+            }
+
+            if (trivia.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+            {
+                if (!ifDirectives.Pop())
+                {
+                    triviaList.Add(trivia);
+                }
+
+                if (ifDirectives.Count == 0)
+                {
+                    directiveStack.IsSyncOnly = null;
+                }
+
+                continue;
+            }
+
+            if (trivia.IsKind(SyntaxKind.ElifDirectiveTrivia))
+            {
+                if (!ifDirectives.Peek())
+                {
+                    triviaList.Add(trivia);
+                }
+                else
+                {
+                    var d = Diagnostic.Create(InvalidElif, trivia.GetLocation(), trivia);
+                    diagnostics.Add(d);
+                    return null;
+                }
+
+                continue;
+            }
+
+            if (trivia.IsKind(SyntaxKind.DisabledTextTrivia) && directiveStack.IsSyncOnly == true)
+            {
+                var statementsText = trivia.ToString();
+                var compilation = SyntaxFactory.ParseCompilationUnit(statementsText);
+
+                foreach (var m in compilation.Members)
+                {
+                    if (m is GlobalStatementSyntax gs)
+                    {
+                        var statement = gs.Statement;
+                        if (triviaList.Count > 0)
+                        {
+                            triviaList.AddRange(statement.GetLeadingTrivia().ToList());
+                            statement = statement.WithLeadingTrivia(triviaList);
+                            triviaList.Clear();
+                        }
+
+                        //Cannot to the following because syntax node is not within syntax tree
+                        //var statement = (StatementSyntax)Visit(gs.Statement)!;
+                        statements.Add(statement);
+                    }
+                }
+
+                continue;
+            }
+
+            triviaList.Add(trivia);
+        }
+
+        return new(SyntaxFactory.List(statements), triviaList);
+    }
+
     private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
 
     private bool CanDropDeclaration(LocalDeclarationStatementSyntax local)
@@ -881,4 +1131,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
         _ => false,
     };
+
+    /// <summary>
+    /// Keeps track of nested directives.
+    /// </summary>
+    private sealed class DirectiveStack()
+    {
+        /// <summary>
+        /// Gets stack values of directive symbols. If SYNC_ONLY or !SYNC_ONLY were the last directive
+        /// true is stored, otherwise false.
+        /// </summary>
+        public Stack<bool> Stack { get; } = new();
+
+        /// <summary>
+        /// Gets or sets value indicating whether stack is SYNC_ONLY (true) or !SYNC_ONLY (false).
+        /// </summary>
+        public bool? IsSyncOnly { get; set; }
+    }
+
+    private sealed record ExtraNodeInfo(SyntaxList<StatementSyntax> Statements, List<SyntaxTrivia> Trivia);
 }

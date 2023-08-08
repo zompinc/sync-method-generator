@@ -16,6 +16,8 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
 
 ## How it works
 
+### CreateSyncVersionAttribute
+
 Add `CreateSyncVersionAttribute` to your async method in your `partial` class
 
 ```cs
@@ -53,12 +55,47 @@ A list of changes applied to the new synchronized method:
 - Invocation changes
   - Remove [ConfigureAwait](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.configureawait)
   - Remove [WithCancellation](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskasyncenumerableextensions.withcancellation)
-  - Remove `Async` suffix from method calls (e.g. [MoveNextAsync](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1.movenextasync) becomes [MoveNext](https://learn.microsoft.com/en-us/dotnet/api/system.collections.ienumerator.movenext))
+  - Rewrite asynchronous invocations with `Async` suffix to call synchronous version (e.g. [MoveNextAsync()](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1.movenextasync) becomes [MoveNext()](https://learn.microsoft.com/en-us/dotnet/api/system.collections.ienumerator.movenext))
+  - Remove asynchronous invocations without the `Async` suffix
   - Remove [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken) parameter
   - Remove [IProgress\<T>.Report(T)](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1.report) call
   - Remove [Memory\<T>.Span](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1.span) property
 - Remove `CreateSyncVersionAttribute`
 - Update XML documentation
+
+### SYNC_ONLY symbol
+
+In case there is logic which should only be executed in the synchronized version of the method, wrap it in `SYNC_ONLY` #if directive.
+
+`SYNC_ONLY` must not be defined anywhere. The source generator will scan #if directives for this symbol.
+
+Code inside `SYNC_ONLY` block will be copied as is. Unless global namespaces are used in the project, this code should contain fully qualified namespaces.
+
+The following syntax:
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task WithSyncOnlyDirectiveAsync(CancellationToken ct)
+{
+#if SYNC_ONLY
+    System.Console.Write("Sync");
+#endif
+    await Task.CompletedTask;
+}
+```
+
+will output:
+
+```cs
+public void WithSyncOnlyDirective()
+{
+    System.Console.Write("Sync");
+}
+```
+
+If you only want to execute in the original async version, flip the flag like this: `#if !SYNC_ONLY`.
+
+Note: `SYNC_ONLY` cannot be mixed with other symbols in a conditional expression and cannot have `#elif` directive.
 
 ## Installation
 
