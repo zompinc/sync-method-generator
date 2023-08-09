@@ -6,7 +6,11 @@
 [Generator]
 public class SyncMethodSourceGenerator : IIncrementalGenerator
 {
-    internal const string CreateSyncVersionAttribute = "Zomp.SyncMethodGenerator.CreateSyncVersionAttribute";
+    /// <summary>
+    /// Create sync version attribute string.
+    /// </summary>
+    public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
+    internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -19,11 +23,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         }
 #endif
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-            "CreateSyncVersionAttribute.g.cs", SourceText.From(SourceGenerationHelper.Attribute, Encoding.UTF8)));
+            $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
         IncrementalValuesProvider<MethodDeclarationSyntax> methodDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                CreateSyncVersionAttribute,
+                QualifiedCreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
                 transform: static (ctx, _) => (MethodDeclarationSyntax)ctx.TargetNode);
 
@@ -89,7 +93,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     private static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
     {
         var methodsToGenerate = new List<MethodToGenerate>();
-        INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(CreateSyncVersionAttribute);
+        INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
         if (attribute == null)
         {
             // nothing to do if this type isn't available

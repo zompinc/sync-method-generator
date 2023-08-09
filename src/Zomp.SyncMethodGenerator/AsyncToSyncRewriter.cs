@@ -392,36 +392,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return newType == node.Type ? @base : @base.WithType(newType);
     }
 
-    public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
-    {
-        var directiveStack = new DirectiveStack();
-        var extraNodeInfoList = new Dictionary<int, ExtraNodeInfo>();
-
-        var dropIndices = DropStatements(node.Statements);
-
-        if (!ProcessDirectivesInStatements(node.Statements, extraNodeInfoList, directiveStack, dropIndices))
-        {
-            return node;
-        }
-
-        var @base = (SwitchSectionSyntax)base.VisitSwitchSection(node)!;
-
-        for (var i = 0; i < @base.Statements.Count; ++i)
-        {
-            var statement = @base.Statements[i];
-            if (CanDropEmptyStatement(statement))
-            {
-                dropIndices.Add(i);
-            }
-        }
-
-        var newStatements = ProcessStatements(@base.Statements, dropIndices, extraNodeInfoList);
-
-        var retVal = @base.WithStatements(newStatements);
-
-        return retVal;
-    }
-
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
     {
         var substituteIfWithEmpty = node.Statement is ExpressionStatementSyntax es && ShouldRemoveArgument(es.Expression);
@@ -443,35 +413,37 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
+    {
+        var statementProcessor = new StatementProcessor(this, node.Statements);
+        if (statementProcessor.HasErrors)
+        {
+            return node;
+        }
+
+        var @base = (SwitchSectionSyntax)base.VisitSwitchSection(node)!;
+        var newStatements = statementProcessor.PostProcess(@base.Statements);
+        var retVal = @base.WithStatements(newStatements);
+
+        return retVal;
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var directiveStack = new DirectiveStack();
-        var extraNodeInfoList = new Dictionary<int, ExtraNodeInfo>();
-
-        var dropIndices = DropStatements(node.Statements);
-
-        if (!ProcessDirectivesInStatements(node.Statements, extraNodeInfoList, directiveStack, dropIndices))
+        var statementProcessor = new StatementProcessor(this, node.Statements);
+        if (statementProcessor.HasErrors)
         {
             return node;
         }
 
         var @base = (BlockSyntax)base.VisitBlock(node)!;
 
-        for (var i = 0; i < @base.Statements.Count; ++i)
-        {
-            var statement = @base.Statements[i];
-            if (CanDropEmptyStatement(statement))
-            {
-                dropIndices.Add(i);
-            }
-        }
-
-        var newStatements = ProcessStatements(@base.Statements, dropIndices, extraNodeInfoList);
-
+        var newStatements = statementProcessor.PostProcess(@base.Statements);
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange(newStatements2.ToList());
@@ -724,7 +696,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => typeSymbol.Name,
     };
 
-    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, HashSet<int> dropIndices, Dictionary<int, ExtraNodeInfo> extraNodeInfoList)
+    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, Dictionary<int, ExtraNodeInfo> extraNodeInfoList)
     {
         var newStatements = new List<StatementSyntax>();
 
@@ -732,32 +704,35 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             var statement = list[i];
 
-            var statementGetsDropped = dropIndices.Contains(i);
-            if (extraNodeInfoList.TryGetValue(i, out var extra))
+            if (!extraNodeInfoList.TryGetValue(i, out var extra))
             {
-                var (statements, trivia) = extra;
-                for (var j = 0; j < statements.Count; ++j)
-                {
-                    var syncOnlyStatement = statements[j];
-                    var syncOnlyStatementWithTrivia = syncOnlyStatement;
-
-                    if (j == statements.Count - 1 && trivia.Count > 0)
-                    {
-                        var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
-                        trailingTrivia.AddRange(trivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
-                        syncOnlyStatementWithTrivia = syncOnlyStatementWithTrivia.WithTrailingTrivia(trailingTrivia);
-                    }
-
-                    newStatements.Add(syncOnlyStatementWithTrivia);
-                }
+                newStatements.Add(statement);
+                continue;
             }
 
-            if (!dropIndices.Contains(i))
+            var (statementGetsDropped, statements, trivia) = extra;
+
+            for (var j = 0; j < statements.Count; ++j)
+            {
+                var syncOnlyStatement = statements[j];
+                var syncOnlyStatementWithTrivia = syncOnlyStatement;
+
+                if (j == statements.Count - 1 && trivia.Count > 0)
+                {
+                    var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
+                    trailingTrivia.AddRange(trivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
+                    syncOnlyStatementWithTrivia = syncOnlyStatementWithTrivia.WithTrailingTrivia(trailingTrivia);
+                }
+
+                newStatements.Add(syncOnlyStatementWithTrivia);
+            }
+
+            if (!statementGetsDropped)
             {
                 var newStatement = statement;
                 if (extra is not null)
                 {
-                    newStatement = newStatement.WithLeadingTrivia(extra.Trivia);
+                    newStatement = newStatement.WithLeadingTrivia(trivia);
                 }
 
                 newStatements.Add(newStatement);
@@ -796,7 +771,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         };
 
     private static bool IsCreateSyncVersionAttribute(INamedTypeSymbol s)
-        => s.ToDisplayString() == SyncMethodSourceGenerator.CreateSyncVersionAttribute;
+        => s.ToDisplayString() == SyncMethodSourceGenerator.QualifiedCreateSyncVersionAttribute;
 
     private static SyntaxList<TNode> RemoveAtRange<TNode>(SyntaxList<TNode> list, IEnumerable<int> indices)
         where TNode : SyntaxNode
@@ -874,11 +849,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             _ => false,
         };
 
-    private bool ProcessDirectivesInStatements(
+    private bool PreProcess(
         SyntaxList<StatementSyntax> statements,
         Dictionary<int, ExtraNodeInfo> extraNodeInfoList,
-        DirectiveStack directiveStack,
-        HashSet<int> dropIndices)
+        DirectiveStack directiveStack)
     {
         for (var i = 0; i < statements.Count; ++i)
         {
@@ -888,9 +862,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 return false;
             }
 
+            if (CanDropStatement(statement))
+            {
+                eni = eni with { DropOriginal = true };
+            }
+
             if (directiveStack.IsSyncOnly == false)
             {
-                dropIndices.Add(i);
+                eni = eni with { DropOriginal = true };
             }
 
             extraNodeInfoList.Add(i, eni);
@@ -1037,7 +1016,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             triviaList.Add(trivia);
         }
 
-        return new(SyntaxFactory.List(statements), triviaList);
+        return new(false, SyntaxFactory.List(statements), triviaList);
     }
 
     private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
@@ -1073,24 +1052,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
         _ => false,
     };
-
-    private HashSet<int> DropStatements(SyntaxList<StatementSyntax> statements)
-    {
-        var i = 0;
-        var indices = new HashSet<int>();
-
-        foreach (var statement in statements)
-        {
-            if (CanDropStatement(statement))
-            {
-                indices.Add(i);
-            }
-
-            ++i;
-        }
-
-        return indices;
-    }
 
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
@@ -1149,5 +1110,49 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         public bool? IsSyncOnly { get; set; }
     }
 
-    private sealed record ExtraNodeInfo(SyntaxList<StatementSyntax> Statements, List<SyntaxTrivia> Trivia);
+    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia)
+    {
+        public ExtraNodeInfo(bool dropOriginal)
+            : this(dropOriginal, SyntaxFactory.List(Array.Empty<StatementSyntax>()), Array.Empty<SyntaxTrivia>())
+        {
+        }
+
+        public static implicit operator ExtraNodeInfo(bool b) => new(b);
+    }
+
+    private sealed class StatementProcessor
+    {
+        private readonly DirectiveStack directiveStack = new();
+        private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = new();
+
+        public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
+        {
+            HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, directiveStack);
+        }
+
+        public bool HasErrors { get; }
+
+        public DirectiveStack DirectiveStack => directiveStack;
+
+        public SyntaxList<StatementSyntax> PostProcess(SyntaxList<StatementSyntax> statements)
+        {
+            for (var i = 0; i < statements.Count; ++i)
+            {
+                var statement = statements[i];
+                if (CanDropEmptyStatement(statement))
+                {
+                    if (extraNodeInfoList.TryGetValue(i, out var zz))
+                    {
+                        extraNodeInfoList[i] = zz with { DropOriginal = true };
+                    }
+                    else
+                    {
+                        extraNodeInfoList.Add(i, true);
+                    }
+                }
+            }
+
+            return ProcessStatements(statements, extraNodeInfoList);
+        }
+    }
 }

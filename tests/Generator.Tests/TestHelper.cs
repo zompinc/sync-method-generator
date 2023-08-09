@@ -74,7 +74,7 @@ public static class TestHelper
         var target = new RunResultWithIgnoreList
         {
             Result = driver.GetRunResult(),
-            IgnoredFiles = { "CreateSyncVersionAttribute.g.cs" },
+            IgnoredFiles = { $"{SyncMethodSourceGenerator.CreateSyncVersionAttribute}.g.cs" },
         };
 
         var verifier = Verifier
