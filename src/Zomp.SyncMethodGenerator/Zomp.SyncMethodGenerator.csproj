@@ -16,6 +16,7 @@
     <NoPackageAnalysis>true</NoPackageAnalysis>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
     <PackageTags>async sync csharp source generator</PackageTags>
+    <DevelopmentDependency>true</DevelopmentDependency>
   </PropertyGroup>
 
   <!-- This ensures the library will be packaged as a source generator when we use `dotnet pack` -->
