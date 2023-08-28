@@ -104,3 +104,39 @@ To add the library use:
 ```sh
 dotnet add package Zomp.SyncMethodGenerator
 ```
+
+## Act
+
+This project is fully compatible with [act](https://github.com/nektos/act).
+
+Other than required packages to run `act` itself, GitHub Actions script installs anything else that might be missing, such as node, yarn and dotnet. On Windows platform, software installation is performed on the host itself due to [lack](https://github.com/nektos/act/issues/1608) of container support.
+
+To build the project using act follow these instructions:
+
+### Windows
+
+Install [chocolatey](https://chocolatey.org/install) if missing.
+
+Install the following packages if missing:
+
+```pwsh
+choco install git -y
+choco install act-cli -y
+refreshenv
+```
+
+In the project directory run:
+
+```pwsh
+act -P windows-latest=-self-hosted --artifact-server-path /tmp/artifacts
+```
+
+### Linux
+
+Install act by following these [instructions](https://lindevs.com/install-act-on-ubuntu).
+
+In the project directory run:
+
+```pwsh
+act --artifact-server-path /tmp/artifacts
+```
