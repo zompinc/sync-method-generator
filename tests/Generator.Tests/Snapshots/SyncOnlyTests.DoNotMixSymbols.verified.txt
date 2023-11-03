@@ -6,8 +6,6 @@
       Severity: Error,
       WarningLevel: 0,
       Location: : (11,0)-(11,38),
-      Description: ,
-      HelpLink: ,
       MessageFormat: Couldn't process condition '{0}'. SYNC_ONLY and other symbols must not be in the same condition.,
       Message: Couldn't process condition '#if SYMBOL1 && !(SYNC_ONLY || SYMBOL2)'. SYNC_ONLY and other symbols must not be in the same condition.,
       Category: Preprocessor

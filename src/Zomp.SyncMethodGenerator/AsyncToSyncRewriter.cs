@@ -46,9 +46,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
     private readonly SemanticModel semanticModel = semanticModel;
-    private readonly HashSet<string> removedParameters = new();
-    private readonly HashSet<string> memoryToSpan = new();
-    private readonly Dictionary<string, string> renamedLocalFunctions = new();
+    private readonly HashSet<string> removedParameters = [];
+    private readonly HashSet<string> memoryToSpan = [];
+    private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
     private enum SyncOnlyDirectiveType
@@ -849,6 +849,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             _ => false,
         };
 
+    private static bool EndsWithAsync(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
+        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
+        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
+        _ => false,
+    };
+
     private bool PreProcess(
         SyntaxList<StatementSyntax> statements,
         Dictionary<int, ExtraNodeInfo> extraNodeInfoList,
@@ -1056,14 +1064,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
 
-    private bool EndsWithAsync(ExpressionSyntax expression) => expression switch
-    {
-        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
-        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
-        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
-        _ => false,
-    };
-
     private bool DropInvocation(InvocationExpressionSyntax invocation)
     {
         if (EndsWithAsync(invocation.Expression))
@@ -1123,7 +1123,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private sealed class StatementProcessor
     {
         private readonly DirectiveStack directiveStack = new();
-        private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = new();
+        private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = [];
 
         public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
         {

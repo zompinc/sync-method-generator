@@ -25,9 +25,14 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- Remove when resolved https://github.com/DotNetAnalyzers/StyleCopAnalyzers/issues/3687 -->
+    <NoWarn>$(NoWarn);SA1010</NoWarn>
+  </PropertyGroup>
+
   <PropertyGroup Condition="$(MsBuildProjectName.EndsWith('.Tests'))">
     <NoWarn>$(NoWarn);CA1810</NoWarn>
-    
+
     <!-- Slow logger is just fine -->
     <NoWarn>$(NoWarn);CA1848</NoWarn>
 

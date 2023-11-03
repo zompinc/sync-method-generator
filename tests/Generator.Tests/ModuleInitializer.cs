@@ -63,6 +63,6 @@ public static class ModuleInitializer
     {
         public required GeneratorDriverRunResult Result { get; init; }
 
-        public List<string> IgnoredFiles { get; init; } = new();
+        public List<string> IgnoredFiles { get; init; } = [];
     }
 }
