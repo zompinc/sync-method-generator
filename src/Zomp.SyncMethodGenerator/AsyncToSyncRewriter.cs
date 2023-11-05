@@ -130,6 +130,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (LocalFunctionStatementSyntax)base.VisitLocalFunctionStatement(node)!;
 
+        if (semanticModel.GetTypeInfo(node.ReturnType).Type is not INamedTypeSymbol symbol)
+        {
+            return @base;
+        }
+
         var newNode = @base;
 
         var identifier = @base.Identifier;
@@ -141,6 +146,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         return newNode
+            .WithReturnType(GetReturnType(@base.ReturnType, symbol))
             .WithModifiers(StripAsyncModifier(@base.Modifiers))
             .WithTriviaFrom(@base);
     }
@@ -586,11 +592,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newTriviaList = newTriviaList.Remove(preprocessor);
         }
 
-        var newReturnType = isTask
-            ? SyntaxFactory.IdentifierName("void")
-                .WithTriviaFrom(returnType)
-            : @base.ReturnType;
-
         if (makeEmpty)
         {
             @base = @base
@@ -598,6 +599,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 .WithBody(SyntaxFactory.Block())
                 .WithSemicolonToken(default);
         }
+
+        var newReturnType = GetReturnType(@base.ReturnType, symbol);
 
         var retVal = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
@@ -856,6 +859,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
         _ => false,
     };
+
+    private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol)
+    {
+        var genericReturnType = returnType as GenericNameSyntax;
+        var isTask = genericReturnType is null && symbol.ToString() is TaskType or ValueTaskType;
+
+        return isTask
+            ? SyntaxFactory.IdentifierName("void")
+                .WithTriviaFrom(returnType)
+            : returnType;
+    }
 
     private bool PreProcess(
         SyntaxList<StatementSyntax> statements,

@@ -565,6 +565,32 @@ partial class Stuff
     }
 
     [Fact]
+    public Task LocalFunctionNonGeneric()
+    {
+        var source = """
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Test;
+partial class Stuff
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)
+    {
+        static async Task LocalFuncAsync()
+        {
+            await Task.CompletedTask;
+        }
+
+        await LocalFuncAsync();
+    }
+}
+""";
+        return TestHelper.Verify(source);
+    }
+
+    [Fact]
     public Task LocalFunctionDelegateWithEndingAsync()
     {
         var source = """
