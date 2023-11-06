@@ -37,18 +37,14 @@ class Component
     {
         // The source code to test
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
+if (true)
 {
-    if (true)
-    {
 #if SYNC_ONLY
-        throw new InvalidOperationException("Some exception");
+    throw new InvalidOperationException("Some exception");
 #endif
-    }
 }
 """;
-        return TestHelper.Verify(source, false, true);
+        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
@@ -57,15 +53,11 @@ public async Task ExecAsync(CancellationToken ct)
         // The source code to test
         var source = $$"""
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync()
-{
 #if SYNC_ONLY
 #endif
-    Console.Write("Done");
-}
+Console.Write("Done");
 """;
-        return TestHelper.Verify(source, false, true);
+        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
@@ -73,53 +65,41 @@ public async Task ExecAsync()
     {
         // The source code to test
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
 #if SYMBOL1
-    ArgumentNullException.ThrowIfNull(source);
+ArgumentNullException.ThrowIfNull(source);
 #elif SYMBOL2
-    ArgumentNullException.ThrowIfNull(source);
+ArgumentNullException.ThrowIfNull(source);
 #else
-    ArgumentNullException.ThrowIfNull(source);
+ArgumentNullException.ThrowIfNull(source);
 #endif
-}
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
     public Task DoNotRemoveInsideSyncOnly()
     {
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
 #if SYNC_ONLY
 #if SYMBOL
-    throw new global::System.InvalidOperationException("Some exception");
+throw new global::System.InvalidOperationException("Some exception");
 #endif
 #endif
-    await Task.CompletedTask;
-}
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
     public Task NotSyncOnly()
     {
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
 #if !SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #endif
-    await Task.CompletedTask;
-}
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Theory]
@@ -134,37 +114,29 @@ public async Task ExecAsync(CancellationToken ct)
         }
 
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
-    if (true) { }
+if (true) { }
 #if SYNC_ONLY
 #if !SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #endif
 #endif
 {{lastStatement}}
-}
 """;
-        return TestHelper.Verify(source, disableUnique: true);
+        return TestHelper.Verify(source, disableUnique: true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
     public Task NestedSyncOnly()
     {
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
 #if SYNC_ONLY
 #if SYNC_ONLY
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #endif
 #endif
-    await Task.CompletedTask;
-}
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Theory]
@@ -178,45 +150,41 @@ public async Task ExecAsync(CancellationToken ct)
         {
             true when useElse => """
 #if SYNC_ONLY
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #else
-    Console.Write("Async");
+Console.Write("Async");
 #endif
 """,
             true when !useElse => """
 #if SYNC_ONLY
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #endif
 #if !SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #endif
 """,
             false when useElse => """
 #if !SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #else
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #endif
 """,
             _ => """
 #if SYNC_ONLY
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #endif
 #if !SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #endif
 """,
         };
 
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync(CancellationToken ct)
-{
 {{conditions}}
-    await Task.CompletedTask;
-}
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source, disableUnique: true);
+        return TestHelper.Verify(source, disableUnique: true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
@@ -224,17 +192,14 @@ public async Task ExecAsync(CancellationToken ct)
     {
         // The source code to test
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync()
-{
 #if SYNC_ONLY
-    Console.Write("Async");
+Console.Write("Async");
 #elif Symbol
-    Console.Write("Whatevs");
+Console.Write("Whatevs");
 #endif
-    await Task.CompletedTask;
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
@@ -242,15 +207,11 @@ public async Task ExecAsync()
     {
         // The source code to test
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync()
-{
 #if SYMBOL1 && !(SYNC_ONLY || SYMBOL2)
-    System.Console.Write("Sync");
+System.Console.Write("Sync");
 #endif
-}
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
@@ -258,32 +219,28 @@ public async Task ExecAsync()
     {
         // The source code to test
         var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public async Task ExecAsync()
+var i = 0;
+switch (i)
 {
-    var i = 0;
-    switch (i)
-    {
-        case 0:
+    case 0:
 #if !SYNC_ONLY
-            Console.Write("Async");
+        Console.Write("Async");
 #endif
-            break;
-        case 2:
+        break;
+    case 2:
 #if SYNC_ONLY
-            System.Console.Write("Sync");
+        System.Console.Write("Sync");
 #endif
-            break;
-        case 3:
+        break;
+    case 3:
 #if SYMBOL
-            System.Console.Write("Symbol");
+        System.Console.Write("Symbol");
 #endif
-            break;
-    }
-
-    await Task.CompletedTask;
+        break;
 }
+
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source);
+        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
     }
 }

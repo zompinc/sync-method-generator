@@ -49,7 +49,7 @@ namespace Test
 """;
 
         // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 #endif
 

@@ -25,7 +25,7 @@ namespace NsOne
     }
 }
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ partial class GenericClass<T1, T2> where T1 : struct where T2 : class
     }
 }
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ namespace NsOne
 }
 
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
 #if NETCOREAPP1_0_OR_GREATER
@@ -195,7 +195,7 @@ namespace N2
     }
 }
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
     [Fact]
@@ -479,7 +479,7 @@ namespace Extensi.ons123
     }
 }
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
     [Fact]
@@ -511,7 +511,7 @@ These comments shouldn't show
 }
 
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
     [Fact]
@@ -560,7 +560,7 @@ namespace Extensi.ons123
     }
 }
 """;
-        return TestHelper.Verify(source, isFullSource: true);
+        return TestHelper.Verify(source, sourceType: SourceType.Full);
     }
 
 #if NETCOREAPP1_0_OR_GREATER
@@ -721,54 +721,42 @@ private sealed class CustomProgress : IProgress<float>
     public Task ConvertExceptionType()
     {
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public static async Task CatchException()
+try
 {
-    try
-    {
-        await Task.CompletedTask;
-    }
-    catch (OperationCanceledException)
-    {
-    }
+    await Task.CompletedTask;
+}
+catch (OperationCanceledException)
+{
 }
 """;
-        return TestHelper.Verify(source, false, true);
+        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
     public Task ConvertForeachType()
     {
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public static async Task ForeachLoop()
+foreach (Int32 i in new Int32[] { 1 })
 {
-    foreach (Int32 i in new Int32[] { 1 })
-    {
-    }
-
-    await Task.CompletedTask;
 }
+
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source, false, true);
+        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
     public Task TestTypes()
     {
         var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
-public static async Task TypeDeclarations()
-{
-    String myStr;
-    string myStrPredefined;
-    Exception ex;
-    Int16 myShort;
-    long myLong;
+String myStr;
+string myStrPredefined;
+Exception ex;
+Int16 myShort;
+long myLong;
 
-    await Task.CompletedTask;
-}
+await Task.CompletedTask;
 """;
-        return TestHelper.Verify(source, false, true);
+        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
     }
 }

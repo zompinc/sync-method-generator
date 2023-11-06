@@ -40,20 +40,31 @@ global using global::Zomp.SyncMethodGenerator;
     ];
 #endif
 
-    internal static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, bool isFullSource = false, params object?[] parameters)
+    internal static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, SourceType sourceType = SourceType.ClassBody, params object?[] parameters)
     {
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(LanguageVersion.Preview)
             .WithPreprocessorSymbols(PreprocessorSymbols);
 
-        if (!isFullSource)
+        if (sourceType != SourceType.Full)
         {
-            string linesWithIndentation = ChangeIndentation(source, InsertIndentation);
+            if (sourceType == SourceType.MethodBody)
+            {
+                source = $$"""
+[CreateSyncVersion]
+async Task MethodAsync(CancellationToken ct)
+{
+{{ChangeIndentation(source, InsertIndentation)}}
+}
+""";
+            }
+
+            source = ChangeIndentation(source, InsertIndentation);
             source = $$"""
 namespace Test;
 partial class Class
 {
-{{linesWithIndentation}}
+{{source}}
 }
 """;
         }
