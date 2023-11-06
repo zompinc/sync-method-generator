@@ -1,16 +1,30 @@
-﻿using Zomp.SyncMethodGenerator;
+﻿using System.Text.RegularExpressions;
+using Zomp.SyncMethodGenerator;
 using static Generator.Tests.ModuleInitializer;
 
 namespace Generator.Tests;
 
-public static class TestHelper
+/// <summary>
+/// Helps set up the test cases.
+/// </summary>
+public static partial class TestHelper
 {
+    private const string GlobalUsingsSource = """
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Drawing;
+global using global::System.IO;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+global using global::Zomp.SyncMethodGenerator;
+""";
+
     private static readonly string[] PreprocessorSymbols
 #if NETFRAMEWORK
         = Array.Empty<string>();
 #else
-        = new string[]
-    {
+        =
+    [
 #if NET7_0
         "NET7_0",
 #endif
@@ -23,16 +37,29 @@ public static class TestHelper
 #if NET6_0_OR_GREATER
         "NET6_0_OR_GREATER",
 #endif
-    };
+    ];
 #endif
 
-    public static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, params object?[] parameters)
+    internal static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, bool isFullSource = false, params object?[] parameters)
     {
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(LanguageVersion.Preview)
             .WithPreprocessorSymbols(PreprocessorSymbols);
 
+        if (!isFullSource)
+        {
+            string linesWithIndentation = ChangeIndentation(source, InsertIndentation);
+            source = $$"""
+namespace Test;
+partial class Class
+{
+{{linesWithIndentation}}
+}
+""";
+        }
+
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
+        SyntaxTree globalUsings = CSharpSyntaxTree.ParseText(GlobalUsingsSource, parseOptions);
 
         // SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
         var locations = new[]
@@ -55,7 +82,7 @@ public static class TestHelper
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
-            syntaxTrees: new[] { syntaxTree },
+            syntaxTrees: new[] { syntaxTree, globalUsings },
             references: references);
 
         var generator = new SyncMethodSourceGenerator();
@@ -98,4 +125,24 @@ public static class TestHelper
 
         return verifier;
     }
+
+    internal static string InsertIndentation(string s) => s.Length == 0 || s[0] == '#' ? s : $"    {s}";
+
+    internal static string RemoveIndentation(string s) => s.StartsWith("    ", StringComparison.Ordinal) ? s[4..] : s;
+
+    internal static string ChangeIndentation(string source, Func<string, string> func)
+    {
+#if NET7_0_OR_GREATER
+        var lines = NewLineRegex().Split(source);
+#else
+        var lines = Regex.Split(source, "\r\n");
+#endif
+        var linesWithIndentation = string.Join("\r\n", lines.Select(func));
+        return linesWithIndentation;
+    }
+
+#if NET7_0_OR_GREATER
+    [GeneratedRegex("\r\n")]
+    private static partial Regex NewLineRegex();
+#endif
 }

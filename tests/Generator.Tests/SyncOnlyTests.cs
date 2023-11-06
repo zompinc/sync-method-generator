@@ -12,29 +12,20 @@ public class SyncOnlyTests
     {
         // The source code to test
         var source = $$"""
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+Component component = new();
 
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    Component component = new();
-
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 {{(before ? additionalIgnorableCommands : string.Empty)}}#if SYNC_ONLY
-        throw new InvalidOperationException("Some exception");
+    throw new InvalidOperationException("Some exception");
 #endif{{(before ? string.Empty : additionalIgnorableCommands)}}
-    }
+}
 
-    class Component
-    {
-        internal async Task<bool> AsyncDump(CancellationToken token) {
-            return await Task.FromResult(false);
-        }
+class Component
+{
+    internal async Task<bool> AsyncDump(CancellationToken token) {
+        return await Task.FromResult(false);
     }
 }
 """;
@@ -46,23 +37,14 @@ internal partial class SimpleMacro
     {
         // The source code to test
         var source = $$"""
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class Stuff
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
+    if (true)
     {
-        if (true)
-        {
 #if SYNC_ONLY
-            throw new InvalidOperationException("Some exception");
+        throw new InvalidOperationException("Some exception");
 #endif
-        }
     }
 }
 """;
@@ -74,22 +56,13 @@ internal partial class Stuff
     {
         // The source code to test
         var source = $$"""
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
-namespace Test;
-
-internal partial class Stuff
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync()
 {
-
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync()
-    {
 #if SYNC_ONLY
 #endif
-        Console.Write("Done");
-    }
+    Console.Write("Done");
 }
 """;
         return TestHelper.Verify(source, false, true);
@@ -100,25 +73,16 @@ internal partial class Stuff
     {
         // The source code to test
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 #if SYMBOL1
-        ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #elif SYMBOL2
-        ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #else
-        ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #endif
-    }
 }
 """;
         return TestHelper.Verify(source);
@@ -128,24 +92,15 @@ internal partial class SimpleMacro
     public Task DoNotRemoveInsideSyncOnly()
     {
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 #if SYNC_ONLY
 #if SYMBOL
-        throw new global::System.InvalidOperationException("Some exception");
+    throw new global::System.InvalidOperationException("Some exception");
 #endif
 #endif
-        await Task.CompletedTask;
-    }
+    await Task.CompletedTask;
 }
 """;
         return TestHelper.Verify(source);
@@ -155,22 +110,13 @@ internal partial class SimpleMacro
     public Task NotSyncOnly()
     {
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 #if !SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #endif
-        await Task.CompletedTask;
-    }
+    await Task.CompletedTask;
 }
 """;
         return TestHelper.Verify(source);
@@ -188,25 +134,16 @@ internal partial class SimpleMacro
         }
 
         var source = $$"""
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
-        if (true) { }
+    if (true) { }
 #if SYNC_ONLY
 #if !SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #endif
 #endif
 {{lastStatement}}
-    }
 }
 """;
         return TestHelper.Verify(source, disableUnique: true);
@@ -216,24 +153,15 @@ internal partial class SimpleMacro
     public Task NestedSyncOnly()
     {
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 #if SYNC_ONLY
 #if SYNC_ONLY
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #endif
 #endif
-        await Task.CompletedTask;
-    }
+    await Task.CompletedTask;
 }
 """;
         return TestHelper.Verify(source);
@@ -250,51 +178,42 @@ internal partial class SimpleMacro
         {
             true when useElse => """
 #if SYNC_ONLY
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #else
-        Console.Write("Async");
+    Console.Write("Async");
 #endif
 """,
             true when !useElse => """
 #if SYNC_ONLY
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #endif
 #if !SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #endif
 """,
             false when useElse => """
 #if !SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #else
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #endif
 """,
             _ => """
 #if SYNC_ONLY
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #endif
 #if !SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #endif
 """,
         };
 
         var source = $$"""
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync(CancellationToken ct)
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync(CancellationToken ct)
-    {
 {{conditions}}
-        await Task.CompletedTask;
-    }
+    await Task.CompletedTask;
 }
 """;
         return TestHelper.Verify(source, disableUnique: true);
@@ -305,23 +224,15 @@ internal partial class SimpleMacro
     {
         // The source code to test
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync()
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync()
-    {
 #if SYNC_ONLY
-        Console.Write("Async");
+    Console.Write("Async");
 #elif Symbol
-        Console.Write("Whatevs");
+    Console.Write("Whatevs");
 #endif
-        await Task.CompletedTask;
+    await Task.CompletedTask;
 """;
         return TestHelper.Verify(source);
     }
@@ -331,21 +242,12 @@ internal partial class SimpleMacro
     {
         // The source code to test
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync()
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync()
-    {
 #if SYMBOL1 && !(SYNC_ONLY || SYMBOL2)
-        System.Console.Write("Sync");
+    System.Console.Write("Sync");
 #endif
-    }
 }
 """;
         return TestHelper.Verify(source);
@@ -356,39 +258,30 @@ internal partial class SimpleMacro
     {
         // The source code to test
         var source = """
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Test;
-
-internal partial class SimpleMacro
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ExecAsync()
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async Task ExecAsync()
+    var i = 0;
+    switch (i)
     {
-        var i = 0;
-        switch (i)
-        {
-            case 0:
+        case 0:
 #if !SYNC_ONLY
-                Console.Write("Async");
+            Console.Write("Async");
 #endif
-                break;
-            case 2:
+            break;
+        case 2:
 #if SYNC_ONLY
-                System.Console.Write("Sync");
+            System.Console.Write("Sync");
 #endif
-                break;
-            case 3:
+            break;
+        case 3:
 #if SYMBOL
-                System.Console.Write("Symbol");
+            System.Console.Write("Symbol");
 #endif
-                break;
-        }
-
-        await Task.CompletedTask;
+            break;
     }
+
+    await Task.CompletedTask;
 }
 """;
         return TestHelper.Verify(source);

@@ -3,7 +3,7 @@
 #nullable enable
 namespace Zomp.SyncMethodGenerator.IntegrationTests
 {
-    internal partial class ExtensionMethods
+    partial class ExtensionMethods
     {
         public static void ZeroParams(object o) => global::Extensi.ons123.MyExtensionClass.SomeMethod(o);
     }

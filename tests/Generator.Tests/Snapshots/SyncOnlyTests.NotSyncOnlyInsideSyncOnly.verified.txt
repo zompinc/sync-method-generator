@@ -5,7 +5,7 @@
       Title: SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other,
       Severity: Error,
       WarningLevel: 0,
-      Location: : (13,0)-(13,14),
+      Location: : (8,0)-(8,14),
       MessageFormat: Couldn't process directive '{0}'. SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other.,
       Message: Couldn't process directive '#if !SYNC_ONLY'. SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other.,
       Category: Preprocessor

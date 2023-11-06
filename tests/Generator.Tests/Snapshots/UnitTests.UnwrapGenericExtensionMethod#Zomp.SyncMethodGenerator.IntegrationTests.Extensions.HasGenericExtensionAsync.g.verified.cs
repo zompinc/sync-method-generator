@@ -3,7 +3,7 @@
 #nullable enable
 namespace Zomp.SyncMethodGenerator.IntegrationTests
 {
-    internal partial class Extensions
+    partial class Extensions
     {
         public static void HasGenericExtension(object o)
         {

@@ -5,7 +5,7 @@ namespace NsOne
 {
     public partial class C1
     {
-        internal partial class C2
+        partial class C2
         {
             private protected partial class C3
             {

@@ -63,6 +63,6 @@ namespace Test
 """;
 
         // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source, true);
+        return TestHelper.Verify(source, true, isFullSource: true);
     }
 }
