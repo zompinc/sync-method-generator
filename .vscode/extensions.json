@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ban.spellright",
+    "DavidAnson.vscode-markdownlint",
+    "esbenp.prettier-vscode",
+    "formulahendry.dotnet-test-explorer",
+    "foxundermoon.shell-format",
+    "ms-dotnettools.csharp"
+  ]
+}

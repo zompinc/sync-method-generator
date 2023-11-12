@@ -4,19 +4,7 @@
 public class GenericMathTests
 {
     [Fact]
-    public Task GeneratesWithIProgressCorrectly()
-    {
-        // The source code to test
-        var source = $$"""
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-#if NET7_0_OR_GREATER
-using System.Numerics;
-#endif
-using Zomp.SyncMethodGenerator;
-
+    public Task GeneratesWithIProgressCorrectly() => $$"""
 namespace Test
 {
     public static partial class EnumerableExtensions
@@ -29,7 +17,7 @@ namespace Test
         /// <param name="progress">The progress</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Max indices</returns>
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async IAsyncEnumerable<int> IndexOfMaxSoFarAsync<T>(this IAsyncEnumerable<T> items, IProgress<int>? progress = null, [EnumeratorCancellation] CancellationToken ct = default)
 #if NET7_0_OR_GREATER
             where T : IComparisonOperators<T, T, bool>
@@ -60,9 +48,5 @@ namespace Test
         }
     }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source, true, sourceType: SourceType.Full);
-    }
+""".Verify(true, sourceType: SourceType.Full);
 }

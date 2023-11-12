@@ -42,6 +42,9 @@
     <!-- No UI thread -->
     <NoWarn>$(NoWarn);CA2007</NoWarn>
 
+    <!-- Single line is fine -->
+    <NoWarn>$(NoWarn);SA1502</NoWarn>
+
     <!-- Don't need comments -->
     <NoWarn>$(NoWarn);SA1600</NoWarn>
   </PropertyGroup>

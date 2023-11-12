@@ -40,15 +40,17 @@ A list of changes applied to the new synchronized method:
 - Remove await from methods as well as `foreach` statement
 - Change types
 
-  | From                                                                                                                                                                                       | To                                                                                                       |
-  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-  | [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task) or [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1)                | void                                                                                                     |
-  | [Task\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1) or [ValueTask\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask-1) | T                                                                                                        |
-  | [IAsyncEnumerable\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerable-1)                                                                         | [IEnumerable\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1) |
-  | [IAsyncEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1)                                                                         | [IEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1) |
-  | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)                                                                                                                 | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                   |
-  | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)                                                                                                 | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                   |
-
+  | From                                                                                                               | To                                                                                                       |
+  | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+  | [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)*                                  | void                                                                                                     |
+  | [Task\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task-1)                             | T                                                                                                        |
+  | [Func](https://learn.microsoft.com/en-us/dotnet/api/system.func-1)\<Task>                                          | [Action](https://learn.microsoft.com/en-us/dotnet/api/system.action)                                     |
+  | Func\<Task\<T>>                                                                                                    | Func\<T>                                                                                                 |
+  | [IAsyncEnumerable\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerable-1) | [IEnumerable\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1) |
+  | [IAsyncEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1) | [IEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1) |
+  | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)                                         | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                   |
+  | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)                         | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                   |
+- \* [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask)s are handled exactly like [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)s
 - Remove parameters
   - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
   - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1)

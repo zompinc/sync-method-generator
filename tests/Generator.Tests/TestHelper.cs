@@ -14,6 +14,9 @@ global using global::System;
 global using global::System.Collections.Generic;
 global using global::System.Drawing;
 global using global::System.IO;
+#if NET7_0_OR_GREATER
+global using global::System.Numerics;
+#endif
 global using global::System.Threading;
 global using global::System.Threading.Tasks;
 global using global::Zomp.SyncMethodGenerator;
@@ -40,7 +43,7 @@ global using global::Zomp.SyncMethodGenerator;
     ];
 #endif
 
-    internal static Task Verify(string source, bool uniqueForFramework = false, bool disableUnique = false, SourceType sourceType = SourceType.ClassBody, params object?[] parameters)
+    internal static Task Verify(this string source, bool uniqueForFramework = false, bool disableUnique = false, SourceType sourceType = SourceType.ClassBody, params object?[] parameters)
     {
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(LanguageVersion.Preview)

@@ -5,21 +5,12 @@ public class IntegrationTesting
 {
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
-    public Task GeneratesSyncMethodCorrectly()
-    {
-        // The source code to test
-        var source = """
-using System;
-using System.Collections.Generic;
-using Zomp.SyncMethodGenerator;
-using System.Threading;
-using System.Threading.Tasks;
-
+    public Task GeneratesSyncMethodCorrectly() => """
 namespace Test
 {
     public static partial class EnumerableExtensions
     {
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async IAsyncEnumerable<double> GetAveragesAsync<T>(this IAsyncEnumerable<T> list, int adjacentCount, [EnumeratorCancellation] CancellationToken ct = default)
             where T : IConvertible
         {
@@ -46,19 +37,12 @@ namespace Test
         }
     }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 #endif
 
     [Fact]
-    public Task WithIAsyncEnumerator()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task WithIAsyncEnumerator() => """
+[CreateSyncVersion]
 async Task EnumeratorTestAsync(IAsyncEnumerable<int> range, CancellationToken ct)
 {
     IAsyncEnumerator<int> e = range.GetAsyncEnumerator(ct);
@@ -68,17 +52,10 @@ async Task EnumeratorTestAsync(IAsyncEnumerable<int> range, CancellationToken ct
     }
     finally { if (e != null) await e.DisposeAsync(); }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task CombineTwoLists()
-    {
-        // The source code to test
-        var source = """
+    public Task CombineTwoLists() => """
 [CreateSyncVersion]
 public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TLeft, TRight>(this IAsyncEnumerable<TLeft> list1, IAsyncEnumerable<TRight> list2, [EnumeratorCancellation] CancellationToken ct = default)
 {
@@ -92,18 +69,11 @@ public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TL
         yield return (item, enumerator2.Current);
     }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
-    public Task ChecksumRead()
-    {
-        // The source code to test
-        var source = """
+    public Task ChecksumRead() => """
 [CreateSyncVersion]
 static async Task<int> HalfCheckSumAsync(Memory<byte> buffer, Stream stream, CancellationToken ct)
     => (await ChecksumReadAsync(buffer, stream, ct).ConfigureAwait(false)) / 2;
@@ -115,18 +85,12 @@ static async Task<int> ChecksumReadAsync(Memory<byte> buffer, Stream stream, Can
     return Checksum(buffer.Span.Slice(0, bytesRead));
 }
 static int Checksum(Span<byte> buffer) => 0;
-""";
+""".Verify();
 
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source);
-    }
-
+    // From: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-2-eager-preconditions-in-async-methods
     [Fact]
-    public Task EagerPreconditionsInAsyncMethod()
-    {
-        // From: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-2-eager-preconditions-in-async-methods
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task EagerPreconditionsInAsyncMethod() => """
+[CreateSyncVersion]
 public static Task<string> GetAllTextAsync(string fileName)
 {
     // Eager argument validation
@@ -139,18 +103,12 @@ public static Task<string> GetAllTextAsync(string fileName)
         return result;
     }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 #endif
 
+    // Modified from: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-1-eager-preconditions-in-iterator-blocks
     [Fact]
-    public Task EagerPreconditionInIteratorBlock()
-    {
-        // Modified from: https://devblogs.microsoft.com/premier-developer/dissecting-the-local-functions-in-c-7/#use-case-1-eager-preconditions-in-iterator-blocks
-        var source = """
+    public Task EagerPreconditionInIteratorBlock() => """
 [CreateSyncVersion]
 public static IAsyncEnumerable<string> ReadLineByLineAsync(string fileName)
 {
@@ -174,9 +132,5 @@ public static IAsyncEnumerable<string> ReadLineByLineAsync(string fileName)
         }
     }
 }
-""";
-
-        // Pass the source code to our helper and snapshot test the output
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 }

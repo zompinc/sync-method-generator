@@ -7,5 +7,5 @@ public partial class Class
     /// <summary>
     /// A summary
     /// </summary>
-    public void Wrapped() {}
+    public void Wrapped() { }
 }

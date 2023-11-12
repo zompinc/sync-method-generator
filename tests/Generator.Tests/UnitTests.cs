@@ -4,10 +4,7 @@
 public class UnitTests
 {
     [Fact]
-    public Task MultipleNamespaces()
-    {
-        // The source code to test
-        var source = """
+    public Task MultipleNamespaces() => """
 namespace NsOne
 {
     namespace NsTwo.NsThree
@@ -16,7 +13,7 @@ namespace NsOne
         {
             public partial class MultipleNamespaces
             {
-                [Zomp.SyncMethodGenerator.CreateSyncVersion]
+                [CreateSyncVersion]
                 async void EmptyAsync()
                 {
                 }
@@ -24,46 +21,31 @@ namespace NsOne
         }
     }
 }
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task GenericClass()
-    {
-        // The source code to test
-        var source = """
+    public Task GenericClass() => """
 namespace Test;
 partial class GenericClass<T1, T2> where T1 : struct where T2 : class
 {
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    [CreateSyncVersion]
     async void EmptyAsync()
     {
     }
 }
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task DropCompletedTask()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task DropCompletedTask() => """
+[CreateSyncVersion]
 public async Task ExecAsync(CancellationToken ct)
 {
     await Task.CompletedTask;
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task MultipleClasses()
-    {
-        // The source code to test
-        var source = """
+    public Task MultipleClasses() => """
 namespace NsOne
 {
     public partial class C1
@@ -74,7 +56,7 @@ namespace NsOne
             {
                 private partial class C4
                 {
-                    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+                    [CreateSyncVersion]
                     async void EmptyAsync()
                     {
                     }
@@ -84,22 +66,15 @@ namespace NsOne
     }
 }
 
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
-    public Task MemoryToSpan()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task MemoryToSpan() => """
+[CreateSyncVersion]
 private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct = default)
     => await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [InlineData(false)]
     [InlineData(true)]
@@ -108,74 +83,53 @@ private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, Cancella
     {
         var typeName = explicitType ? "Memory<byte>" : "var";
 
-        // The source code to test
-        var source = $$"""
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+        return $$"""
+[CreateSyncVersion]
 private async Task MakeArray(byte[] sampleBytes, CancellationToken ct = default)
 {
     {{typeName}} mem = sampleBytes.AsMemory(0, 123);
     var arr = mem.Span.ToArray();
 }
-""";
-        return TestHelper.Verify(source, false, false, parameters: explicitType);
+""".Verify(false, false, parameters: explicitType);
     }
 
     [Fact]
-    public Task MemoryToSpanWithBody()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task MemoryToSpanWithBody() => """
+[CreateSyncVersion]
 private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct = default)
 {
     await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task ReadOnlyMemoryToReadOnlySpan()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task ReadOnlyMemoryToReadOnlySpan() => """
+[CreateSyncVersion]
 static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, CancellationToken ct)
     => await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task DoNotDropInvocationChainThatHasAsyncAnywhere()
-    {
-        // The source code to test
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task DoNotDropInvocationChainThatHasAsyncAnywhere() => """
+[CreateSyncVersion]
 public static async Task WriteAllTextAsync(string file, string contents,
 CancellationToken ct)
 {
     await File.WriteAllTextAsync(file, contents, ct).ConfigureAwait(true);
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 #endif
 
     [Fact]
-    public Task NonPredefinedTypes()
-    {
-        var source = """
+    public Task NonPredefinedTypes() => """
 using N2;
 using static N2.C1;
-using System;
-using System.Threading.Tasks;
 
 namespace N1
 {
     partial class Class
     {
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         async Task FillAsync(Memory<C2.Accelerometer> accelerometers)
         {
             C2.Accelerometer a = new(1, 2, 3);
@@ -194,109 +148,77 @@ namespace N2
         }
     }
 }
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task TaskOfT()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task TaskOfT() => """
+[CreateSyncVersion]
 public static async Task<Point> GetPointAsync()
 {
     return await Task.FromResult(new Point(1, 2));
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task TaskOfTArray()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task TaskOfTArray() => """
+[CreateSyncVersion]
 public static async Task<Point[]> GetPointAsync()
 {
     return await Task.FromResult(new[] { new Point(1, 2) });
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task DropBrackets()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task DropBrackets() => """
+[CreateSyncVersion]
 public static async Task<int> GetIntAsync()
 {
     return (await Task.FromResult(new[] { 1, 2 }))[0];
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task TaskOfTIList()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task TaskOfTIList() => """
+[CreateSyncVersion]
 public static async Task<IList<Point>> GetPointAsync()
 {
     return await Task.FromResult(new[] { new Point(1, 2) });
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task TaskOfT2IList()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task TaskOfT2IList() => """
+[CreateSyncVersion]
 public static async Task<IList<T>> GetArrayOfTAsync<T>() where T: new()
 {
     return await Task.FromResult(new T[] { new T() });
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task DefaultParameter()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task DefaultParameter() => """
+[CreateSyncVersion]
 public async Task<int> GetColorAsync(FileAccess access = FileAccess.Read)
     => await Task.FromResult(1);
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task TaskOfArrayOfGeneric()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task TaskOfArrayOfGeneric() => """
+[CreateSyncVersion]
 public static async Task<LinkedListNode<Point>[]> GetArrayOfTAsync<T>() where T : new()
 {
     return await Task.FromResult(new LinkedListNode<Point>[] { });
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Theory]
     [InlineData("await w.AsyncCondition(ct);")]
     [InlineData("if (await w.AsyncCondition(ct)){}")]
     [InlineData("if (!await w.AsyncCondition(ct)){}")]
-    public Task DoNotCallPropertiesReturningGenericTasks(string invocation)
-    {
-        var source = $$"""
+    public Task DoNotCallPropertiesReturningGenericTasks(string invocation) => $$"""
 private readonly ClassWithAsyncFunc w = new();
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public async Task MyMethodAsync(CancellationToken ct)
 {
     {{invocation}}
@@ -307,17 +229,13 @@ private class ClassWithAsyncFunc
     internal Func<CancellationToken, Task<bool>> AsyncCondition
         => (ct) => Task.FromResult(false);
 }
-""";
-        return TestHelper.Verify(source, false, true);
-    }
+""".Verify(false, true);
 
     [Fact]
-    public Task DoNotCallPropertiesReturningGenericTasksExpression()
-    {
-        var source = $$"""
+    public Task DoNotCallPropertiesReturningGenericTasksExpression() => $$"""
 private readonly ClassWithAsyncFunc w = new();
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public async Task MyMethodAsync(CancellationToken ct)
     => await w.AsyncCondition(ct);
 
@@ -326,17 +244,13 @@ private class ClassWithAsyncFunc
     internal Func<CancellationToken, Task<bool>> AsyncCondition
         => (ct) => Task.FromResult(false);
 }
-""";
-        return TestHelper.Verify(source, false, true);
-    }
+""".Verify(false, true);
 
     [Fact]
-    public Task DoNotCallPropertiesReturningTasks()
-    {
-        var source = """
+    public Task DoNotCallPropertiesReturningTasks() => """
 private readonly ClassWithAsyncFunc w = new();
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public async Task MyMethodAsync()
 {
     await w.AsyncAction(CancellationToken.None);
@@ -347,17 +261,13 @@ private class ClassWithAsyncFunc
     internal Func<CancellationToken, Task> AsyncAction
         => (ct) => Task.CompletedTask;
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task CallPropertiesReturningTasksWithAsync()
-    {
-        var source = """
+    public Task CallPropertiesReturningTasksWithAsync() => """
 private readonly ClassWithAsyncFunc w = new();
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public async Task MyMethodAsync()
 {
     await w.ActionAsync(CancellationToken.None);
@@ -372,25 +282,17 @@ private class ClassWithAsyncFunc
     {
     }
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task WithAction()
-    {
-        var source = """
+    public Task WithAction() => """
 [CreateSyncVersion]
 public static async Task WithAction(Action<Point, IEnumerable<Point>>? action) { }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task LocalFunction()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task LocalFunction() => """
+[CreateSyncVersion]
 public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)
 {
     static async Task<int> Internal(Stream stream, CancellationToken ct)
@@ -400,15 +302,11 @@ public static async Task<int> InternalExampleAsync(Stream stream, CancellationTo
     }
     return await Internal(stream, ct);
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task LocalFunctionNonGeneric()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task LocalFunctionNonGeneric() => """
+[CreateSyncVersion]
 public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)
 {
     static async Task LocalFuncAsync()
@@ -418,20 +316,16 @@ public static async Task<int> InternalExampleAsync(Stream stream, CancellationTo
 
     await LocalFuncAsync();
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task LocalFunctionDelegateWithEndingAsync()
-    {
-        var source = """
+    public Task LocalFunctionDelegateWithEndingAsync() => """
 static async Task<int> SomeMethodAsync(Func<CancellationToken, Task<int>> _)
     => await Task.FromResult(0);
 
 static int SomeMethod(Func<int> _) => 0;
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public static async Task DoItAsync()
 {
     static async Task<int> LocalAsync(CancellationToken ct)
@@ -441,14 +335,10 @@ public static async Task DoItAsync()
 
     _ = await SomeMethodAsync(LocalAsync);
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task UnwrapExtensionMethod()
-    {
-        var source = """
+    public Task UnwrapExtensionMethod() => """
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -457,11 +347,11 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     using Extensi.ons123;
     partial class ExtensionMethods
     {
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async Task ZeroParamsAsync(object o, CancellationToken ct) => await o.SomeMethodAsync(ct);
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async Task OneParamsAsync(object o, string s, CancellationToken ct) => await o.SomeMethodAsync(s, ct);
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async Task TwoParamsAsync(object o, string s, int i, CancellationToken ct) => await o.SomeMethodAsync(s, i, ct);
     }
 }
@@ -478,14 +368,10 @@ namespace Extensi.ons123
         public static void SomeMethod(this object _, string _2, int _3) { }
     }
 }
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task Preprocessor()
-    {
-        var source = """
+    public Task Preprocessor() => """
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -504,20 +390,16 @@ These comments shouldn't show
     /// <summary>
     /// A summary
     /// </summary>
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    [CreateSyncVersion]
     public async Task WrappedAsync() => await Task.CompletedTask;
 #endif
 #endregion
 }
 
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task UnwrapGenericExtensionMethod()
-    {
-        var source = """
+    public Task UnwrapGenericExtensionMethod() => """
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
@@ -527,13 +409,13 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     using Extensi.ons123;
     partial class Extensions
     {
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async Task HasGenericExtensionAsync(object o, CancellationToken ct)
         {
             var z = o.TryGetValue<Point>(out var item);
         }
 
-        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        [CreateSyncVersion]
         public static async Task HasGeneric2ExtensionAsync(object o, CancellationToken ct)
         {
             var z = o.TryGetValue<Point, PointF>(out var _, out var _1);
@@ -559,46 +441,36 @@ namespace Extensi.ons123
         }
     }
 }
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.Full);
-    }
+""".Verify(sourceType: SourceType.Full);
 
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
-    public Task Overloads()
-    {
-        var source = """
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task Overloads() => """
+[CreateSyncVersion]
 async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct)
     => await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes)
     => await stream.ReadAsync(sampleBytes.AsMemory(0, 123)).ConfigureAwait(false);
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 
     [Fact]
-    public Task FindsASpan()
-    {
-        var source = """
+    public Task FindsASpan() => """
 class ClassThatReturnsMemoryAndSpan
 {
     public Memory<byte> GetMemory(int sizeHint = 0) => throw new NotImplementedException();
     public Span<byte> GetSpan(int sizeHint = 0) => throw new NotImplementedException();
 }
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 private async Task GetMemoryOrSpanAsync()
 {
     var instance = new ClassThatReturnsMemoryAndSpan();
     Memory<byte> mem = instance.GetMemory();
     var arr = mem.Span.ToArray();
 }
-""";
-        return TestHelper.Verify(source);
-    }
+""".Verify();
 #endif
 
     [Theory]
@@ -616,9 +488,7 @@ private async Task GetMemoryOrSpanAsync()
     [InlineData("(Progress<float>)classWithProgress")]
     [InlineData("new CustomProgress()")]
     [InlineData("SomeMethod(progress)")]
-    public Task DropIProgressExpressionArgument(string callArgument)
-    {
-        var source = $$"""
+    public Task DropIProgressExpressionArgument(string callArgument) => $$"""
 public static async Task WithIProgress()
 {
 }
@@ -653,15 +523,13 @@ static ClassWithProgress classWithProgress = new();
 
 static IProgress<T> SomeMethod<T>(IProgress<T> p) => p;
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public static async Task CallWithIProgressAsync()
 {
     var progress = new Progress<float>();
     await WithIProgressAsync({{callArgument}});
 }
-""";
-        return TestHelper.Verify(source, false, true);
-    }
+""".Verify(false, true);
 
     [Theory]
     [InlineData("progress++;")]
@@ -683,9 +551,7 @@ public static async Task CallWithIProgressAsync()
         }
         """)]
 
-    public Task DropIProgressStatement(string statement)
-    {
-        var source = $$"""
+    public Task DropIProgressStatement(string statement) => $$"""
 public static async Task WithIProgressAsync(IProgress<float>? progress = null)
 {
     await Task.CompletedTask;
@@ -697,7 +563,7 @@ public static void WithIProgress()
 
 static int k = 2;
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public static async Task CallWithIProgressAsync()
 {
     CustomProgress progress = new();
@@ -713,14 +579,10 @@ private sealed class CustomProgress : IProgress<float>
 
     public void Report(float value) => throw new NotImplementedException();
 }
-""";
-        return TestHelper.Verify(source, false, true);
-    }
+""".Verify(false, true);
 
     [Fact]
-    public Task ConvertExceptionType()
-    {
-        var source = $$"""
+    public Task ConvertExceptionType() => $$"""
 try
 {
     await Task.CompletedTask;
@@ -728,27 +590,19 @@ try
 catch (OperationCanceledException)
 {
 }
-""";
-        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
-    }
+""".Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task ConvertForeachType()
-    {
-        var source = $$"""
+    public Task ConvertForeachType() => $$"""
 foreach (Int32 i in new Int32[] { 1 })
 {
 }
 
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
-    }
+""".Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task TestTypes()
-    {
-        var source = $$"""
+    public Task TestTypes() => $$"""
 String myStr;
 string myStrPredefined;
 Exception ex;
@@ -756,7 +610,5 @@ Int16 myShort;
 long myLong;
 
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
-    }
+""".Verify(false, true, sourceType: SourceType.MethodBody);
 }

@@ -8,13 +8,10 @@ public class SyncOnlyTests
     [InlineData(true, "if (!await component.AsyncDump(ct)) { }\n")]
     [InlineData(false, "\nif (!await component.AsyncDump(ct)) { }")]
     [InlineData(false, "\nif (!await component.AsyncDump(ct)) throw new InvalidOperationException(\"async exception\");")]
-    public Task SimpleMacro(bool before, string additionalIgnorableCommands)
-    {
-        // The source code to test
-        var source = $$"""
+    public Task SimpleMacro(bool before, string additionalIgnorableCommands) => $$"""
 Component component = new();
 
-[Zomp.SyncMethodGenerator.CreateSyncVersion]
+[CreateSyncVersion]
 public async Task ExecAsync(CancellationToken ct)
 {
 {{(before ? additionalIgnorableCommands : string.Empty)}}#if SYNC_ONLY
@@ -28,43 +25,28 @@ class Component
         return await Task.FromResult(false);
     }
 }
-""";
-        return TestHelper.Verify(source, false, true);
-    }
+""".Verify(false, true);
 
     [Fact]
-    public Task InsideEmptyIf()
-    {
-        // The source code to test
-        var source = $$"""
+    public Task InsideEmptyIf() => $$"""
 if (true)
 {
 #if SYNC_ONLY
     throw new InvalidOperationException("Some exception");
 #endif
 }
-""";
-        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
-    }
+""".Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task StatementAtTheEnd()
-    {
-        // The source code to test
-        var source = $$"""
+    public Task StatementAtTheEnd() => $$"""
 
 #if SYNC_ONLY
 #endif
 Console.Write("Done");
-""";
-        return TestHelper.Verify(source, false, true, sourceType: SourceType.MethodBody);
-    }
+""".Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task DoNotRemove()
-    {
-        // The source code to test
-        var source = """
+    public Task DoNotRemove() => """
 #if SYMBOL1
 ArgumentNullException.ThrowIfNull(source);
 #elif SYMBOL2
@@ -72,35 +54,25 @@ ArgumentNullException.ThrowIfNull(source);
 #else
 ArgumentNullException.ThrowIfNull(source);
 #endif
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task DoNotRemoveInsideSyncOnly()
-    {
-        var source = """
+    public Task DoNotRemoveInsideSyncOnly() => """
 #if SYNC_ONLY
 #if SYMBOL
 throw new global::System.InvalidOperationException("Some exception");
 #endif
 #endif
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task NotSyncOnly()
-    {
-        var source = """
+    public Task NotSyncOnly() => """
 #if !SYNC_ONLY
 Console.Write("Async");
 #endif
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Theory]
     [InlineData(false)]
@@ -113,7 +85,7 @@ await Task.CompletedTask;
             lastStatement = "await Task.CompletedTask;";
         }
 
-        var source = $$"""
+        return $$"""
 if (true) { }
 #if SYNC_ONLY
 #if !SYNC_ONLY
@@ -121,23 +93,18 @@ Console.Write("Async");
 #endif
 #endif
 {{lastStatement}}
-""";
-        return TestHelper.Verify(source, disableUnique: true, sourceType: SourceType.MethodBody);
+""".Verify(disableUnique: true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
-    public Task NestedSyncOnly()
-    {
-        var source = """
+    public Task NestedSyncOnly() => """
 #if SYNC_ONLY
 #if SYNC_ONLY
 System.Console.Write("Sync");
 #endif
 #endif
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Theory]
     [InlineData(false, false)]
@@ -180,45 +147,31 @@ Console.Write("Async");
 """,
         };
 
-        var source = $$"""
+        return $$"""
 {{conditions}}
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, disableUnique: true, sourceType: SourceType.MethodBody);
+""".Verify(disableUnique: true, sourceType: SourceType.MethodBody);
     }
 
     [Fact]
-    public Task ProhibitElif()
-    {
-        // The source code to test
-        var source = """
+    public Task ProhibitElif() => """
 #if SYNC_ONLY
 Console.Write("Async");
 #elif Symbol
 Console.Write("Whatevs");
 #endif
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task DoNotMixSymbols()
-    {
-        // The source code to test
-        var source = """
+    public Task DoNotMixSymbols() => """
 #if SYMBOL1 && !(SYNC_ONLY || SYMBOL2)
 System.Console.Write("Sync");
 #endif
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
-    public Task SwitchStatementProcessesDirectives()
-    {
-        // The source code to test
-        var source = """
+    public Task SwitchStatementProcessesDirectives() => """
 var i = 0;
 switch (i)
 {
@@ -240,7 +193,5 @@ switch (i)
 }
 
 await Task.CompletedTask;
-""";
-        return TestHelper.Verify(source, sourceType: SourceType.MethodBody);
-    }
+""".Verify(sourceType: SourceType.MethodBody);
 }

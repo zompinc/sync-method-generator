@@ -21,7 +21,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.gitignore = .gitignore
 		Directory.Build.props = Directory.Build.props
 		Directory.Packages.props = Directory.Packages.props
-		exclusion.dic = exclusion.dic
 		NuGet.Config = NuGet.Config
 		package.json = package.json
 	EndProjectSection
@@ -45,6 +44,11 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".config", ".config", "{F40847A8-EF57-4E9F-8AF6-CAB2CC20B45E}"
 	ProjectSection(SolutionItems) = preProject
 		.config\dotnet-tools.json = .config\dotnet-tools.json
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{356FB7F3-77F6-4DF7-95CC-25EA735F4755}"
+	ProjectSection(SolutionItems) = preProject
+		.vscode\spellright.dict = .vscode\spellright.dict
 	EndProjectSection
 EndProject
 Global
@@ -77,6 +81,7 @@ Global
 		{1C91E12D-2680-4E7D-9A8F-8E4548F49C62} = {12C22879-AE16-4BD4-ADE5-1F97DDEF9E11}
 		{D10EEA31-447A-4D33-A305-E5274E1B4240} = {0504B10E-4B5F-45E9-8661-05057A232157}
 		{F40847A8-EF57-4E9F-8AF6-CAB2CC20B45E} = {0504B10E-4B5F-45E9-8661-05057A232157}
+		{356FB7F3-77F6-4DF7-95CC-25EA735F4755} = {0504B10E-4B5F-45E9-8661-05057A232157}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0CDD8FAE-3E18-41AF-8A3B-3E12A09E0E41}

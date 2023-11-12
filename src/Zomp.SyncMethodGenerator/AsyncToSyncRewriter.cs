@@ -10,6 +10,7 @@
 internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
+    private const string SystemFunc = "System.Func";
     private const string ReadOnlyMemory = "System.ReadOnlyMemory";
     private const string Memory = "System.Memory";
     private const string TaskType = "System.Threading.Tasks.Task";
@@ -156,20 +157,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var newNode = (ParameterListSyntax)base.VisitParameterList(node)!;
         bool IsValidParameter(ParameterSyntax ps)
         {
-            if (ps.Type is not { } type1)
+            if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
             {
                 return true;
             }
 
-            if (type1 is NullableTypeSyntax nuts)
-            {
-                type1 = nuts.ElementType;
-            }
-
-            if (semanticModel.GetTypeInfo(type1).Type is not INamedTypeSymbol nts)
-            {
-                return true;
-            }
+            var nts = symbol.Type;
 
             if (ShouldRemoveType(nts))
             {
@@ -180,7 +173,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return true;
         }
 
-        var invalid = node.Parameters.GetIndices(v => !IsValidParameter(v));
+        var invalid = node.Parameters.GetIndices((v, _) => !IsValidParameter(v));
         var newParams = RemoveAtRange(newNode.Parameters, invalid);
         return newNode.WithParameters(newParams);
     }
@@ -462,10 +455,27 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitTypeArgumentList(TypeArgumentListSyntax node)
     {
+        // Ensure that Func<Task<T>> is not removed
+        var isFunc = node.Parent is { } parent
+            && semanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true } n
+            && GetNameWithoutTypeParams(n) is SystemFunc;
+
+        // Do not remove Task<T>, but remove Task inside a Func<>
+        bool RemoveType(TypeSyntax z, int index) =>
+            !(isFunc && index == node.Arguments.Count - 1 && z is GenericNameSyntax)
+            && semanticModel.GetTypeInfo(z).Type is { } type
+            && ShouldRemoveType(type);
+
+        var indicesToRemove = node.Arguments.GetIndices(RemoveType);
+
         var @base = (TypeArgumentListSyntax)base.VisitTypeArgumentList(node)!;
-        return @base.WithArguments(SyntaxFactory.SeparatedList(
-            @base.Arguments.Select(z => z.SyntaxTree == node.SyntaxTree ? ProcessType(z) : z),
-            @base.Arguments.GetSeparators()));
+        var newSep = RemoveSeparators(@base.Arguments.GetSeparators().ToList(), indicesToRemove);
+
+        var newArguments = SyntaxFactory.SeparatedList(
+            RemoveAtRange(@base.Arguments, indicesToRemove)
+            .Select(z => z.SyntaxTree == node.SyntaxTree ? ProcessType(z) : z),
+            newSep);
+        return @base.WithArguments(newArguments);
     }
 
     /// <inheritdoc/>
@@ -491,8 +501,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        var makeEmpty = node.ExpressionBody is { } arr && ShouldRemoveArgument(arr.Expression);
-
         var attributes = node.AttributeLists.Select(
             z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
             .WithTriviaFrom(z));
@@ -592,11 +600,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newTriviaList = newTriviaList.Remove(preprocessor);
         }
 
-        if (makeEmpty)
+        if (ShouldRemoveArrowExpression(node.ExpressionBody))
         {
             @base = @base
                 .WithExpressionBody(null)
-                .WithBody(SyntaxFactory.Block())
+                .WithBody(CreateEmptyBody())
                 .WithSemicolonToken(default);
         }
 
@@ -615,8 +623,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
     {
+        ImmutableArray<IParameterSymbol>? nullableParameters = null;
+
+        if (node.Parent is { } parent
+            && GetSymbol(parent) is IMethodSymbol { Parameters: { Length: > 0 } @params })
+        {
+            nullableParameters = @params;
+        }
+
+        bool ShouldRemoveArgumentLocal(ArgumentSyntax arg, int index)
+        {
+            var byExpression = ShouldRemoveArgument(arg.Expression);
+            if (byExpression || nullableParameters is not { } parameters)
+            {
+                return byExpression;
+            }
+
+            var nameColon = arg.NameColon?.Name.Identifier.ValueText;
+
+            var param = nameColon is not null ? parameters.Single(z => z.Name == nameColon) : parameters[index];
+
+            return ShouldRemoveType(param.Type);
+        }
+
         var @base = (ArgumentListSyntax)base.VisitArgumentList(node)!;
-        var invalid = node.Arguments.GetIndices(v => ShouldRemoveArgument(v.Expression));
+        var invalid = node.Arguments.GetIndices(ShouldRemoveArgumentLocal);
 
         var newList = RemoveAtRange(@base.Arguments, invalid);
         return @base.WithArguments(newList);
@@ -627,6 +658,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
         return @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
+    public override SyntaxNode? VisitParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node)
+    {
+        var @base = (ParenthesizedLambdaExpressionSyntax)base.VisitParenthesizedLambdaExpression(node)!;
+        if (node.ExpressionBody is { } expr && ShouldRemoveArgument(expr))
+        {
+            @base = @base
+                .WithExpressionBody(null)
+                .WithBody(CreateEmptyBody());
+        }
+
+        return @base.WithModifiers(StripAsyncModifier(@base.Modifiers)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -640,6 +684,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             .GetSymbolInfo(variableTypeName)
             .Symbol;
 
+        TypeSyntax? newTypeSyntax = null;
+
+        List<VariableDeclaratorSyntax>? newVariableNames = null;
+
         if (variableType is INamedTypeSymbol { IsGenericType: true } n)
         {
             var name = GetNameWithoutTypeParams(n);
@@ -650,9 +698,58 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     memoryToSpan.Add(variable.Identifier.Text);
                 }
             }
+            else if (name is SystemFunc)
+            {
+                newVariableNames = [];
+                foreach (var variable in @base.Declaration.Variables)
+                {
+                    newVariableNames.Add(SyntaxFactory.VariableDeclarator(RemoveAsync(variable.Identifier.Text))
+                        .WithTrailingTrivia(variable.Identifier.TrailingTrivia).WithInitializer(variable.Initializer));
+                }
+
+                var typeArgs = n.TypeArguments;
+
+                if (typeArgs[typeArgs.Length - 1].ToString() is TaskType or ValueTaskType
+                    && @base.Declaration.Type is GenericNameSyntax gns)
+                {
+                    var newType = "global::System.Action";
+
+                    var list = new List<TypeSyntax>();
+                    if (typeArgs.Length > 1)
+                    {
+                        for (var i = 0; i < typeArgs.Length - 1; i++)
+                        {
+                            list.Add(ProcessSymbol(typeArgs[i]));
+                        }
+
+                        var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
+
+                        var separatedList = SyntaxFactory.SeparatedList(list, originalSeparators);
+                        newTypeSyntax = SyntaxFactory.GenericName(SyntaxFactory.Identifier(newType), SyntaxFactory.TypeArgumentList(separatedList));
+                    }
+                    else
+                    {
+                        newTypeSyntax = SyntaxFactory.IdentifierName(newType);
+                    }
+
+                    newTypeSyntax = newTypeSyntax.WithTriviaFrom(node.Declaration.Type);
+                }
+            }
         }
 
-        return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
+        var retval = @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
+        if (newVariableNames is not null)
+        {
+            var separatedList = SyntaxFactory.SeparatedList(newVariableNames, node.Declaration.Variables.GetSeparators());
+            retval = retval.WithDeclaration(retval.Declaration.WithVariables(separatedList));
+        }
+
+        if (newTypeSyntax is not null)
+        {
+            retval = retval.WithDeclaration(retval.Declaration.WithType(newTypeSyntax));
+        }
+
+        return retval;
     }
 
     /// <inheritdoc/>
@@ -789,6 +886,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return newContent;
     }
 
+    private static List<SyntaxToken> RemoveSeparators(List<SyntaxToken> separators, int[] indicesToRemove)
+    {
+        var separatorCount = separators.Count;
+        var removeLast = indicesToRemove.Contains(separators.Count);
+
+        var newSep = separators.Select((z, i) => new { Item = z, Index = i })
+            .Where(z => !indicesToRemove.Contains(z.Index))
+            .Select(z => z.Item).ToList();
+
+        if (removeLast && newSep.Count > 0)
+        {
+            newSep.RemoveAt(newSep.Count - 1);
+        }
+
+        return newSep;
+    }
+
     private static SeparatedSyntaxList<TNode> RemoveAtRange<TNode>(SeparatedSyntaxList<TNode> list, IEnumerable<int> indices)
         where TNode : SyntaxNode
     {
@@ -811,6 +925,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         return list;
     }
+
+    private static BlockSyntax CreateEmptyBody()
+        => SyntaxFactory.Block().WithCloseBraceToken(
+            SyntaxFactory.Token(SyntaxKind.CloseBraceToken)
+            .WithLeadingTrivia(SyntaxFactory.Whitespace(" ")));
 
     private static bool ShouldRemoveType(ITypeSymbol symbol)
     {
@@ -1088,6 +1207,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return HasSymbolAndShouldBeRemoved(invocation);
     }
 
+    private bool ShouldRemoveArrowExpression(ArrowExpressionClauseSyntax? arrowNullable)
+        => arrowNullable is { } arrow && ShouldRemoveArgument(arrow.Expression);
+
     private bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
     {
         ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
@@ -1104,6 +1226,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
         AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
         AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
+        GenericNameSyntax gn => HasSymbolAndShouldBeRemoved(gn),
         _ => false,
     };
 

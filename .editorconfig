@@ -3,7 +3,7 @@ end_of_line = crlf
 indent_style = space
 indent_size = 2
 insert_final_newline = true
-spelling_exclusion_path = .\exclusion.dic
+spelling_exclusion_path = .\.vscode\spellright.dict
 
 # Xml project files
 [*.{csproj,props}]
