@@ -978,8 +978,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ITypeSymbol ts => ShouldRemoveType(ts),
         ILocalSymbol ls => ShouldRemoveType(ls.Type),
         IParameterSymbol ps => ShouldRemoveType(ps.Type),
-        IMethodSymbol { Name: not FromResult } ms => ShouldRemoveType(ms.ReturnType)
-            || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
+        IMethodSymbol { Name: not FromResult } ms =>
+            (ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
+                || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
         _ => false,
     };
 
@@ -1015,6 +1016,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         Dictionary<int, ExtraNodeInfo> extraNodeInfoList,
         DirectiveStack directiveStack)
     {
+        var removeRemaining = false;
         for (var i = 0; i < statements.Count; ++i)
         {
             var statement = statements[i];
@@ -1023,8 +1025,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 return false;
             }
 
-            if (CanDropStatement(statement))
+            if (removeRemaining)
             {
+                eni = eni with { DropOriginal = true };
+            }
+            else if (CanDropStatement(statement))
+            {
+                if (!removeRemaining && statement is ReturnStatementSyntax)
+                {
+                    removeRemaining = true;
+                }
+
                 eni = eni with { DropOriginal = true };
             }
 
@@ -1211,6 +1222,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         IfStatementSyntax @if => ShouldRemoveArgument(@if.Condition),
         ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
+        ReturnStatementSyntax { Expression: { } re } => ShouldRemoveArgument(re),
         _ => false,
     };
 
