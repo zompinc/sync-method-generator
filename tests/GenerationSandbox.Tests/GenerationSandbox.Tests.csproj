@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <NoWarn>$(NoWarn);CA1812;CA1852;SA1402;CA1822;SA1201;CA1303;SA1124</NoWarn>
+    <NoWarn>$(NoWarn);CA1812;CA1852;SA1402;CA1822;SA1201;CA1303;SA1124;IDE0035;CS0162;</NoWarn>
     <ImplicitUsings>false</ImplicitUsings>
     <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>

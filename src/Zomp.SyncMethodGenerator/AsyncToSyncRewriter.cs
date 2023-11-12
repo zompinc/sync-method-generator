@@ -146,9 +146,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newNode = @base.WithIdentifier(SyntaxFactory.Identifier(newName));
         }
 
+        var nonEmptyAttributes = SyntaxFactory.List(@base.AttributeLists.Where(z => z.Attributes.Any()));
+
         return newNode
             .WithReturnType(GetReturnType(@base.ReturnType, symbol))
             .WithModifiers(StripAsyncModifier(@base.Modifiers))
+            .WithAttributeLists(nonEmptyAttributes)
             .WithTriviaFrom(@base);
     }
 
@@ -501,12 +504,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        var attributes = node.AttributeLists.Select(
-            z => SyntaxFactory.AttributeList(SyntaxFactory.SeparatedList(z.Attributes.Where(ShouldPreserveAttribute)))
-            .WithTriviaFrom(z));
-
-        var newAttributes = SyntaxFactory.List(attributes.Where(z => z.Attributes.Any()));
-
         var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
         var returnType = node.ReturnType;
 
@@ -530,19 +527,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var originalName = @base.Identifier.Text;
         var newName = RemoveAsync(originalName);
-
-        bool ShouldPreserveAttribute(AttributeSyntax attributeSyntax)
-        {
-            if (GetSymbol(attributeSyntax) is not IMethodSymbol attributeSymbol)
-            {
-                return false;
-            }
-
-            var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
-
-            // Is the attribute [CreateSyncVersion] attribute?
-            return !IsCreateSyncVersionAttribute(attributeContainingTypeSymbol);
-        }
 
         // Documentation
         var trivia = node.GetLeadingTrivia();
@@ -581,7 +565,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newTriviaList = trivia.Replace(comments, newTrivia);
         }
 
-        bool Preprocessors(SyntaxTrivia st)
+        static bool Preprocessors(SyntaxTrivia st)
         {
             return st.IsKind(SyntaxKind.IfDirectiveTrivia)
                 || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
@@ -610,11 +594,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var newReturnType = GetReturnType(@base.ReturnType, symbol);
 
+        var nonEmptyAttributes = SyntaxFactory.List(@base.AttributeLists.Where(z => z.Attributes.Any()));
+
         var retVal = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
             .WithReturnType(newReturnType)
             .WithModifiers(StripAsyncModifier(@base.Modifiers))
-            .WithAttributeLists(newAttributes)
+            .WithAttributeLists(nonEmptyAttributes)
             .WithLeadingTrivia(newTriviaList)
             ;
 
@@ -771,6 +757,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         return @base.WithType(newType).WithTriviaFrom(@base);
+    }
+
+    public override SyntaxNode? VisitAttributeList(AttributeListSyntax node)
+    {
+        bool ShouldRemoveAttribute(AttributeSyntax attributeSyntax)
+        {
+            if (GetSymbol(attributeSyntax) is not IMethodSymbol attributeSymbol)
+            {
+                return true;
+            }
+
+            var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
+
+            // Is the attribute [CreateSyncVersion] attribute?
+            return IsCreateSyncVersionAttribute(attributeContainingTypeSymbol);
+        }
+
+        var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
+        var indices = node.Attributes.GetIndices((a, _) => ShouldRemoveAttribute(a));
+        var newList = RemoveAtRange(@base.Attributes, indices);
+        return @base.WithAttributes(newList);
+    }
+
+    public override SyntaxNode? VisitAttribute(AttributeSyntax node)
+    {
+        var @base = (AttributeSyntax)base.VisitAttribute(node)!;
+
+        if (GetSymbol(node.Name) is not IMethodSymbol ms)
+        {
+            return @base;
+        }
+
+        var retval = @base.WithName(ProcessSymbol(ms.ContainingType));
+        return retval;
     }
 
     internal static bool IsTypeOfInterest(ITypeSymbol symbol)

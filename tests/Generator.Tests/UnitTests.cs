@@ -68,6 +68,35 @@ namespace NsOne
 
 """.Verify(sourceType: SourceType.Full);
 
+    [Fact]
+    public Task HandleAttribute() => """
+using System.Diagnostics.CodeAnalysis;
+
+namespace Test;
+
+public partial class Class
+{
+    [SuppressMessage("Performance", "CA1835:Prefer the 'Memory'-based overloads for 'ReadAsync' and 'WriteAsync'", Justification = "Just Testing")]
+    [CreateSyncVersion]
+    public async Task<int> ReadSomeBytesAsync(Stream stream)
+    {
+        var buffer = new byte[100];
+        return await stream.ReadAsync(buffer, 0, 100);
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task HandleAttributeOnLocalFunction() => """
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+void Local()
+{
+}
+
+Local();
+await Task.CompletedTask;
+""".Verify(sourceType: SourceType.MethodBody);
+
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task MemoryToSpan() => """
