@@ -222,6 +222,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base;
     }
 
+    ////override visitinter
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
     {
@@ -366,7 +368,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node)
     {
-        var dropParentheses = node.Expression is AwaitExpressionSyntax;
+        var dropParentheses = node.Expression is AwaitExpressionSyntax && node.Parent is not InterpolationSyntax;
         var @base = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node)!;
         return dropParentheses ? @base.Expression.WithTriviaFrom(@base) : @base;
     }
@@ -376,6 +378,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
         return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
+    }
+
+    public override SyntaxNode? VisitInterpolation(InterpolationSyntax node)
+    {
+        var @base = (InterpolationSyntax)base.VisitInterpolation(node)!;
+        if (@base.Expression is not ParenthesizedExpressionSyntax)
+        {
+            var newExpression = SyntaxFactory.ParenthesizedExpression(@base.Expression);
+            @base = @base.WithExpression(newExpression);
+        }
+
+        return @base;
     }
 
     /// <inheritdoc/>
