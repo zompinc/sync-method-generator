@@ -12,10 +12,10 @@ namespace Zomp.SyncMethodGenerator
     [Flags]
     public enum CollectionTypes
     {
-        IList,
-        ReadOnlySpan,
-        Span,
-        IEnumerable
+        IList = 1,
+        ReadOnlySpan = 2,
+        Span = 4,
+        IEnumerable = 8
     }
 
     /// <summary>
