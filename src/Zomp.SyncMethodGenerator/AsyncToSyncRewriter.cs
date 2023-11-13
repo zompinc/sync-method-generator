@@ -246,11 +246,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             newName = RemoveAsync(ins.Identifier.ValueText);
 
+            /*
             var siblings = methodSymbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
             var hasSync = siblings.Any(z => z.Name == newName);
             var hasAsyncWithAttr = siblings.Any(z => z.Name == ins.Identifier.ValueText
                 && z.GetAttributes().Any(z
                     => z.AttributeClass is not null && IsCreateSyncVersionAttribute(z.AttributeClass)));
+            */
 
             if (string.IsNullOrWhiteSpace(newName))
             {
@@ -259,6 +261,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
 
             return @base.WithExpression(SyntaxFactory.IdentifierName(newName));
+        }
+        else if (@base.Expression is GenericNameSyntax gn && gn.Identifier.Text.EndsWithAsync())
+        {
+            newName = RemoveAsync(gn.Identifier.Text);
+            return @base.WithExpression(gn.WithIdentifier(SyntaxFactory.Identifier(newName)));
         }
 
         var returnType = methodSymbol.ReturnType;
@@ -1011,6 +1018,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
         MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
         InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
+        GenericNameSyntax gn => gn.Identifier.Text.EndsWithAsync(),
         _ => false,
     };
 

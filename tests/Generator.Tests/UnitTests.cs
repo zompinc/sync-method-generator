@@ -189,6 +189,15 @@ namespace N2
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task CallWithTypeParameters() => """
+[CreateSyncVersion]
+public async Task MyFuncAsync<T>()
+{
+    await MyFuncAsync<T>();
+}
+""".Verify();
+
+    [Fact]
     public Task TaskOfT() => """
 [CreateSyncVersion]
 public static async Task<Point> GetPointAsync()
