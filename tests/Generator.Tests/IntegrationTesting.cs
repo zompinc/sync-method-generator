@@ -56,7 +56,7 @@ async Task EnumeratorTestAsync(IAsyncEnumerable<int> range, CancellationToken ct
 
     [Fact]
     public Task CombineTwoLists() => """
-[CreateSyncVersion]
+[CreateSyncVersion(Variations = (CollectionTypes)5)]
 public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TLeft, TRight>(this IAsyncEnumerable<TLeft> list1, IAsyncEnumerable<TRight> list2, [EnumeratorCancellation] CancellationToken ct = default)
 {
     await using var enumerator2 = list2.GetAsyncEnumerator(ct);

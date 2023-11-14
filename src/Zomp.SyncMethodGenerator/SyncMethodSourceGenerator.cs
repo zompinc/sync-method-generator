@@ -122,6 +122,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var methodName = methodSymbol.ToString();
 
+            var variations = 0;
             foreach (AttributeData attributeData in methodSymbol.GetAttributes())
             {
                 if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
@@ -129,7 +130,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                var variations = attributeData.NamedArguments[0].Value.Value;
+                if (attributeData.NamedArguments[0].Value.Value is int value)
+                {
+                    variations = value;
+                }
+
                 break;
             }
 
@@ -163,6 +168,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             {
                 continue;
             }
+
+            var @collections = (CollectionTypes)variations;
 
             //fill out replacement overrides dictionary
             var rewriter = new AsyncToSyncRewriter(semanticModel, replacementOverrides);
