@@ -17,13 +17,13 @@ namespace Zomp.SyncMethodGenerator
     public enum CollectionTypes
     {
         /// IList
-        IList = 1,
+        System.Collections.Generic.IList = 1,
         /// ReadOnlySpan
-        ReadOnlySpan = 2,
+        System.ReadOnlySpan = 2,
         /// Span
-        Span = 4,
+        System.Span = 4,
         /// IEnumerable
-        IEnumerable = 8
+        System.Collections.Generic.IEnumerable = 8
     }
 
     /// <summary>

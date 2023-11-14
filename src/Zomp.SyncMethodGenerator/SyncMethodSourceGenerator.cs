@@ -129,6 +129,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                var variations = attributeData.NamedArguments[0].Value.Value;
                 break;
             }
 
