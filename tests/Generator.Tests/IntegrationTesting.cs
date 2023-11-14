@@ -71,6 +71,23 @@ public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TL
 }
 """.Verify();
 
+    [Fact]
+    public Task CombineTwoListsAll() => """
+[CreateSyncVersion(Variations = (CollectionTypes)15)]
+public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TLeft, TRight>(this IAsyncEnumerable<TLeft> list1, IAsyncEnumerable<TRight> list2, [EnumeratorCancellation] CancellationToken ct = default)
+{
+    await using var enumerator2 = list2.GetAsyncEnumerator(ct);
+    await foreach (var item in list1.WithCancellation(ct).ConfigureAwait(false))
+    {
+        if (!(await enumerator2.MoveNextAsync().ConfigureAwait(false)))
+        {
+            throw new InvalidOperationException("Must have the same size");
+        }
+        yield return (item, enumerator2.Current);
+    }
+}
+""".Verify();
+
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task ChecksumRead() => """
