@@ -121,7 +121,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var methodName = methodSymbol.ToString();
 
-            var variations = 0;
+            var variations = 8;
             foreach (AttributeData attributeData in methodSymbol.GetAttributes())
             {
                 if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
@@ -175,17 +175,17 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 collections.Add("System.Collections.Generic.IList");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.Span) == CollectionTypes.IList)
+            if (((CollectionTypes)variations & CollectionTypes.Span) == CollectionTypes.Span)
             {
                 collections.Add("System.Span");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.ReadOnlySpan) == CollectionTypes.IList)
+            if (((CollectionTypes)variations & CollectionTypes.ReadOnlySpan) == CollectionTypes.ReadOnlySpan)
             {
                 collections.Add("System.ReadOnlySpan");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.IEnumerable) == CollectionTypes.IList)
+            if (((CollectionTypes)variations & CollectionTypes.IEnumerable) == CollectionTypes.IEnumerable || collections.Count == 0)
             {
                 collections.Add("System.Collections.Generic.IEnumerable");
             }
