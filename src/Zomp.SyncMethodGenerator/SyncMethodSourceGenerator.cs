@@ -93,6 +93,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     private static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
     {
         var methodsToGenerate = new List<MethodToGenerate>();
+        var replacementOverrides = new Dictionary<string, string?>();
+
         INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
         if (attribute == null)
         {
@@ -161,7 +163,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var rewriter = new AsyncToSyncRewriter(semanticModel);
+            //fill out replacement overrides dictionary
+            var rewriter = new AsyncToSyncRewriter(semanticModel, replacementOverrides);
             var sn = rewriter.Visit(methodDeclarationSyntax);
             var content = sn.ToFullString();
 
