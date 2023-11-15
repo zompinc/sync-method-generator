@@ -129,7 +129,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                if (attributeData.NamedArguments.Length >= 1 && attributeData.NamedArguments[0].Value.Value is int value)
+                if (attributeData.NamedArguments.Length >= 1 && attributeData.NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value is int value)
                 {
                     variations = (CollectionTypes)value;
                 }
