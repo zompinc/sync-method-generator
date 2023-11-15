@@ -121,7 +121,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var methodName = methodSymbol.ToString();
 
-            var variations = 8;
+            var variations = CollectionTypes.IEnumerable;
             foreach (AttributeData attributeData in methodSymbol.GetAttributes())
             {
                 if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
@@ -129,7 +129,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                if (attributeData.NamedArguments.Length >= 1 && attributeData.NamedArguments[0].Value.Value is int value)
+                if (attributeData.NamedArguments.Length >= 1 && attributeData.NamedArguments[0].Value.Value is CollectionTypes value)
                 {
                     variations = value;
                 }
@@ -170,22 +170,22 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var collections = new List<string>();
 
-            if (((CollectionTypes)variations & CollectionTypes.IList) == CollectionTypes.IList)
+            if ((variations & CollectionTypes.IList) == CollectionTypes.IList)
             {
                 collections.Add("System.Collections.Generic.IList");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.Span) == CollectionTypes.Span)
+            if ((variations & CollectionTypes.Span) == CollectionTypes.Span)
             {
                 collections.Add("System.Span");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.ReadOnlySpan) == CollectionTypes.ReadOnlySpan)
+            if ((variations & CollectionTypes.ReadOnlySpan) == CollectionTypes.ReadOnlySpan)
             {
                 collections.Add("System.ReadOnlySpan");
             }
 
-            if (((CollectionTypes)variations & CollectionTypes.IEnumerable) == CollectionTypes.IEnumerable || collections.Count == 0)
+            if ((variations & CollectionTypes.IEnumerable) == CollectionTypes.IEnumerable || collections.Count == 0)
             {
                 collections.Add("System.Collections.Generic.IEnumerable");
             }
