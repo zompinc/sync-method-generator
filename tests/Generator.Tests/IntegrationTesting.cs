@@ -56,7 +56,7 @@ async Task EnumeratorTestAsync(IAsyncEnumerable<int> range, CancellationToken ct
 
     [Fact]
     public Task CombineTwoLists() => """
-[CreateSyncVersion(Variations = (CollectionTypes)5)]
+[CreateSyncVersion(Variations = (CollectionTypes.IList | CollectionTypes.Span))]
 public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TLeft, TRight>(this IAsyncEnumerable<TLeft> list1, IAsyncEnumerable<TRight> list2, [EnumeratorCancellation] CancellationToken ct = default)
 {
     await using var enumerator2 = list2.GetAsyncEnumerator(ct);
@@ -73,7 +73,7 @@ public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TL
 
     [Fact]
     public Task CombineTwoListsAll() => """
-[CreateSyncVersion(Variations = (CollectionTypes)15)]
+[CreateSyncVersion(Variations = (CollectionTypes.IList | CollectionTypes.Span | CollectionTypes.ReadOnlySpan | CollectionTypes.IEnumerable))]
 public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TLeft, TRight>(this IAsyncEnumerable<TLeft> list1, IAsyncEnumerable<TRight> list2, [EnumeratorCancellation] CancellationToken ct = default)
 {
     await using var enumerator2 = list2.GetAsyncEnumerator(ct);
