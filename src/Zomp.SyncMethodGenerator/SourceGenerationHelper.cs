@@ -32,13 +32,7 @@ namespace Zomp.SyncMethodGenerator
     [System.AttributeUsage(System.AttributeTargets.Method)]
     internal class CreateSyncVersionAttribute : System.Attribute
     {
-        private CollectionTypes variations;
-
-        public virtual CollectionTypes Variations
-        {
-            get { return variations; }
-            set { variations = value; }
-        }
+        public virtual CollectionTypes Variations { get; set; }
     }
 }
 """;
