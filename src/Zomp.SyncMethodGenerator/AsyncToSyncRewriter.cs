@@ -59,6 +59,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
     private readonly HashSet<string> memoryToSpan = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+    private Dictionary<string, string> parametersWithTypes = [];
 
     private enum SyncOnlyDirectiveType
     {
@@ -215,6 +216,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
 
         string? newType = null;
 
+        //if (@base.Att)
+        // {
+        // }
         if (replacementOverrides.TryGetValue(genericName, out var replacement) ||
             Replacements.TryGetValue(genericName, out replacement))
         {
@@ -874,6 +878,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
         }
 
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
+        node.Attributes.ToList().ForEach(a => AddParameterTypes(a));
         var indices = node.Attributes.GetIndices((a, _) => ShouldRemoveAttribute(a));
         var newList = RemoveAtRange(@base.Attributes, indices);
         return @base.WithAttributes(newList);
@@ -881,6 +886,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
 
     public override SyntaxNode? VisitAttribute(AttributeSyntax node)
     {
+        parametersWithTypes.ContainsKey("k");
         var @base = (AttributeSyntax)base.VisitAttribute(node)!;
 
         if (GetSymbol(node.Name) is not IMethodSymbol ms)
@@ -1192,6 +1198,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
         }
 
         return replacement;
+    }
+
+    private void AddParameterTypes(AttributeSyntax attributeSyntax)
+    {
+        if (GetSymbol(attributeSyntax) is IMethodSymbol attributeSymbol)
+        {
+            var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
+            if (IsReplaceWithAttribute(attributeContainingTypeSymbol) && attributeSyntax.Parent?.Parent is ParameterSyntax param)
+            {
+                parametersWithTypes.Add(param.Identifier.ValueText, param.Identifier.Text);
+            }
+        }
     }
 
     private bool PreProcess(
