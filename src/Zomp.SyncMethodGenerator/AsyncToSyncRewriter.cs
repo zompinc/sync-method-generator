@@ -1205,9 +1205,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
         if (GetSymbol(attributeSyntax) is IMethodSymbol attributeSymbol)
         {
             var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
-            if (IsReplaceWithAttribute(attributeContainingTypeSymbol) && attributeSyntax.Parent?.Parent is ParameterSyntax param)
+            if (IsReplaceWithAttribute(attributeContainingTypeSymbol) && attributeSyntax.Parent?.Parent is ParameterSyntax param
+                && GetSymbol(param) is IParameterSymbol parameterSymbol)
             {
-                parametersWithTypes.Add(param.Identifier.ValueText, param.Identifier.Text);
+                var variation = parameterSymbol.GetAttributes()[0].NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value;
+
+                //.NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value;
+                parametersWithTypes.Add(param.Identifier.ValueText, param.Identifier.ValueText);
             }
         }
     }
