@@ -16,6 +16,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// </summary>
     public const string ReplaceWithAttribute = "ReplaceWithAttribute";
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
+    internal const string QualifiedReplaceWithAttribute = $"{ThisAssembly.RootNamespace}.{ReplaceWithAttribute}";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)

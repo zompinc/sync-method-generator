@@ -870,7 +870,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
             var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
 
             // Is the attribute [CreateSyncVersion] attribute?
-            return IsCreateSyncVersionAttribute(attributeContainingTypeSymbol);
+            return IsCreateSyncVersionAttribute(attributeContainingTypeSymbol) || IsReplaceWithAttribute(attributeContainingTypeSymbol);
         }
 
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
@@ -1015,6 +1015,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionar
 
     private static bool IsCreateSyncVersionAttribute(INamedTypeSymbol s)
         => s.ToDisplayString() == SyncMethodSourceGenerator.QualifiedCreateSyncVersionAttribute;
+
+    private static bool IsReplaceWithAttribute(INamedTypeSymbol s)
+        => s.ToDisplayString() == SyncMethodSourceGenerator.QualifiedReplaceWithAttribute;
 
     private static SyntaxList<TNode> RemoveAtRange<TNode>(SyntaxList<TNode> list, IEnumerable<int> indices)
         where TNode : SyntaxNode
