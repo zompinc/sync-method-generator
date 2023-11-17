@@ -28,6 +28,11 @@
     <None Include="AsyncExtensions.GenericMath.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="..\..\src\Zomp.SyncMethodGenerator\CollectionTypes.cs" Link="CollectionTypes.cs">
+      <LogicalName>Zomp.SyncMethodGenerator.tests.CollectionTypes.cs</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Numerics" Condition="$(TargetFramework) != 'net6.0'" />
   </ItemGroup>

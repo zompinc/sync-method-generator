@@ -33,8 +33,8 @@
     <PackageReference Include="coverlet.collector" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="..\Zomp.SyncMethodGenerator\CollectionTypes.cs" Link="src\CollectionTypes.cs">
-      <LogicalName>Zomp.SyncMethodGenerator.CollectionTypes.cs</LogicalName>
+    <EmbeddedResource Include="..\..\src\Zomp.SyncMethodGenerator\CollectionTypes.cs" Link="CollectionTypes.cs">
+      <LogicalName>Zomp.SyncMethodGenerator.tests.CollectionTypes.cs</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

@@ -10,22 +10,6 @@ public static class SourceGenerationHelper
 namespace Zomp.SyncMethodGenerator
 {
     /// <summary>
-    /// All types that an IAsyncEnumerable can be converted into
-    /// </summary>
-    [global::System.Flags]
-    public enum CollectionTypes
-    {
-        /// IEnumerable
-        IEnumerable = 1,
-        /// IList
-        IList = 2,
-        /// ReadOnlySpan
-        ReadOnlySpan = 4,
-        /// Span
-        Span = 8,
-    }
-
-    /// <summary>
     /// An attribute that can be used to automatically generate a synchronous version of an async method. Must be used in a partial class.
     /// </summary>
     [System.AttributeUsage(System.AttributeTargets.Method)]
