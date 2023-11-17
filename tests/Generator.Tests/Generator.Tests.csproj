@@ -34,7 +34,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\src\Zomp.SyncMethodGenerator\CollectionTypes.cs" Link="CollectionTypes.cs">
-      <LogicalName>Zomp.SyncMethodGenerator.tests.CollectionTypes.cs</LogicalName>
+      <LogicalName>Generator.Tests.CollectionTypes.cs</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
