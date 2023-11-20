@@ -12,8 +12,10 @@ public static partial class TestHelper
     private const string GlobalUsingsSource = """
 global using global::System;
 global using global::System.Collections.Generic;
+global using global::System.Reflection;
 global using global::System.Drawing;
 global using global::System.IO;
+global using global::System.Linq;
 #if NET7_0_OR_GREATER
 global using global::System.Numerics;
 #endif
@@ -76,7 +78,8 @@ partial class Class
         SyntaxTree globalUsings = CSharpSyntaxTree.ParseText(GlobalUsingsSource, parseOptions);
 
         // SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
-        var locations = new[]
+        var linqAssembly = typeof(Enumerable).Assembly.Location;
+        var locations = new List<string>
         {
             typeof(IAsyncEnumerable<>).Assembly.Location,
             typeof(ValueTask<>).Assembly.Location,
@@ -86,7 +89,15 @@ partial class Class
             typeof(Memory<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
+            linqAssembly,
         };
+
+        var directory = Path.GetDirectoryName(linqAssembly);
+        var runtimeLocation = directory is null ? null : Path.Combine(directory, "System.Runtime.dll");
+        if (runtimeLocation is not null && File.Exists(runtimeLocation))
+        {
+            locations.Add(runtimeLocation);
+        }
 
         var distinct = locations.Distinct().ToArray();
 

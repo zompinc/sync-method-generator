@@ -1,4 +1,6 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Rewrites a method synchronously.
@@ -10,6 +12,7 @@
 internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
+    private const string SystemObject = "object";
     private const string SystemFunc = "System.Func";
     private const string ReadOnlyMemory = "System.ReadOnlyMemory";
     private const string Memory = "System.Memory";
@@ -66,6 +69,125 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public ImmutableArray<Diagnostic> Diagnostics => diagnostics.ToImmutable();
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
+    {
+        var chain = new List<ExtensionExprSymbol>();
+        ConditionalAccessExpressionSyntax? curNode = node;
+
+        ExtensionExprSymbol? GetExtensionExprSymbol(InvocationExpressionSyntax invocation)
+            => GetSymbol(invocation) is not IMethodSymbol
+            { IsExtensionMethod: true, ReducedFrom: { } reducedFrom, ReturnType: { } returnType }
+            ? null : new(invocation, reducedFrom, returnType);
+
+        while (curNode is { WhenNotNull: { } whenNotNull })
+        {
+            var ext = whenNotNull switch
+            {
+                InvocationExpressionSyntax ies => GetExtensionExprSymbol(ies),
+                ConditionalAccessExpressionSyntax { Expression: InvocationExpressionSyntax ies } caes => GetExtensionExprSymbol(ies),
+                _ => null,
+            };
+
+            if (ext is not null)
+            {
+                chain.Add(ext);
+            }
+
+            curNode = whenNotNull as ConditionalAccessExpressionSyntax;
+        }
+
+        if (chain.Count == 0)
+        {
+            return base.VisitConditionalAccessExpression(node)!;
+        }
+
+        var leftOfTheDot = (ExpressionSyntax)Visit(node.Expression)!;
+
+        static BinaryExpressionSyntax CheckNull(ExpressionSyntax expr) => BinaryExpression(
+            SyntaxKind.EqualsExpression,
+            CastExpression(NullableType(IdentifierName(SystemObject)), expr).AppendSpace(),
+            LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
+
+        var argumentType = GetSymbol(leftOfTheDot) ?? throw new InvalidOperationException("Can't process");
+        var funcArgumentType = GetReturnType(argumentType);
+
+        IdentifierNameSyntax toCheckForNullExpr;
+        GenericNameSyntax? funcExpr = null;
+
+        var statements = new List<StatementSyntax>();
+        var parameter = Identifier("param");
+        if (leftOfTheDot is IdentifierNameSyntax ins && chain.Count == 1)
+        {
+            toCheckForNullExpr = ins;
+        }
+        else
+        {
+            var argumentTypeExpr = ProcessSymbol(funcArgumentType);
+
+            var separated = SeparatedList([(TypeSyntax)NullableType(argumentTypeExpr), NullableType(ProcessSymbol(chain[^1].ReturnType))]);
+
+            var type = TypeArgumentList(separated);
+            funcExpr = GenericName(
+                Identifier(Global(SystemFunc)),
+                type);
+
+            toCheckForNullExpr = IdentifierName(parameter);
+        }
+
+        ExpressionSyntax lastExpression = null!;
+
+        for (var i = 0; i < chain.Count; i++)
+        {
+            var (callSymbol, reducedSymbol, returnType) = chain[i];
+            var unwrappedExpr = UnwrapExtension(callSymbol, /*Fixme*/ false, reducedSymbol, toCheckForNullExpr);
+
+            var condition = CheckNull(toCheckForNullExpr);
+
+            if (i == chain.Count - 1)
+            {
+                var conditional = ConditionalExpression(
+                    condition,
+                    CastExpression(NullableType(ProcessSymbol(returnType)), LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                    unwrappedExpr.PrependSpace());
+
+                lastExpression = conditional;
+
+                statements.Add(ReturnStatement(conditional.PrependSpace()));
+                continue;
+            }
+
+            var returnNullStatement = ReturnStatement(LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
+
+            var ifBlock = ((ICollection<StatementSyntax>)[returnNullStatement]).CreateBlock(3);
+            statements.Add(IfStatement(CheckNull(toCheckForNullExpr), ifBlock));
+
+            var toCheckForNull = Identifier($"check{i}");
+            var localType = ProcessSymbol(returnType); // reduced will return generic
+
+            var declarator = VariableDeclarator(toCheckForNull.AppendSpace(), null, EqualsValueClause(unwrappedExpr));
+            var declaration = VariableDeclaration(localType.AppendSpace(), SeparatedList([declarator]));
+            var intermediaryNullCheck = LocalDeclarationStatement(declaration);
+
+            statements.Add(intermediaryNullCheck);
+
+            toCheckForNullExpr = IdentifierName(toCheckForNull);
+        }
+
+        if (funcExpr is null)
+        {
+            return ParenthesizedExpression(lastExpression);
+        }
+
+        var parameterList = ParameterList(SeparatedList([Parameter(parameter)]));
+        var lambda = chain.Count == 1
+            ? ParenthesizedLambdaExpression(parameterList, lastExpression)
+            : ParenthesizedLambdaExpression(parameterList, statements.CreateBlock(2));
+
+        var arguments = SeparatedList([Argument(leftOfTheDot)]);
+        return InvocationExpression(ParenthesizedExpression(CastExpression(funcExpr, ParenthesizedExpression(lambda))), ArgumentList(arguments));
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
     {
         var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
@@ -91,7 +213,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             if (replacement is not null)
             {
-                newType = "global::" + replacement;
+                newType = Global(replacement);
             }
         }
         else
@@ -272,69 +394,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var typeString = GetNameWithoutTypeParams(returnType);
         var isMemory = typeString is ReadOnlyMemory or Memory;
 
-        string? GetNewName(string name)
-        {
-            var containingType = methodSymbol.ContainingType;
-            var replacement = Regex.Replace(name, "Memory", "Span");
-            var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
-            if (newSymbol is null)
-            {
-                return null;
-            }
-
-            return replacement;
-        }
-
         if (methodSymbol is { IsExtensionMethod: true, ReducedFrom: { } reducedFrom }
-            && node.Expression is MemberAccessExpressionSyntax zz)
+            && @base.Expression is MemberAccessExpressionSyntax memberAccess2)
         {
-            var arguments = @base.ArgumentList.Arguments;
-            var separators = arguments.GetSeparators();
-
-            var newSeparators = arguments.Count < 1 ? Array.Empty<SyntaxToken>()
-                : new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) }
-                .Union(separators);
-
-            ArgumentSyntax @as;
-            if (@base.Expression is MemberAccessExpressionSyntax memberAccess2)
-            {
-                @as = SyntaxFactory.Argument(memberAccess2.Expression);
-            }
-            else
-            {
-                throw new InvalidOperationException($"Need to handle {node.Expression}");
-            }
-
-            var newList = SyntaxFactory.SeparatedList(new[] { @as }.Union(arguments), newSeparators);
-
-            newName = reducedFrom.Name;
-            if (isMemory)
-            {
-                newName = GetNewName(symbol.Name);
-            }
-            else if (symbol is { Name: "WithCancellation", ContainingNamespace.Name: "Tasks" })
-            {
-                return zz.Expression;
-            }
-            else
-            {
-                newName = RemoveAsync(newName);
-            }
-
-            var id = SyntaxFactory.Identifier($"{MakeType(reducedFrom.ContainingType)}.{newName}");
-
-            ExpressionSyntax es = @base.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax gns }
-                ? SyntaxFactory.GenericName(id, gns.TypeArgumentList)
-                : SyntaxFactory.IdentifierName(id);
-
-            return @base
-                .WithExpression(es)
-                .WithArgumentList(SyntaxFactory.ArgumentList(newList));
+            return UnwrapExtension(@base, isMemory, reducedFrom, memberAccess2.Expression);
         }
 
         if (isMemory)
         {
-            newName = GetNewName(symbol.Name);
+            newName = GetNewName(methodSymbol);
         }
 
         if (@base.Expression is not MemberAccessExpressionSyntax memberAccess
@@ -716,10 +784,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                 var typeArgs = n.TypeArguments;
 
-                if (typeArgs[typeArgs.Length - 1].ToString() is TaskType or ValueTaskType
+                if (typeArgs[^1].ToString() is TaskType or ValueTaskType
                     && @base.Declaration.Type is GenericNameSyntax gns)
                 {
-                    var newType = "global::System.Action";
+                    var newType = Global("System.Action");
 
                     var list = new List<TypeSyntax>();
                     if (typeArgs.Length > 1)
@@ -970,7 +1038,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static BlockSyntax CreateEmptyBody()
         => SyntaxFactory.Block().WithCloseBraceToken(
             SyntaxFactory.Token(SyntaxKind.CloseBraceToken)
-            .WithLeadingTrivia(SyntaxFactory.Whitespace(" ")));
+            .PrependSpace());
 
     private static bool ShouldRemoveType(ITypeSymbol symbol)
     {
@@ -992,17 +1060,24 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return Drops.Contains(@base);
     }
 
+    private static ITypeSymbol GetReturnType(ISymbol symbol) => symbol switch
+    {
+        IFieldSymbol fs => fs.Type,
+        IPropertySymbol ps => ps.Type,
+        ITypeSymbol ts => ts,
+        ILocalSymbol ls => ls.Type,
+        IParameterSymbol ps => ps.Type,
+        IMethodSymbol ms => ms.ReturnType,
+        _ => throw new NotSupportedException($"Can't process {symbol}"),
+    };
+
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
-        IFieldSymbol fs => ShouldRemoveType(fs.Type),
-        IPropertySymbol ps => ShouldRemoveType(ps.Type),
-        ITypeSymbol ts => ShouldRemoveType(ts),
-        ILocalSymbol ls => ShouldRemoveType(ls.Type),
-        IParameterSymbol ps => ShouldRemoveType(ps.Type),
         IMethodSymbol { Name: not FromResult } ms =>
             (ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
                 || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
-        _ => false,
+        IMethodSymbol => false,
+        _ => ShouldRemoveType(GetReturnType(symbol)),
     };
 
     private static bool CanDropEmptyStatement(StatementSyntax statement)
@@ -1031,6 +1106,58 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             ? SyntaxFactory.IdentifierName("void")
                 .WithTriviaFrom(returnType)
             : returnType;
+    }
+
+    private static string Global(string type) => $"global::{type}";
+
+    private static ExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
+    {
+        var arguments = ies.ArgumentList.Arguments;
+        var separators = arguments.GetSeparators();
+
+        var newSeparators = arguments.Count < 1 ? Array.Empty<SyntaxToken>()
+            : new[] { Token(SyntaxKind.CommaToken).AppendSpace() }
+            .Union(separators);
+
+        var @as = Argument(expression);
+        var newList = SeparatedList(new[] { @as }.Union(arguments), newSeparators);
+
+        var newName = reducedFrom.Name;
+        if (isMemory)
+        {
+            newName = GetNewName(reducedFrom);
+        }
+        else if (reducedFrom is { Name: "WithCancellation", ContainingNamespace.Name: "Tasks" } && ies.Expression is MemberAccessExpressionSyntax mae)
+        {
+            return mae.Expression;
+        }
+        else
+        {
+            newName = RemoveAsync(newName);
+        }
+
+        var id = Identifier($"{MakeType(reducedFrom.ContainingType)}.{newName}");
+
+        ExpressionSyntax es = ies.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax gns }
+            ? GenericName(id, gns.TypeArgumentList)
+            : IdentifierName(id);
+
+        return ies
+            .WithExpression(es)
+            .WithArgumentList(ArgumentList(newList));
+    }
+
+    private static string? GetNewName(IMethodSymbol methodSymbol)
+    {
+        var containingType = methodSymbol.ContainingType;
+        var replacement = Regex.Replace(methodSymbol.Name, "Memory", "Span");
+        var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
+        if (newSymbol is null)
+        {
+            return null;
+        }
+
+        return replacement;
     }
 
     private bool PreProcess(
@@ -1346,4 +1473,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return ProcessStatements(statements, extraNodeInfoList);
         }
     }
+
+    private sealed record ExtensionExprSymbol(InvocationExpressionSyntax InvocationExpression, IMethodSymbol ReducedFrom, ITypeSymbol ReturnType);
 }

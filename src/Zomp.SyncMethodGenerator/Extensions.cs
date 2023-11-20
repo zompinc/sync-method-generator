@@ -1,4 +1,6 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Zomp.SyncMethodGenerator;
 
 internal static class Extensions
 {
@@ -17,4 +19,57 @@ internal static class Extensions
 
     internal static bool EndsWithAsync(this string str)
         => str.EndsWith("Async", StringComparison.Ordinal);
+
+    internal static SyntaxToken PrependSpace(this SyntaxToken token)
+        => token.WithLeadingTrivia(Space);
+
+    internal static SyntaxToken AppendSpace(this SyntaxToken token)
+        => token.WithTrailingTrivia(Space);
+
+    internal static T PrependSpace<T>(this T syntax)
+        where T : ExpressionSyntax
+        => syntax.WithLeadingTrivia(Space);
+
+    internal static T AppendSpace<T>(this T syntax)
+        where T : ExpressionSyntax
+        => syntax.WithTrailingTrivia(Space);
+
+    internal static BlockSyntax CreateBlock(this ICollection<StatementSyntax> statements, int indentationLevel = 0)
+    {
+        var list = new List<StatementSyntax>();
+
+        var i = 0;
+        foreach (var statement in statements)
+        {
+            var leading = new List<SyntaxTrivia>();
+            var trailing = new List<SyntaxTrivia>() { CarriageReturnLineFeed };
+
+            if (i == 0)
+            {
+                leading.Add(CarriageReturnLineFeed);
+            }
+
+            if (statement is IfStatementSyntax && i < statements.Count - 1)
+            {
+                trailing.Add(CarriageReturnLineFeed);
+            }
+
+            if (i == statements.Count - 1)
+            {
+                trailing.Add(Whitespace(new string(' ', 4 * indentationLevel)));
+            }
+
+            if (indentationLevel > 0)
+            {
+                leading.Add(Whitespace(new string(' ', 4 * (indentationLevel + 1))));
+            }
+
+            list.Add(statement.WithTrailingTrivia(trailing)
+                .WithLeadingTrivia(leading));
+            ++i;
+        }
+
+        return Block(List(list))
+            .WithLeadingTrivia(CarriageReturnLineFeed, Whitespace(new string(' ', 4 * indentationLevel)));
+    }
 }
