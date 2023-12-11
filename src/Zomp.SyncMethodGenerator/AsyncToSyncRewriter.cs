@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using Zomp.SyncMethodGenerator.Models;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -57,7 +58,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
-    private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+    private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
 
     private enum SyncOnlyDirectiveType
     {
@@ -77,7 +78,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <summary>
     /// Gets the diagnostics messages.
     /// </summary>
-    public ImmutableArray<Diagnostic> Diagnostics => diagnostics.ToImmutable();
+    public ImmutableArray<ReportedDiagnostic> Diagnostics => diagnostics.ToImmutable();
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
@@ -1307,7 +1308,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                 if (syncOnlyDirectiveType == SyncOnlyDirectiveType.Invalid)
                 {
-                    var d = Diagnostic.Create(InvalidCondition, trivia.GetLocation(), trivia);
+                    var d = ReportedDiagnostic.Create(InvalidCondition, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
                     return null;
                 }
@@ -1318,7 +1319,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     {
                         if (isStackSyncOnly ^ syncOnlyDirectiveType == SyncOnlyDirectiveType.SyncOnly)
                         {
-                            var d = Diagnostic.Create(InvalidNesting, trivia.GetLocation(), trivia);
+                            var d = ReportedDiagnostic.Create(InvalidNesting, trivia.GetLocation(), trivia.ToString());
                             diagnostics.Add(d);
                             return null;
                         }
@@ -1378,7 +1379,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 }
                 else
                 {
-                    var d = Diagnostic.Create(InvalidElif, trivia.GetLocation(), trivia);
+                    var d = ReportedDiagnostic.Create(InvalidElif, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
                     return null;
                 }

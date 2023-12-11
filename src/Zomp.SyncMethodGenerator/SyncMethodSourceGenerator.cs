@@ -1,4 +1,6 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿using Zomp.SyncMethodGenerator.Helpers;
+
+namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Generates synchronous code from asynchronous.
@@ -11,6 +13,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// </summary>
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
+
+    private static MethodToGenerate? last;
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -25,162 +29,161 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
-        IncrementalValuesProvider<MethodDeclarationSyntax> methodDeclarations = context.SyntaxProvider
+        var disableNullable =
+            context.CompilationProvider.Select((c, _)
+                => c is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 });
+
+        var methodDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 QualifiedCreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, _) => (MethodDeclarationSyntax)ctx.TargetNode);
+                transform: static (ctx, ct) => ctx)
+            .Combine(disableNullable)
+            .Select((data, ct) => GetMethodToGenerate(data.Left, (MethodDeclarationSyntax)data.Left.TargetNode, data.Right, ct)!)
+            .WithTrackingName("GetMethodToGenerate")
+            .Where(static s => s is not null);
 
-        IncrementalValueProvider<(Compilation, ImmutableArray<MethodDeclarationSyntax>)> compilationAndMethods
-            = context.CompilationProvider.Combine(methodDeclarations.Collect());
+        var sourceTexts = methodDeclarations
+            .Select(static (m, _) => GenerateSource(m))
+            .WithTrackingName("GenerateSource");
 
         context.RegisterSourceOutput(
-            compilationAndMethods,
-            static (spc, source) => Execute(source.Item1, source.Item2, spc));
+            sourceTexts,
+            static (spc, source) =>
+            {
+                foreach (var diagnostic in source.MethodToGenerate.Diagnostics)
+                {
+                    spc.ReportDiagnostic(diagnostic);
+                }
+
+                if (!source.MethodToGenerate.HasErrors)
+                {
+                    spc.AddSource(source.Path, SourceText.From(source.Content, Encoding.UTF8));
+                }
+            });
     }
 
     private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-        => node is MethodDeclarationSyntax m && m.AttributeLists.Count > 0;
+        => node is MethodDeclarationSyntax { AttributeLists.Count: > 0 };
 
-    private static void Execute(Compilation compilation, ImmutableArray<MethodDeclarationSyntax> methods, SourceProductionContext context)
+    private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
-        if (methods.IsDefaultOrEmpty)
-        {
-            // nothing to do yet
-            return;
-        }
+        var sourcePath = $"{string.Join(".", m.Namespaces)}" +
+            $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
+            $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
 
-        // I'm not sure if this is actually necessary, but `[LoggerMessage]` does it, so seems like a good idea!
-        IEnumerable<MethodDeclarationSyntax> distinctMethods = methods.Distinct();
+        var source = SourceGenerationHelper.GenerateExtensionClass(m);
 
-        // Convert each MethodDeclarationSyntax to an MethodToGenerate
-        List<MethodToGenerate> methodsToGenerate = GetTypesToGenerate(context, compilation, distinctMethods, context.CancellationToken);
-
-        // If there were errors in the MethodDeclarationSyntax, we won't create an
-        // MethodToGenerate for it, so make sure we have something to generate
-        if (methodsToGenerate.Count > 0)
-        {
-            // Generate the source code and add it to the output
-            var sourceDictionary = new Dictionary<string, string>();
-            foreach (var m in methodsToGenerate)
-            {
-                // Ensure there are no collisions in generated names
-                var i = 1;
-                while (true)
-                {
-                    var sourcePath = $"{string.Join(".", m.Namespaces)}" +
-                        $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
-                        $".{m.MethodName + (i == 1 ? string.Empty : "_" + i)}.g.cs";
-
-                    if (!sourceDictionary.ContainsKey(sourcePath))
-                    {
-                        var source = SourceGenerationHelper.GenerateExtensionClass(m);
-                        sourceDictionary.Add(sourcePath, source);
-                        break;
-                    }
-
-                    ++i;
-                }
-            }
-
-            foreach (var entry in sourceDictionary)
-            {
-                context.AddSource(entry.Key, SourceText.From(entry.Value, Encoding.UTF8));
-            }
-        }
+        return (m, sourcePath, source);
     }
 
-    private static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
+    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
     {
-        var methodsToGenerate = new List<MethodToGenerate>();
-        INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
+        // stop if we're asked to
+        ct.ThrowIfCancellationRequested();
+
+        if (context.TargetSymbol is not IMethodSymbol methodSymbol)
+        {
+            // the attribute isn't on a method
+            return null;
+        }
+
+        INamedTypeSymbol? attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
         if (attribute == null)
         {
             // nothing to do if this type isn't available
-            return methodsToGenerate;
+            return null;
         }
 
-        foreach (var methodDeclarationSyntax in methodDeclarations)
+        // find the index of the method in the containing type
+        var index = 1;
+
+        if (methodSymbol.ContainingType is { } containingType)
         {
-            // stop if we're asked to
-            ct.ThrowIfCancellationRequested();
-
-            SemanticModel semanticModel = compilation.GetSemanticModel(methodDeclarationSyntax.SyntaxTree);
-
-            if (semanticModel.GetDeclaredSymbol(methodDeclarationSyntax, cancellationToken: ct) is not IMethodSymbol methodSymbol)
+            foreach (var member in containingType.GetMembers())
             {
-                // something went wrong
-                continue;
-            }
-
-            if (!methodSymbol.IsAsync && !AsyncToSyncRewriter.IsTypeOfInterest(methodSymbol.ReturnType))
-            {
-                continue;
-            }
-
-            var methodName = methodSymbol.ToString();
-
-            foreach (AttributeData attributeData in methodSymbol.GetAttributes())
-            {
-                if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
-                {
-                    continue;
-                }
-
-                break;
-            }
-
-            var classes = new List<ClassDeclaration>();
-            SyntaxNode? node = methodDeclarationSyntax;
-            while (node.Parent is not null)
-            {
-                node = node.Parent;
-                if (node is not ClassDeclarationSyntax classSyntax)
+                if (member.Equals(methodSymbol, SymbolEqualityComparer.Default))
                 {
                     break;
                 }
 
-                var modifiers = new List<SyntaxKind>();
-
-                foreach (var mod in classSyntax.Modifiers)
+                if (member.Name.Equals(methodSymbol.Name, StringComparison.Ordinal))
                 {
-                    var kind = mod.RawKind;
-                    if (kind == (int)SyntaxKind.PartialKeyword)
-                    {
-                        continue;
-                    }
+                    ++index;
+                }
+            }
+        }
 
-                    modifiers.Add((SyntaxKind)kind);
+        if (!methodSymbol.IsAsync && !AsyncToSyncRewriter.IsTypeOfInterest(methodSymbol.ReturnType))
+        {
+            return null;
+        }
+
+        foreach (AttributeData attributeData in methodSymbol.GetAttributes())
+        {
+            if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                continue;
+            }
+
+            break;
+        }
+
+        var classes = ImmutableArray.CreateBuilder<ClassDeclaration>();
+        SyntaxNode? node = methodDeclarationSyntax;
+        while (node.Parent is not null)
+        {
+            node = node.Parent;
+            if (node is not ClassDeclarationSyntax classSyntax)
+            {
+                break;
+            }
+
+            var modifiers = ImmutableArray.CreateBuilder<EquatableEnum<SyntaxKind>>();
+
+            foreach (var mod in classSyntax.Modifiers)
+            {
+                var kind = mod.RawKind;
+                if (kind == (int)SyntaxKind.PartialKeyword)
+                {
+                    continue;
                 }
 
-                classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers, classSyntax.TypeParameterList));
+                modifiers.Add((SyntaxKind)kind);
             }
 
-            if (classes.Count == 0)
+            var typeParameters = ImmutableArray.CreateBuilder<string>();
+
+            foreach (var typeParameter in classSyntax.TypeParameterList?.Parameters ?? default)
             {
-                continue;
+                typeParameters.Add(typeParameter.Identifier.ValueText);
             }
 
-            var rewriter = new AsyncToSyncRewriter(semanticModel);
-            var sn = rewriter.Visit(methodDeclarationSyntax);
-            var content = sn.ToFullString();
+            classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable()));
+        }
 
-            var diagnostics = rewriter.Diagnostics;
+        if (classes.Count == 0)
+        {
+            return null;
+        }
 
-            var hasErrors = false;
-            foreach (var diagnostic in diagnostics)
-            {
-                context.ReportDiagnostic(diagnostic);
-                hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
-            }
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel);
+        var sn = rewriter.Visit(methodDeclarationSyntax);
+        var content = sn.ToFullString();
 
-            if (hasErrors)
-            {
-                continue;
-            }
+        var diagnostics = rewriter.Diagnostics;
 
-            var isNamespaceFileScoped = false;
-            var namespaces = new List<string>();
+        var hasErrors = false;
+        foreach (var diagnostic in diagnostics)
+        {
+            hasErrors |= diagnostic.Descriptor.DefaultSeverity == DiagnosticSeverity.Error;
+        }
+
+        var isNamespaceFileScoped = false;
+        var namespaces = ImmutableArray.CreateBuilder<string>();
+
+        if (!hasErrors)
+        {
             while (node is not null && node is not CompilationUnitSyntax)
             {
                 switch (node)
@@ -198,11 +201,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
                 node = node.Parent;
             }
-
-            var disableNullable = compilation is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 };
-            methodsToGenerate.Add(new(namespaces, isNamespaceFileScoped, classes, methodDeclarationSyntax.Identifier.ValueText, content, disableNullable));
         }
 
-        return methodsToGenerate;
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+
+        last = result;
+        return result;
     }
 }
