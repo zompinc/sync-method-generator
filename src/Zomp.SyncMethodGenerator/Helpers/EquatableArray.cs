@@ -10,6 +10,11 @@ namespace Zomp.SyncMethodGenerator.Helpers;
 /// An immutable, equatable array. This is equivalent to <see cref="ImmutableArray{T}"/> but with value equality support.
 /// </summary>
 /// <typeparam name="T">The type of values in the array.</typeparam>
+/// <remarks>
+/// Modified from: https://github.com/dotnet/runtime/issues/77183#issuecomment-1284577055.
+/// Remove this struct when the issue above is resolved.
+/// </remarks>
+[ExcludeFromCodeCoverage]
 internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
     where T : IEquatable<T>
 {
