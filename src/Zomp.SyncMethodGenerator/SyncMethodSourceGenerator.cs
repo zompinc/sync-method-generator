@@ -139,7 +139,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 break;
             }
 
-            var modifiers = ImmutableArray.CreateBuilder<EquatableEnum<SyntaxKind>>();
+            var modifiers = ImmutableArray.CreateBuilder<ushort>();
 
             foreach (var mod in classSyntax.Modifiers)
             {
@@ -149,7 +149,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                modifiers.Add((SyntaxKind)kind);
+                modifiers.Add((ushort)kind);
             }
 
             var typeParameters = ImmutableArray.CreateBuilder<string>();
