@@ -185,6 +185,7 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
 /// <summary>
 /// Extensions for <see cref="EquatableArray{T}"/>.
 /// </summary>
+[ExcludeFromCodeCoverage]
 internal static class EquatableArray
 {
     /// <summary>
