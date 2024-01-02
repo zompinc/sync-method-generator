@@ -886,6 +886,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return retval;
     }
 
+    public override SyntaxNode? VisitCastExpression(CastExpressionSyntax node)
+    {
+        var @base = (CastExpressionSyntax)base.VisitCastExpression(node)!;
+        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
     internal static bool IsTypeOfInterest(ITypeSymbol symbol)
     {
         var genericName = GetNameWithoutTypeParams(symbol);

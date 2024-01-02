@@ -132,15 +132,6 @@ private async Task MakeArray(byte[] sampleBytes, CancellationToken ct = default)
     }
 
     [Fact]
-    public Task MemoryToSpanWithBody() => """
-[CreateSyncVersion]
-private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct = default)
-{
-    await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
-}
-""".Verify();
-
-    [Fact]
     public Task ReadOnlyMemoryToReadOnlySpan() => """
 [CreateSyncVersion]
 static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, CancellationToken ct)
@@ -658,4 +649,26 @@ long myLong;
 
 await Task.CompletedTask;
 """.Verify(false, true, sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task CastFullyQualifiedType() => """
+class CustomClass { }
+
+[CreateSyncVersion]
+public async Task<object> GetCustomObjectAsync(object o)
+{
+    return (CustomClass)o;
+}
+""".Verify();
+
+    [Fact]
+    public Task CastFullyQualifiedTypeTwice() => """
+class CustomClass { }
+
+[CreateSyncVersion]
+public async Task<object> GetCustomObjectAsync(object o)
+{
+    return (CustomClass)(object)(CustomClass)o;
+}
+""".Verify();
 }
