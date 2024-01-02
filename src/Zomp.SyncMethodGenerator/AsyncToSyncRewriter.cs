@@ -21,13 +21,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string IProgressInterface = "System.IProgress";
     private const string IAsyncResultInterface = "System.IAsyncResult";
     private const string CancellationTokenType = "System.Threading.CancellationToken";
+    private const string ConfiguredTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredTaskAwaitable";
+    private const string ConfiguredValueTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable";
+    private const string ConfiguredCancelableAsyncEnumerable = "System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable";
+    private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
     private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface, IAsyncResultInterface });
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
-        { "System.Collections.Generic.IAsyncEnumerator", "System.Collections.Generic.IEnumerator" },
+        { IAsyncEnumerator, "System.Collections.Generic.IEnumerator" },
         { TaskType, null },
         { ValueTaskType, null },
         { ReadOnlyMemory, "System.ReadOnlySpan" },
@@ -344,8 +348,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base;
     }
 
-    ////override visitinter
-
     /// <inheritdoc/>
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
     {
@@ -390,39 +392,41 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return @base.WithExpression(gn.WithIdentifier(SyntaxFactory.Identifier(newName)));
         }
 
-        var returnType = methodSymbol.ReturnType;
-        var typeString = GetNameWithoutTypeParams(returnType);
-        var isMemory = typeString is ReadOnlyMemory or Memory;
-
-        if (methodSymbol is { IsExtensionMethod: true, ReducedFrom: { } reducedFrom }
-            && @base.Expression is MemberAccessExpressionSyntax memberAccess2)
-        {
-            return UnwrapExtension(@base, isMemory, reducedFrom, memberAccess2.Expression);
-        }
+        var returnType = GetNameWithoutTypeParams(methodSymbol.ReturnType);
+        var isMemory = returnType is ReadOnlyMemory or Memory;
 
         if (isMemory)
         {
             newName = GetNewName(methodSymbol);
         }
 
-        if (@base.Expression is not MemberAccessExpressionSyntax memberAccess
-            || memberAccess.Name is not IdentifierNameSyntax mins)
+        if (@base.Expression is not MemberAccessExpressionSyntax { } memberAccess)
         {
             return @base;
         }
 
-        if (memberAccess.Name is IdentifierNameSyntax { Identifier.ValueText: "ConfigureAwait" })
+        if (returnType is ConfiguredTaskAwaitable or ConfiguredValueTaskAwaitable or ConfiguredCancelableAsyncEnumerable)
         {
             return memberAccess.Expression;
         }
 
-        if (mins.Identifier.ValueText.EndsWithAsync() || mins.Identifier.ValueText == "GetAsyncEnumerator")
+        if (methodSymbol is { IsExtensionMethod: true, ReducedFrom: { } reducedFrom })
         {
-            newName = RemoveAsync(mins.Identifier.ValueText);
+            return UnwrapExtension(@base, isMemory, reducedFrom, memberAccess.Expression);
         }
-        else if (mins.Identifier.ValueText == FromResult && @base.ArgumentList.Arguments.Count > 0)
+
+        if (memberAccess.Name is not IdentifierNameSyntax { Identifier.ValueText: { } name })
         {
-            return @base.ArgumentList.Arguments[0].Expression;
+            return @base;
+        }
+
+        if (name.EndsWithAsync() || returnType == IAsyncEnumerator)
+        {
+            newName = RemoveAsync(name);
+        }
+        else if (name == FromResult && @base.ArgumentList.Arguments is [var singleArg])
+        {
+            return singleArg.Expression;
         }
 
         if (newName == null)
@@ -1110,7 +1114,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static string Global(string type) => $"global::{type}";
 
-    private static ExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
+    private static InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
     {
         var arguments = ies.ArgumentList.Arguments;
         var separators = arguments.GetSeparators();
@@ -1126,10 +1130,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         if (isMemory)
         {
             newName = GetNewName(reducedFrom);
-        }
-        else if (reducedFrom is { Name: "WithCancellation", ContainingNamespace.Name: "Tasks" } && ies.Expression is MemberAccessExpressionSyntax mae)
-        {
-            return mae.Expression;
         }
         else
         {
