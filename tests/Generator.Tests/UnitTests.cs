@@ -671,4 +671,10 @@ public async Task<object> GetCustomObjectAsync(object o)
     return (CustomClass)(object)(CustomClass)o;
 }
 """.Verify();
+
+    [Fact]
+    public Task UseFullyQualifiedTypeInIsExpression() => """
+[CreateSyncVersion]
+public async Task HasIsExpressionAsync() => _ = stream is FileStream;
+""".Verify();
 }

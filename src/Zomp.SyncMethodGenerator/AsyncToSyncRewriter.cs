@@ -892,6 +892,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
+    public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
+    {
+        var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
+
+        if (@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) && GetSymbol(node.Right) is INamedTypeSymbol typeSymbol)
+        {
+            @base = @base.WithRight(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base);
+        }
+
+        return @base;
+    }
+
     internal static bool IsTypeOfInterest(ITypeSymbol symbol)
     {
         var genericName = GetNameWithoutTypeParams(symbol);
