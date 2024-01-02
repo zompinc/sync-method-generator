@@ -677,4 +677,16 @@ public async Task<object> GetCustomObjectAsync(object o)
 [CreateSyncVersion]
 public async Task HasIsExpressionAsync() => _ = stream is FileStream;
 """.Verify();
+
+    [Fact]
+    public Task VerifyParamHandling() => $$"""
+static byte[] HelperMethod(params int[] myParams) => null;
+_ = HelperMethod(1, 2);
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task VerifyAsyncParamHandling() => $$"""
+static async Task<byte[]> HelperMethod(params int[] myParams) => null;
+_ = await HelperMethod(1, 2);
+""".Verify(sourceType: SourceType.MethodBody);
 }

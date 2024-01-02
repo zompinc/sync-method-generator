@@ -718,11 +718,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 return byExpression;
             }
 
+            var isParams = parameters[^1].IsParams;
+
             var nameColon = arg.NameColon?.Name.Identifier.ValueText;
 
-            var param = nameColon is not null ? parameters.Single(z => z.Name == nameColon) : parameters[index];
+            var param = nameColon is not null ? parameters.Single(z => z.Name == nameColon)
+                : index < parameters.Length ? parameters[index] : null;
 
-            return ShouldRemoveType(param.Type);
+            return param is not null && ShouldRemoveType(param.Type);
         }
 
         var @base = (ArgumentListSyntax)base.VisitArgumentList(node)!;
