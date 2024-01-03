@@ -689,4 +689,9 @@ _ = HelperMethod(1, 2);
 static async Task<byte[]> HelperMethod(params int[] myParams) => null;
 _ = await HelperMethod(1, 2);
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task HandleDiscardSymbol()
+        => "_ = int.TryParse(\"2\", out _);"
+        .Verify(sourceType: SourceType.MethodBody);
 }

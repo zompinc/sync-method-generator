@@ -1093,6 +1093,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ILocalSymbol ls => ls.Type,
         IParameterSymbol ps => ps.Type,
         IMethodSymbol ms => ms.ReturnType,
+        IDiscardSymbol ds => ds.Type,
         _ => throw new NotSupportedException($"Can't process {symbol}"),
     };
 
