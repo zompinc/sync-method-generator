@@ -71,4 +71,9 @@ public async Task HasIsExpressionAsync(Stream stream) => _ = stream is FileStrea
     public Task HandleTypeOf()
         => "_ = typeof(Stream);"
         .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task HandleNameOf()
+        => "_ = nameof(Stream);"
+        .Verify(sourceType: SourceType.MethodBody);
 }

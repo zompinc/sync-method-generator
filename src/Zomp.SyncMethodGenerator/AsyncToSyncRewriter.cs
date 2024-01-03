@@ -712,6 +712,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return retVal;
     }
 
+    public override SyntaxNode? VisitArgument(ArgumentSyntax node)
+    {
+        // Handles nameof(Type)
+        var @base = (ArgumentSyntax)base.VisitArgument(node)!;
+        if (GetSymbol(node.Expression) is ITypeSymbol { } typeSymbol)
+        {
+            return @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base);
+        }
+
+        return @base;
+    }
+
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
     {
         ImmutableArray<IParameterSymbol>? nullableParameters = null;
