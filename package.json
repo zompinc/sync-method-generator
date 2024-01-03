@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "husky": "^8.0.2"
+    "husky": "^8.0.3"
   },
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
