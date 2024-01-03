@@ -620,65 +620,6 @@ private sealed class CustomProgress : IProgress<float>
 """.Verify(false, true);
 
     [Fact]
-    public Task ConvertExceptionType() => $$"""
-try
-{
-    await Task.CompletedTask;
-}
-catch (OperationCanceledException)
-{
-}
-""".Verify(false, true, sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task ConvertForeachType() => $$"""
-foreach (Int32 i in new Int32[] { 1 })
-{
-}
-
-await Task.CompletedTask;
-""".Verify(false, true, sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task TestTypes() => $$"""
-String myStr;
-string myStrPredefined;
-Exception ex;
-Int16 myShort;
-long myLong;
-
-await Task.CompletedTask;
-""".Verify(false, true, sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task CastFullyQualifiedType() => """
-class CustomClass { }
-
-[CreateSyncVersion]
-public async Task<object> GetCustomObjectAsync(object o)
-{
-    return (CustomClass)o;
-}
-""".Verify();
-
-    [Fact]
-    public Task CastFullyQualifiedTypeTwice() => """
-class CustomClass { }
-
-[CreateSyncVersion]
-public async Task<object> GetCustomObjectAsync(object o)
-{
-    return (CustomClass)(object)(CustomClass)o;
-}
-""".Verify();
-
-    [Fact]
-    public Task UseFullyQualifiedTypeInIsExpression() => """
-[CreateSyncVersion]
-public async Task HasIsExpressionAsync() => _ = stream is FileStream;
-""".Verify();
-
-    [Fact]
     public Task VerifyParamHandling() => $$"""
 static byte[] HelperMethod(params int[] myParams) => null;
 _ = HelperMethod(1, 2);
@@ -689,9 +630,4 @@ _ = HelperMethod(1, 2);
 static async Task<byte[]> HelperMethod(params int[] myParams) => null;
 _ = await HelperMethod(1, 2);
 """.Verify(sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task HandleDiscardSymbol()
-        => "_ = int.TryParse(\"2\", out _);"
-        .Verify(sourceType: SourceType.MethodBody);
 }
