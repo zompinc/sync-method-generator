@@ -895,6 +895,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
+    public override SyntaxNode? VisitTypeOfExpression(TypeOfExpressionSyntax node)
+    {
+        var @base = (TypeOfExpressionSyntax)base.VisitTypeOfExpression(node)!;
+        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
     {
         var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
