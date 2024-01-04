@@ -10,7 +10,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// Create sync version attribute string.
     /// </summary>
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
+
+    /// <summary>
+    /// Replace with attribute string.
+    /// </summary>
+    public const string ReplaceWithAttribute = "ReplaceWithAttribute";
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
+    internal const string QualifiedReplaceWithAttribute = $"{ThisAssembly.RootNamespace}.{ReplaceWithAttribute}";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -22,8 +28,15 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             Debugger.Launch();
         }
 #endif
+
+        context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+            $"CollectionTypes.g.cs", SourceText.From(GetResourceText("Zomp.SyncMethodGenerator.tests.CollectionTypes.cs"), Encoding.UTF8)));
+
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
+
+        context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+            $"{ReplaceWithAttribute}.g.cs", SourceText.From(SourceGenerationHelper.ReplaceWithAttributeSource, Encoding.UTF8)));
 
         IncrementalValuesProvider<MethodDeclarationSyntax> methodDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
@@ -93,6 +106,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     private static List<MethodToGenerate> GetTypesToGenerate(SourceProductionContext context, Compilation compilation, IEnumerable<MethodDeclarationSyntax> methodDeclarations, CancellationToken ct)
     {
         var methodsToGenerate = new List<MethodToGenerate>();
+
         INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
         if (attribute == null)
         {
@@ -120,11 +134,17 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var methodName = methodSymbol.ToString();
 
+            var variations = CollectionTypes.IEnumerable;
             foreach (AttributeData attributeData in methodSymbol.GetAttributes())
             {
                 if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
                 {
                     continue;
+                }
+
+                if (attributeData.NamedArguments.Length >= 1 && attributeData.NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value is int value)
+                {
+                    variations = (CollectionTypes)value;
                 }
 
                 break;
@@ -161,47 +181,86 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var rewriter = new AsyncToSyncRewriter(semanticModel);
-            var sn = rewriter.Visit(methodDeclarationSyntax);
-            var content = sn.ToFullString();
+            var collections = new List<string>();
 
-            var diagnostics = rewriter.Diagnostics;
-
-            var hasErrors = false;
-            foreach (var diagnostic in diagnostics)
+            if ((variations & CollectionTypes.IList) == CollectionTypes.IList)
             {
-                context.ReportDiagnostic(diagnostic);
-                hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
+                collections.Add("System.Collections.Generic.IList");
             }
 
-            if (hasErrors)
+            if ((variations & CollectionTypes.Span) == CollectionTypes.Span)
             {
-                continue;
+                collections.Add("System.Span");
             }
 
-            var isNamespaceFileScoped = false;
-            var namespaces = new List<string>();
-            while (node is not null && node is not CompilationUnitSyntax)
+            if ((variations & CollectionTypes.ReadOnlySpan) == CollectionTypes.ReadOnlySpan)
             {
-                switch (node)
+                collections.Add("System.ReadOnlySpan");
+            }
+
+            if ((variations & CollectionTypes.IEnumerable) == CollectionTypes.IEnumerable || collections.Count == 0)
+            {
+                collections.Add("System.Collections.Generic.IEnumerable");
+            }
+
+            foreach (var collection in collections)
+            {
+                var replacementOverrides = new Dictionary<string, string?>
                 {
-                    case NamespaceDeclarationSyntax nds:
-                        namespaces.Insert(0, nds.Name.ToString());
-                        break;
-                    case FileScopedNamespaceDeclarationSyntax file:
-                        namespaces.Add(file.Name.ToString());
-                        isNamespaceFileScoped = true;
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Cannot handle {node}");
+                    { "System.Collections.Generic.IAsyncEnumerable", collection },
+                };
+                var rewriter = new AsyncToSyncRewriter(semanticModel, replacementOverrides);
+                var sn = rewriter.Visit(methodDeclarationSyntax);
+                var content = sn.ToFullString();
+
+                var diagnostics = rewriter.Diagnostics;
+
+                var hasErrors = false;
+                foreach (var diagnostic in diagnostics)
+                {
+                    context.ReportDiagnostic(diagnostic);
+                    hasErrors |= diagnostic.Severity == DiagnosticSeverity.Error;
                 }
 
-                node = node.Parent;
-            }
+                if (hasErrors)
+                {
+                    continue;
+                }
 
-            methodsToGenerate.Add(new(namespaces, isNamespaceFileScoped, classes, methodDeclarationSyntax.Identifier.ValueText, content));
+                var isNamespaceFileScoped = false;
+                var namespaces = new List<string>();
+                while (node is not null && node is not CompilationUnitSyntax)
+                {
+                    switch (node)
+                    {
+                        case NamespaceDeclarationSyntax nds:
+                            namespaces.Insert(0, nds.Name.ToString());
+                            break;
+                        case FileScopedNamespaceDeclarationSyntax file:
+                            namespaces.Add(file.Name.ToString());
+                            isNamespaceFileScoped = true;
+                            break;
+                        default:
+                            throw new InvalidOperationException($"Cannot handle {node}");
+                    }
+
+                    node = node.Parent;
+                }
+
+                methodsToGenerate.Add(new(namespaces, isNamespaceFileScoped, classes, methodDeclarationSyntax.Identifier.ValueText, content));
+            }
         }
 
         return methodsToGenerate;
+    }
+
+    private string GetResourceText(string name)
+    {
+        using var stream = GetType().Assembly.GetManifestResourceStream(name);
+        using var streamReader = new StreamReader(stream);
+        return $"""
+                // <auto-generated/>
+                {streamReader.ReadToEnd()}
+                """;
     }
 }

@@ -24,6 +24,12 @@
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\src\Zomp.SyncMethodGenerator\CollectionTypes.cs" Link="CollectionTypes.cs">
+      <LogicalName>Zomp.SyncMethodGenerator.tests.CollectionTypes.cs</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
   <!-- https://stackoverflow.com/a/59893520/6461844 -->
   <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">

@@ -9,7 +9,8 @@ namespace Zomp.SyncMethodGenerator;
 /// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
+/// <param name="replacementOverrides">The type of collection that should be used to replace IAsyncEnumerable.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, Dictionary<string, string?> replacementOverrides) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
     private const string SystemObject = "object";
@@ -59,6 +60,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private readonly HashSet<string> memoryToSpan = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+    private Dictionary<string, string> parametersWithTypes = [];
 
     private enum SyncOnlyDirectiveType
     {
@@ -214,7 +216,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var genericName = GetNameWithoutTypeParams(symbol);
 
         string? newType = null;
-        if (Replacements.TryGetValue(genericName, out var replacement))
+
+        //if (@base.Att)
+        // {
+        // }
+        if (replacementOverrides.TryGetValue(genericName, out var replacement) ||
+            Replacements.TryGetValue(genericName, out replacement))
         {
             if (replacement is not null)
             {
@@ -891,10 +898,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
 
             // Is the attribute [CreateSyncVersion] attribute?
-            return IsCreateSyncVersionAttribute(attributeContainingTypeSymbol);
+            return IsCreateSyncVersionAttribute(attributeContainingTypeSymbol) || IsReplaceWithAttribute(attributeContainingTypeSymbol);
         }
 
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
+        node.Attributes.ToList().ForEach(a => AddParameterTypes(a));
         var indices = node.Attributes.GetIndices((a, _) => ShouldRemoveAttribute(a));
         var newList = RemoveAtRange(@base.Attributes, indices);
         return @base.WithAttributes(newList);
@@ -902,6 +910,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     public override SyntaxNode? VisitAttribute(AttributeSyntax node)
     {
+        parametersWithTypes.ContainsKey("k");
         var @base = (AttributeSyntax)base.VisitAttribute(node)!;
 
         if (GetSymbol(node.Name) is not IMethodSymbol ms)
@@ -1036,6 +1045,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool IsCreateSyncVersionAttribute(INamedTypeSymbol s)
         => s.ToDisplayString() == SyncMethodSourceGenerator.QualifiedCreateSyncVersionAttribute;
+
+    private static bool IsReplaceWithAttribute(INamedTypeSymbol s)
+        => s.ToDisplayString() == SyncMethodSourceGenerator.QualifiedReplaceWithAttribute;
 
     private static SyntaxList<TNode> RemoveAtRange<TNode>(SyntaxList<TNode> list, IEnumerable<int> indices)
         where TNode : SyntaxNode
@@ -1210,6 +1222,22 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         return replacement;
+    }
+
+    private void AddParameterTypes(AttributeSyntax attributeSyntax)
+    {
+        if (GetSymbol(attributeSyntax) is IMethodSymbol attributeSymbol)
+        {
+            var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
+            if (IsReplaceWithAttribute(attributeContainingTypeSymbol) && attributeSyntax.Parent?.Parent is ParameterSyntax param
+                && GetSymbol(param) is IParameterSymbol parameterSymbol)
+            {
+                var variation = parameterSymbol.GetAttributes()[0].NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value;
+
+                //.NamedArguments.FirstOrDefault(c => c.Key == "Variations").Value.Value;
+                parametersWithTypes.Add(param.Identifier.ValueText, param.Identifier.ValueText);
+            }
+        }
     }
 
     private bool PreProcess(
