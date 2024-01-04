@@ -630,4 +630,14 @@ _ = HelperMethod(1, 2);
 static async Task<byte[]> HelperMethod(params int[] myParams) => null;
 _ = await HelperMethod(1, 2);
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task TaskDelayToThreadSleepWithInt() =>
+        "await Task.Delay(1);"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task TaskDelayToThreadSleepWithSpan() =>
+        "await Task.Delay(new TimeSpan(2, 3, 4));"
+        .Verify(sourceType: SourceType.MethodBody);
 }

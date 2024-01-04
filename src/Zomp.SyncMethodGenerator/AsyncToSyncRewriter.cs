@@ -26,6 +26,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string ConfiguredCancelableAsyncEnumerable = "System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable";
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
+    private const string Delay = "Delay";
     private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
     private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface, IAsyncResultInterface });
     private static readonly Dictionary<string, string?> Replacements = new()
@@ -441,6 +442,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitAwaitExpression(AwaitExpressionSyntax node)
     {
         var @base = (AwaitExpressionSyntax)base.VisitAwaitExpression(node)!;
+
+        // Handle Task.Delay
+        if (node.Expression is InvocationExpressionSyntax ie
+            && @base.Expression is InvocationExpressionSyntax { ArgumentList: { } arguments }
+            && GetSymbol(ie) is IMethodSymbol methodSymbol
+            && GetNameWithoutTypeParams(methodSymbol.ContainingType) == TaskType
+            && methodSymbol.Name == Delay)
+        {
+            return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), arguments).WithTriviaFrom(@base);
+        }
+
         return @base.Expression.WithTriviaFrom(@base);
     }
 
@@ -1105,7 +1117,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
-        IMethodSymbol { Name: not FromResult } ms =>
+        IMethodSymbol { Name: not FromResult and not Delay } ms =>
             (ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
                 || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
         IMethodSymbol => false,
