@@ -68,6 +68,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         Invalid,
     }
 
+    private enum SpecialMethod
+    {
+        None,
+        FromResult,
+        Delay,
+    }
+
     /// <summary>
     /// Gets the diagnostics messages.
     /// </summary>
@@ -406,7 +413,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return @base;
         }
 
-        if (returnType is ConfiguredTaskAwaitable or ConfiguredValueTaskAwaitable or ConfiguredCancelableAsyncEnumerable)
+        if (IsTaskExtension(methodSymbol))
         {
             return memberAccess.Expression;
         }
@@ -425,9 +432,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             newName = RemoveAsync(name);
         }
-        else if (name == FromResult && @base.ArgumentList.Arguments is [var singleArg])
+        else
         {
-            return singleArg.Expression;
+            var specialMethod = IsSpecialMethod(methodSymbol);
+            if (specialMethod == SpecialMethod.FromResult && @base.ArgumentList.Arguments is [var singleArg])
+            {
+                return singleArg.Expression;
+            }
+            else if (specialMethod == SpecialMethod.Delay)
+            {
+                return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), @base.ArgumentList).WithTriviaFrom(@base);
+            }
         }
 
         if (newName == null)
@@ -442,16 +457,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitAwaitExpression(AwaitExpressionSyntax node)
     {
         var @base = (AwaitExpressionSyntax)base.VisitAwaitExpression(node)!;
-
-        // Handle Task.Delay
-        if (node.Expression is InvocationExpressionSyntax ie
-            && @base.Expression is InvocationExpressionSyntax { ArgumentList: { } arguments }
-            && GetSymbol(ie) is IMethodSymbol methodSymbol
-            && GetNameWithoutTypeParams(methodSymbol.ContainingType) == TaskType
-            && methodSymbol.Name == Delay)
-        {
-            return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), arguments).WithTriviaFrom(@base);
-        }
 
         return @base.Expression.WithTriviaFrom(@base);
     }
@@ -960,6 +965,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => typeSymbol.Name,
     };
 
+    private static SpecialMethod IsSpecialMethod(IMethodSymbol methodSymbol)
+    {
+        string GetContainingType() => GetNameWithoutTypeParams(methodSymbol.ContainingType);
+        return methodSymbol.Name switch
+        {
+            Delay when GetContainingType() == TaskType => SpecialMethod.Delay,
+            FromResult when GetContainingType() is TaskType or ValueTaskType => SpecialMethod.FromResult,
+            _ => SpecialMethod.None,
+        };
+    }
+
     private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, Dictionary<int, ExtraNodeInfo> extraNodeInfoList)
     {
         var newStatements = new List<StatementSyntax>();
@@ -1129,12 +1145,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
-        IMethodSymbol { Name: not FromResult and not Delay } ms =>
-            (ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
-                || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)),
-        IMethodSymbol => false,
+        IMethodSymbol ms =>
+            IsSpecialMethod(ms) == SpecialMethod.None
+                && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
+                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver))),
         _ => ShouldRemoveType(GetReturnType(symbol)),
     };
+
+    private static bool IsTaskExtension(IMethodSymbol methodSymbol)
+    {
+        var returnType = GetNameWithoutTypeParams(methodSymbol.ReturnType);
+        return returnType is ConfiguredTaskAwaitable or ConfiguredValueTaskAwaitable or ConfiguredCancelableAsyncEnumerable;
+    }
 
     private static bool CanDropEmptyStatement(StatementSyntax statement)
         => statement switch
@@ -1397,7 +1419,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private bool CanDropDeclaration(LocalDeclarationStatementSyntax local)
     {
         var symbol = GetSymbol(local.Declaration.Type);
-        return symbol is not null && ShouldRemoveArgument(symbol);
+
+        if (symbol is not null && ShouldRemoveArgument(symbol))
+        {
+            return true;
+        }
+
+        // All variables should have async initializers for this statement to be dropped.
+        foreach (var variable in local.Declaration.Variables)
+        {
+            if (variable.Initializer is not { Value: { } value }
+                || !ShouldRemoveArgument(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
@@ -1432,9 +1470,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private bool DropInvocation(InvocationExpressionSyntax invocation)
     {
-        if (EndsWithAsync(invocation.Expression))
+        var expression = invocation.Expression;
+        if (EndsWithAsync(expression))
         {
             return false;
+        }
+
+        if (GetSymbol(expression) is not ISymbol symbol)
+        {
+            return false;
+        }
+
+        if (symbol is IMethodSymbol methodSymbol && IsTaskExtension(methodSymbol)
+            && expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax childInvocation })
+        {
+            return DropInvocation(childInvocation);
         }
 
         return HasSymbolAndShouldBeRemoved(invocation);

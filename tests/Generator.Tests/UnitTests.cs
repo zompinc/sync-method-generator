@@ -250,6 +250,7 @@ public static async Task<LinkedListNode<Point>[]> GetArrayOfTAsync<T>() where T 
 """.Verify();
 
     [Theory]
+    [InlineData("await w.Delay(ct);")]
     [InlineData("await w.AsyncCondition(ct);")]
     [InlineData("if (await w.AsyncCondition(ct)){}")]
     [InlineData("if (!await w.AsyncCondition(ct)){}")]
@@ -265,6 +266,8 @@ public async Task MyMethodAsync(CancellationToken ct)
 private class ClassWithAsyncFunc
 {
     internal Func<CancellationToken, Task<bool>> AsyncCondition
+        => (ct) => Task.FromResult(false);
+    internal Func<CancellationToken, Task<bool>> Delay
         => (ct) => Task.FromResult(false);
 }
 """.Verify(false, true);
@@ -284,22 +287,24 @@ private class ClassWithAsyncFunc
 }
 """.Verify(false, true);
 
-    [Fact]
-    public Task DoNotCallPropertiesReturningTasks() => """
+    [Theory]
+    [InlineData("AsyncAction")]
+    [InlineData("Delay")]
+    public Task DoNotCallPropertiesReturningTasks(string methodName) => $$"""
 private readonly ClassWithAsyncFunc w = new();
 
 [CreateSyncVersion]
 public async Task MyMethodAsync()
 {
-    await w.AsyncAction(CancellationToken.None);
+    await w.{{methodName}}(CancellationToken.None);
 }
 
 private class ClassWithAsyncFunc
 {
-    internal Func<CancellationToken, Task> AsyncAction
+    internal Func<CancellationToken, Task> {{methodName}}
         => (ct) => Task.CompletedTask;
 }
-""".Verify();
+""".Verify(disableUnique: true);
 
     [Fact]
     public Task CallPropertiesReturningTasksWithAsync() => """
@@ -630,14 +635,4 @@ _ = HelperMethod(1, 2);
 static async Task<byte[]> HelperMethod(params int[] myParams) => null;
 _ = await HelperMethod(1, 2);
 """.Verify(sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task TaskDelayToThreadSleepWithInt() =>
-        "await Task.Delay(1);"
-        .Verify(sourceType: SourceType.MethodBody);
-
-    [Fact]
-    public Task TaskDelayToThreadSleepWithSpan() =>
-        "await Task.Delay(new TimeSpan(2, 3, 4));"
-        .Verify(sourceType: SourceType.MethodBody);
 }
