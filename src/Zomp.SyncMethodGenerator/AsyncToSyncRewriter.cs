@@ -55,8 +55,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
     private readonly SemanticModel semanticModel = semanticModel;
-    private readonly HashSet<string> removedParameters = [];
-    private readonly HashSet<string> memoryToSpan = [];
+    private readonly HashSet<IParameterSymbol> removedParameters = [];
+    private readonly HashSet<ISymbol> memoryToSpan = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
@@ -233,11 +233,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newType = symbol.ToDisplayString(GlobalDisplayFormat);
         }
 
-        if (node.Parent is ParameterSyntax ps && genericName is ReadOnlyMemory or Memory)
-        {
-            memoryToSpan.Add(ps.Identifier.ValueText);
-        }
-
         if (newType is not null)
         {
             return @base.WithIdentifier(SyntaxFactory.Identifier(newType))
@@ -301,9 +296,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
             var nts = symbol.Type;
 
+            var name = GetNameWithoutTypeParams(nts);
+            if (name is ReadOnlyMemory or Memory)
+            {
+                memoryToSpan.Add(symbol);
+            }
+
             if (ShouldRemoveType(nts))
             {
-                removedParameters.Add(ps.Identifier.ValueText);
+                removedParameters.Add(symbol);
                 return false;
             }
 
@@ -332,8 +333,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
 
-        var symbol = GetSymbol(node.Expression);
-        if (symbol is ITypeSymbol && node.Expression is TypeSyntax type)
+        var exprSymbol = GetSymbol(node.Expression);
+        if (exprSymbol is ITypeSymbol && node.Expression is TypeSyntax type)
         {
             // Rewrite static invocation (eg. File.ReadAllTextAsync)
             var newType = ProcessType(type);
@@ -344,7 +345,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         if (@base.Name.Identifier.ValueText == "Span"
-            && @base.Expression is IdentifierNameSyntax ins && memoryToSpan.Contains(ins.Identifier.ValueText))
+            && GetSymbol(node.Expression) is { } symbol
+            && @base.Expression is IdentifierNameSyntax ins && memoryToSpan.Contains(symbol))
         {
             return @base.Expression;
         }
@@ -656,13 +658,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 if (commentLine is XmlElementSyntax xes)
                 {
                     var attribute = xes.StartTag.Attributes.FirstOrDefault(a => a is XmlNameAttributeSyntax) as XmlNameAttributeSyntax;
-                    if (attribute is not null)
+                    if (attribute is not null
+                        && GetSymbol(attribute.Identifier) is IParameterSymbol paramSymbol
+                        && removedParameters.Contains(paramSymbol))
                     {
-                        if (removedParameters.Contains(attribute.Identifier.Identifier.ValueText))
-                        {
-                            indicesToRemove.Add(i - 1); // preceding slashes
-                            indicesToRemove.Add(i);
-                        }
+                        indicesToRemove.Add(i - 1); // preceding slashes
+                        indicesToRemove.Add(i);
                     }
                 }
 
@@ -806,7 +807,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             {
                 foreach (var variable in node.Declaration.Variables)
                 {
-                    memoryToSpan.Add(variable.Identifier.Text);
+                    var symbol = semanticModel.GetDeclaredSymbol(variable);
+                    if (symbol is not null)
+                    {
+                        memoryToSpan.Add(symbol);
+                    }
                 }
             }
             else

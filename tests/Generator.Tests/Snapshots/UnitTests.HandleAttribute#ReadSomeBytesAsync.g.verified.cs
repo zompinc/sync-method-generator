@@ -4,7 +4,6 @@
 namespace Test;
 public partial class Class
 {
-    [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Performance", "CA1835:Prefer the 'Memory'-based overloads for 'ReadAsync' and 'WriteAsync'", Justification = "Just Testing")]
     public int ReadSomeBytes(global::System.IO.Stream stream)
     {
         var buffer = new byte[100];
