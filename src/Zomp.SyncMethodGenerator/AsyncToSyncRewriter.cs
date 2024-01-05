@@ -797,11 +797,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         TypeSyntax? newTypeSyntax = null;
 
-        List<VariableDeclaratorSyntax>? newVariableNames = null;
-
-        if (variableType is INamedTypeSymbol { IsGenericType: true } n)
+        SeparatedSyntaxList<VariableDeclaratorSyntax>? separatedVariableNames = null;
+        if (variableType is INamedTypeSymbol { IsGenericType: true } n
+            && GetNameWithoutTypeParams(n) is { } name
+            && name is ReadOnlyMemory or Memory or SystemFunc)
         {
-            var name = GetNameWithoutTypeParams(n);
             if (name is ReadOnlyMemory or Memory)
             {
                 foreach (var variable in node.Declaration.Variables)
@@ -809,9 +809,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     memoryToSpan.Add(variable.Identifier.Text);
                 }
             }
-            else if (name is SystemFunc)
+            else
             {
-                newVariableNames = [];
+                var newVariableNames = new List<VariableDeclaratorSyntax>();
                 foreach (var variable in @base.Declaration.Variables)
                 {
                     newVariableNames.Add(SyntaxFactory.VariableDeclarator(RemoveAsync(variable.Identifier.Text))
@@ -845,14 +845,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                     newTypeSyntax = newTypeSyntax.WithTriviaFrom(node.Declaration.Type);
                 }
+
+                separatedVariableNames = SyntaxFactory.SeparatedList(newVariableNames, node.Declaration.Variables.GetSeparators());
+            }
+        }
+        else
+        {
+            var invalid = node.Declaration.Variables.GetIndices(RemoveDeclarator);
+            if (invalid.Length > 0)
+            {
+                separatedVariableNames = RemoveAtRange(@base.Declaration.Variables, invalid);
             }
         }
 
         var retval = @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
-        if (newVariableNames is not null)
+        if (separatedVariableNames is not null)
         {
-            var separatedList = SyntaxFactory.SeparatedList(newVariableNames, node.Declaration.Variables.GetSeparators());
-            retval = retval.WithDeclaration(retval.Declaration.WithVariables(separatedList));
+            retval = retval.WithDeclaration(retval.Declaration.WithVariables(separatedVariableNames.Value));
         }
 
         if (newTypeSyntax is not null)
@@ -900,7 +909,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
-        var indices = node.Attributes.GetIndices((a, _) => ShouldRemoveAttribute(a));
+        var indices = node.Attributes.GetIndices(ShouldRemoveAttribute);
         var newList = RemoveAtRange(@base.Attributes, indices);
         return @base.WithAttributes(newList);
     }
@@ -1425,11 +1434,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return true;
         }
 
-        // All variables should have async initializers for this statement to be dropped.
+        // All variables should have be removed for this declaration to be dropped.
         foreach (var variable in local.Declaration.Variables)
         {
-            if (variable.Initializer is not { Value: { } value }
-                || !ShouldRemoveArgument(value))
+            if (!RemoveDeclarator(variable))
             {
                 return false;
             }
@@ -1437,6 +1445,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         return true;
     }
+
+    private bool RemoveDeclarator(VariableDeclaratorSyntax variable)
+        => variable.Initializer is { Value: { } value } && ShouldRemoveArgument(value);
 
     private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
     {

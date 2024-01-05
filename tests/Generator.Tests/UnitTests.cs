@@ -334,6 +334,23 @@ public static async Task WithAction(Action<Point, IEnumerable<Point>>? action) {
 """.Verify();
 
     [Fact]
+    public Task MultipleInitializers() => """
+[CreateSyncVersion]
+public static async Task MethodAsync(CancellationToken ct)
+{
+    int a = await PrivateClass.FromResult(2, 6), b = await Task.FromResult(2),  c = await pc.IntProperty(ct);
+}
+
+PrivateClass pc = new PrivateClass();
+private class PrivateClass
+{
+    internal Func<CancellationToken, Task<int>> IntProperty => (ct) => Task.FromResult(2);
+
+    public static Task<TResult> FromResult<TResult>(TResult delay, int unrelated) => Task.FromResult(delay);
+}
+""".Verify();
+
+    [Fact]
     public Task LocalFunction() => """
 [CreateSyncVersion]
 public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)

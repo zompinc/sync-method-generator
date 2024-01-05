@@ -17,6 +17,9 @@ internal static class Extensions
         .Select(t => t.i)
         .ToArray();
 
+    internal static int[] GetIndices<T>(this IEnumerable<T> elements, Func<T, bool> predicate)
+        => elements.GetIndices((e, _) => predicate(e));
+
     internal static bool EndsWithAsync(this string str)
         => str.EndsWith("Async", StringComparison.Ordinal);
 
