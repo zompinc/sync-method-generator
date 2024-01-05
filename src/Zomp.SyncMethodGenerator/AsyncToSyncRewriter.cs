@@ -252,6 +252,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             return @base.WithIdentifier(SyntaxFactory.Identifier(newName));
         }
+        else if (node.Parent is not MemberAccessExpressionSyntax
+            && GetSymbol(node) is IFieldSymbol { IsStatic: true } fieldSymbol)
+        {
+            var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormat);
+            return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}"));
+        }
 
         return @base;
     }

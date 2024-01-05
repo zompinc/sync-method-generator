@@ -24,6 +24,32 @@ namespace NsOne
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task StaticUsings() => """
+using static N2.C2;
+
+namespace N1
+{
+    public partial class C1
+    {
+        [CreateSyncVersion]
+        public async Task MethodAsync()
+        {
+            _ = OtherConst;
+        }
+    }
+}
+
+namespace N2
+{
+    public class C2
+    {
+        public const int OtherConst = 1;
+    }
+}
+
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task GenericClass() => """
 namespace Test;
 partial class GenericClass<T1, T2> where T1 : struct where T2 : class
@@ -174,8 +200,7 @@ public static async Task<IList<T>> GetArrayOfTAsync<T>() where T: new()
     [Fact]
     public Task DefaultParameter() => """
 [CreateSyncVersion]
-public async Task<int> GetColorAsync(FileAccess access = FileAccess.Read)
-    => await Task.FromResult(1);
+public async Task GetColorAsync(FileAccess access = FileAccess.Read) { }
 """.Verify();
 
     [Fact]
