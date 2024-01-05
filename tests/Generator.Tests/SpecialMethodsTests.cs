@@ -4,16 +4,32 @@
 public class SpecialMethodsTests
 {
     [Theory]
-    [InlineData("")]
-    [InlineData(".ConfigureAwait(false)")]
-    public Task TaskDelayToThreadSleepWithInt(string extend) =>
-        $"await Task.Delay(1){extend};"
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task TaskDelayToThreadSleepWithInt(bool caf) =>
+        $"await Task.Delay(1){Caf(caf)};"
         .Verify(disableUnique: true, sourceType: SourceType.MethodBody);
 
     [Fact]
     public Task TaskDelayToThreadSleepWithSpan() =>
         "await Task.Delay(new TimeSpan(2, 3, 4));"
         .Verify(sourceType: SourceType.MethodBody);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task FromTaskResultCheck(bool caf) =>
+        $"_ = await Task.FromResult(1){Caf(caf)};"
+        .Verify(disableUnique: true, sourceType: SourceType.MethodBody);
+
+#if NETCOREAPP1_0_OR_GREATER
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task FromValueTaskResultCheck(bool caf) =>
+        $"_ = await ValueTask.FromResult(1){Caf(caf)};"
+        .Verify(disableUnique: true, sourceType: SourceType.MethodBody);
+#endif
 
     [Theory]
     [InlineData("await PrivateClass.Delay(2, 5);")]
@@ -32,4 +48,6 @@ private class PrivateClass
     public static Task<TResult> FromResult<TResult>(TResult delay, int unrelated) => Task.FromResult(delay);
 }
 """.Verify(disableUnique: true);
+
+    private static string Caf(bool apply) => apply ? ".ConfigureAwait(false)" : string.Empty;
 }
