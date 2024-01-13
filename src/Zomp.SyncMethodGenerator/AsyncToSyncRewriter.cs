@@ -56,7 +56,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
-    private readonly HashSet<ISymbol> memoryToSpan = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<Diagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
@@ -303,11 +302,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             var nts = symbol.Type;
 
             var name = GetNameWithoutTypeParams(nts);
-            if (name is ReadOnlyMemory or Memory)
-            {
-                memoryToSpan.Add(symbol);
-            }
-
             if (ShouldRemoveType(nts))
             {
                 removedParameters.Add(symbol);
@@ -352,7 +346,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         if (@base.Name.Identifier.ValueText == "Span"
             && GetSymbol(node.Expression) is { } symbol
-            && @base.Expression is IdentifierNameSyntax ins && memoryToSpan.Contains(symbol))
+            && GetNameWithoutTypeParams(GetReturnType(symbol)) is Memory or ReadOnlyMemory)
         {
             return @base.Expression;
         }
@@ -806,59 +800,44 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         SeparatedSyntaxList<VariableDeclaratorSyntax>? separatedVariableNames = null;
         if (variableType is INamedTypeSymbol { IsGenericType: true } n
-            && GetNameWithoutTypeParams(n) is { } name
-            && name is ReadOnlyMemory or Memory or SystemFunc)
+            && GetNameWithoutTypeParams(n) is SystemFunc)
         {
-            if (name is ReadOnlyMemory or Memory)
+            var newVariableNames = new List<VariableDeclaratorSyntax>();
+            foreach (var variable in @base.Declaration.Variables)
             {
-                foreach (var variable in node.Declaration.Variables)
-                {
-                    var symbol = semanticModel.GetDeclaredSymbol(variable);
-                    if (symbol is not null)
-                    {
-                        memoryToSpan.Add(symbol);
-                    }
-                }
+                newVariableNames.Add(SyntaxFactory.VariableDeclarator(RemoveAsync(variable.Identifier.Text))
+                    .WithTrailingTrivia(variable.Identifier.TrailingTrivia).WithInitializer(variable.Initializer));
             }
-            else
+
+            var typeArgs = n.TypeArguments;
+
+            if (typeArgs[^1].ToString() is TaskType or ValueTaskType
+                && @base.Declaration.Type is GenericNameSyntax gns)
             {
-                var newVariableNames = new List<VariableDeclaratorSyntax>();
-                foreach (var variable in @base.Declaration.Variables)
+                var newType = Global("System.Action");
+
+                var list = new List<TypeSyntax>();
+                if (typeArgs.Length > 1)
                 {
-                    newVariableNames.Add(SyntaxFactory.VariableDeclarator(RemoveAsync(variable.Identifier.Text))
-                        .WithTrailingTrivia(variable.Identifier.TrailingTrivia).WithInitializer(variable.Initializer));
-                }
-
-                var typeArgs = n.TypeArguments;
-
-                if (typeArgs[^1].ToString() is TaskType or ValueTaskType
-                    && @base.Declaration.Type is GenericNameSyntax gns)
-                {
-                    var newType = Global("System.Action");
-
-                    var list = new List<TypeSyntax>();
-                    if (typeArgs.Length > 1)
+                    for (var i = 0; i < typeArgs.Length - 1; i++)
                     {
-                        for (var i = 0; i < typeArgs.Length - 1; i++)
-                        {
-                            list.Add(ProcessSymbol(typeArgs[i]));
-                        }
-
-                        var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
-
-                        var separatedList = SyntaxFactory.SeparatedList(list, originalSeparators);
-                        newTypeSyntax = SyntaxFactory.GenericName(SyntaxFactory.Identifier(newType), SyntaxFactory.TypeArgumentList(separatedList));
-                    }
-                    else
-                    {
-                        newTypeSyntax = SyntaxFactory.IdentifierName(newType);
+                        list.Add(ProcessSymbol(typeArgs[i]));
                     }
 
-                    newTypeSyntax = newTypeSyntax.WithTriviaFrom(node.Declaration.Type);
+                    var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
+
+                    var separatedList = SyntaxFactory.SeparatedList(list, originalSeparators);
+                    newTypeSyntax = SyntaxFactory.GenericName(SyntaxFactory.Identifier(newType), SyntaxFactory.TypeArgumentList(separatedList));
+                }
+                else
+                {
+                    newTypeSyntax = SyntaxFactory.IdentifierName(newType);
                 }
 
-                separatedVariableNames = SyntaxFactory.SeparatedList(newVariableNames, node.Declaration.Variables.GetSeparators());
+                newTypeSyntax = newTypeSyntax.WithTriviaFrom(node.Declaration.Type);
             }
+
+            separatedVariableNames = SyntaxFactory.SeparatedList(newVariableNames, node.Declaration.Variables.GetSeparators());
         }
         else
         {

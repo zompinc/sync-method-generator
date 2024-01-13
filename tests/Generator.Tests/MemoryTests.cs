@@ -37,6 +37,15 @@ static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, Cancell
 #endif
 
     [Fact]
+    public Task DropSpanAfterAsMemory() => """
+[CreateSyncVersion]
+public async Task MakeArrayAsync(byte[] sampleBytes, CancellationToken ct = default)
+{
+    var arr = sampleBytes.AsMemory(0, 123).Span.ToArray();
+}
+""".Verify();
+
+    [Fact]
     public Task PreserveUnrelatedSpan() => """
 [CreateSyncVersion]
 public async Task HasMemoryAsync(Memory<byte> mem)
