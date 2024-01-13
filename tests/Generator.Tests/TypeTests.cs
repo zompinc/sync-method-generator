@@ -76,4 +76,17 @@ public async Task HasIsExpressionAsync(Stream stream) => _ = stream is FileStrea
     public Task HandleNameOf()
         => "_ = nameof(Stream);"
         .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task SwitchType() => """
+[CreateSyncVersion]
+public async Task SwitchAsync(Stream stream)
+{
+    var s = stream switch
+    {
+        FileStream fs => fs,
+        _ => throw new InvalidOperationException("No"),
+    };
+}
+""".Verify();
 }
