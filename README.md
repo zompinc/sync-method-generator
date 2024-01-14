@@ -18,7 +18,7 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
 
 ### CreateSyncVersionAttribute
 
-Add `CreateSyncVersionAttribute` to your async method in your `partial` class
+Decorate your async method with `CreateSyncVersionAttribute` in your `partial` class
 
 ```cs
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
@@ -109,7 +109,13 @@ To add the library use:
 dotnet add package Zomp.SyncMethodGenerator
 ```
 
-## Act
+## Development
+
+### Related projects
+
+- [SyncToAsyncExtension](https://marketplace.visualstudio.com/items?itemName=lsoft.SyncToAsyncExtension) - Allows switching between sync and async versions of a method. Very useful in development of this library.
+
+### Act
 
 This project is fully compatible with [act](https://github.com/nektos/act).
 
