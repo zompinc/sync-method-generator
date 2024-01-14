@@ -27,8 +27,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private const string Delay = "Delay";
-    private static readonly HashSet<string> Drops = new(new[] { IProgressInterface, CancellationTokenType });
-    private static readonly HashSet<string> InterfacesToDrop = new(new[] { IProgressInterface, IAsyncResultInterface });
+    private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
+    private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
     private static readonly Dictionary<string, string?> Replacements = new()
     {
         { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
@@ -1198,12 +1198,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var arguments = ies.ArgumentList.Arguments;
         var separators = arguments.GetSeparators();
 
-        var newSeparators = arguments.Count < 1 ? Array.Empty<SyntaxToken>()
-            : new[] { Token(SyntaxKind.CommaToken).AppendSpace() }
-            .Union(separators);
+        SyntaxToken[] newSeparators = arguments.Count < 1 ? []
+            : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
 
         var @as = Argument(expression);
-        var newList = SeparatedList(new[] { @as }.Union(arguments), newSeparators);
+        var newList = SeparatedList([@as, .. arguments], newSeparators);
 
         var newName = reducedFrom.Name;
         if (isMemory)
