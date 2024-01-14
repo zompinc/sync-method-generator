@@ -8,9 +8,11 @@
 /// <param name="Classes">List of classes this method belongs to starting from the outer-most class.</param>
 /// <param name="MethodName">Name of the method.</param>
 /// <param name="Implementation">Implementation.</param>
+/// <param name="DisableNullable">Disables nullable for the method.</param>
 internal sealed record MethodToGenerate(
     IEnumerable<string> Namespaces,
     bool IsNamespaceFileScoped,
     IEnumerable<ClassDeclaration> Classes,
     string MethodName,
-    string Implementation);
+    string Implementation,
+    bool DisableNullable);

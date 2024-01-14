@@ -51,10 +51,11 @@ global using global::Zomp.SyncMethodGenerator;
         bool uniqueForFramework = false,
         bool disableUnique = false,
         SourceType sourceType = SourceType.ClassBody,
+        LanguageVersion languageVersion = LanguageVersion.Preview,
         params object?[] parameters)
     {
         var parseOptions = CSharpParseOptions.Default
-            .WithLanguageVersion(LanguageVersion.Preview)
+            .WithLanguageVersion(languageVersion)
             .WithPreprocessorSymbols(PreprocessorSymbols);
 
         if (sourceType != SourceType.Full)
@@ -110,10 +111,10 @@ partial class Class
         IEnumerable<PortableExecutableReference> references = distinct
             .Select(l => MetadataReference.CreateFromFile(l));
 
-        CSharpCompilation compilation = CSharpCompilation.Create(
+        var compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
-            syntaxTrees: new[] { syntaxTree, globalUsings },
+            options: new(OutputKind.DynamicallyLinkedLibrary),
+            syntaxTrees: [syntaxTree, globalUsings],
             references: references);
 
         var generator = new SyncMethodSourceGenerator();

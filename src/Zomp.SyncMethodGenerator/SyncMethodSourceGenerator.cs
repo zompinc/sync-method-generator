@@ -199,7 +199,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 node = node.Parent;
             }
 
-            methodsToGenerate.Add(new(namespaces, isNamespaceFileScoped, classes, methodDeclarationSyntax.Identifier.ValueText, content));
+            var disableNullable = compilation is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 };
+            methodsToGenerate.Add(new(namespaces, isNamespaceFileScoped, classes, methodDeclarationSyntax.Identifier.ValueText, content, disableNullable));
         }
 
         return methodsToGenerate;
