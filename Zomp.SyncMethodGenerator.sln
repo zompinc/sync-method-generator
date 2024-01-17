@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Directory.Packages.props = Directory.Packages.props
 		NuGet.Config = NuGet.Config
 		package.json = package.json
+		version.json = version.json
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Generator.Tests", "tests\Generator.Tests\Generator.Tests.csproj", "{DEB7DF97-43ED-49D6-8C05-6B2681208610}"

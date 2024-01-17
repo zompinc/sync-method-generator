@@ -1,6 +1,5 @@
 ﻿namespace Generator.Tests;
 
-[UsesVerify]
 public class TypeTests
 {
     [Fact]

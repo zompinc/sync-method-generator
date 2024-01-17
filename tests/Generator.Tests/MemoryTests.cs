@@ -1,6 +1,5 @@
 ﻿namespace Generator.Tests;
 
-[UsesVerify]
 public class MemoryTests
 {
 #if NETCOREAPP1_0_OR_GREATER

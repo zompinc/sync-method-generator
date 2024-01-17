@@ -1,6 +1,5 @@
 ﻿namespace Generator.Tests;
 
-[UsesVerify]
 public class NullabilityTests
 {
     [Fact(Skip = "Execute when resolved: https://github.com/dotnet/roslyn/issues/49555")]
