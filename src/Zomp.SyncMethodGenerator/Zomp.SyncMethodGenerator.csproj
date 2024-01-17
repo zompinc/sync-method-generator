@@ -62,6 +62,8 @@
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
+    <Using Include="Zomp.SyncMethodGenerator.Helpers" />
+    <Using Include="Zomp.SyncMethodGenerator.Models" />
   </ItemGroup>
 
   <ItemGroup>

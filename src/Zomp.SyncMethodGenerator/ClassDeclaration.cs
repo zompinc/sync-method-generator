@@ -1,6 +1,4 @@
-﻿using Zomp.SyncMethodGenerator.Helpers;
-
-namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Represents a class a <see cref="MethodToGenerate"/> belongs to.

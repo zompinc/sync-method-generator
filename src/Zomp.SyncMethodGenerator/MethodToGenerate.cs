@@ -1,7 +1,4 @@
-﻿using Zomp.SyncMethodGenerator.Helpers;
-using Zomp.SyncMethodGenerator.Models;
-
-namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Represents a sync method to generate from its async version.

@@ -1,6 +1,4 @@
-﻿using Zomp.SyncMethodGenerator.Helpers;
-
-namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Generates synchronous code from asynchronous.

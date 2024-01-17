@@ -1,5 +1,4 @@
-﻿using Zomp.SyncMethodGenerator.Models;
-using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
