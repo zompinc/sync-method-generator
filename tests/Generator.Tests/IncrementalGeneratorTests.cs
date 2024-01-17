@@ -108,8 +108,8 @@ public class IncrementalGeneratorTests
         GeneratorRunResult result = driver.GetRunResult().Results.Single();
         IEnumerable<(object Value, IncrementalStepRunReason Reason)> sourceOutputs =
             result.TrackedOutputSteps.SelectMany(outputStep => outputStep.Value).SelectMany(output => output.Outputs);
-        Assert.Collection(sourceOutputs, output => Assert.Equal(sourceStepReason, output.Reason));
-
+        var (value, reason) = Assert.Single(sourceOutputs);
+        Assert.Equal(sourceStepReason, reason);
         Assert.Equal(executeStepReason, result.TrackedSteps["GetMethodToGenerate"].Single().Outputs[0].Reason);
         Assert.Equal(combineStepReason, result.TrackedSteps["GenerateSource"].Single().Outputs[0].Reason);
     }
