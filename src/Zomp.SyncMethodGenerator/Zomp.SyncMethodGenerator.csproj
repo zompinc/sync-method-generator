@@ -23,6 +23,9 @@
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+
+    <!-- Package the Microsoft.Bcl.HashCode alongside the generator assembly -->
+    <None Include="$(PkgMicrosoft_Bcl_HashCode)\lib\netstandard2.0\*.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <!-- https://stackoverflow.com/a/59893520/6461844 -->
@@ -43,6 +46,7 @@
 
   <ItemGroup>
     <PackageReference Include="IsExternalInit" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Microsoft.Bcl.HashCode" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />
     <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
     <PackageReference Include="PolySharp" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
@@ -58,6 +62,8 @@
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
+    <Using Include="Zomp.SyncMethodGenerator.Helpers" />
+    <Using Include="Zomp.SyncMethodGenerator.Models" />
   </ItemGroup>
 
   <ItemGroup>
