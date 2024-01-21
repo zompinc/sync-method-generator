@@ -433,14 +433,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return UnwrapExtension(@base, isMemory, reducedFrom, memberAccess.Expression);
         }
 
-        var name = memberAccess.Name switch
-        {
-            IdentifierNameSyntax ins2 => ins2.Identifier.ValueText,
-            GenericNameSyntax gns => gns.Identifier.ValueText,
-            _ => null,
-        };
-
-        if (name is null)
+        if (memberAccess.Name is not SimpleNameSyntax { Identifier.ValueText: { } name })
         {
             return @base;
         }
