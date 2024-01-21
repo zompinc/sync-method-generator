@@ -77,6 +77,20 @@ partial class GenericClass<T>
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task GenericAsyncCall() => """
+namespace Test;
+partial class GenericClass<T>
+{
+    [CreateSyncVersion]
+    public async Task<T> FooAsync<T>(CancellationToken ct = default)
+        => await this.InnerFooAsync<T>(ct);
+
+    private async Task<T> InnerFooAsync<T>(CancellationToken ct = default) => default;
+    private async T InnerFoo<T>() => default;
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task DropCompletedTask() => """
 [CreateSyncVersion]
 public async Task ExecAsync(CancellationToken ct)

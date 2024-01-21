@@ -360,7 +360,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
         else if (@base.Name.Identifier.ValueText.EndsWithAsync())
         {
-            return @base.WithName(SyntaxFactory.IdentifierName(RemoveAsync(@base.Name.Identifier.ValueText)));
+            return @base.WithName(@base.ChangeIdentifier(RemoveAsync(@base.Name.Identifier.ValueText)));
         }
 
         return @base;
@@ -1222,27 +1222,22 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             newName = RemoveAsync(newName);
         }
 
-        var id = Identifier($"{MakeType(reducedFrom.ContainingType)}.{newName}");
+        var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
 
-        ExpressionSyntax es = ies.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax gns }
-            ? GenericName(id, gns.TypeArgumentList)
-            : IdentifierName(id);
+        var es = ies.Expression is MemberAccessExpressionSyntax mae
+            ? mae.ChangeIdentifier(fullyQualifiedName)
+            : IdentifierName(Identifier(fullyQualifiedName));
 
         return ies
             .WithExpression(es)
             .WithArgumentList(ArgumentList(newList));
     }
 
-    private static string? GetNewName(IMethodSymbol methodSymbol)
+    private static string GetNewName(IMethodSymbol methodSymbol)
     {
         var containingType = methodSymbol.ContainingType;
         var replacement = Regex.Replace(methodSymbol.Name, "Memory", "Span");
         var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
-        if (newSymbol is null)
-        {
-            return null;
-        }
-
         return replacement;
     }
 
