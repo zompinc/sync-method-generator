@@ -167,14 +167,16 @@ public async Task MyFuncAsync<T>()
 }
 """.Verify();
 
-    [Fact]
-    public Task TaskOfT() => """
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task TaskOfT(bool explicitType) => $$"""
 [CreateSyncVersion]
 public static async Task<Point> GetPointAsync()
 {
-    return await Task.FromResult(new Point(1, 2));
+    return await Task.FromResult{{(explicitType ? "<Point>" : string.Empty)}}(new Point(1, 2));
 }
-""".Verify();
+""".Verify(disableUnique: true);
 
     [Fact]
     public Task TaskOfTArray() => """
