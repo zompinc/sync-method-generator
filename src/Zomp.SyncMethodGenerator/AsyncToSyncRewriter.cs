@@ -47,6 +47,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
+    private static readonly SymbolDisplayFormat GlobalDisplayFormatWithTypeParameters = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions:
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
     private static readonly SymbolDisplayFormat NamespaceDisplayFormat = new(
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
         genericsOptions: SymbolDisplayGenericsOptions.None,
@@ -254,7 +262,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         else if (node.Parent is not MemberAccessExpressionSyntax
             && GetSymbol(node) is IFieldSymbol { IsStatic: true } fieldSymbol)
         {
-            var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormat);
+            var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
             return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}"));
         }
 

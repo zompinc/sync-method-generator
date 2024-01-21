@@ -61,6 +61,22 @@ partial class GenericClass<T1, T2> where T1 : struct where T2 : class
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task GenericClassMemberAccess() => """
+namespace Test;
+partial class GenericClass<T>
+{
+    private const string Bar = "Bar";
+
+    [CreateSyncVersion]
+    public async Task MethodAsync()
+    {
+        _ = Bar;
+    }
+}
+
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task DropCompletedTask() => """
 [CreateSyncVersion]
 public async Task ExecAsync(CancellationToken ct)
