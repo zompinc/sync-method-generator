@@ -504,9 +504,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = base.VisitImplicitObjectCreationExpression(node);
         var symbol = GetSymbol(node);
 
-        if (ShouldRemoveObjectCreation(node, symbol, out var expression))
+        if (TryReplaceObjectCreation(node, symbol, out var replacement))
         {
-            return expression;
+            return replacement;
         }
 
         return @base;
@@ -518,9 +518,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
         var symbol = GetSymbol(node);
 
-        if (ShouldRemoveObjectCreation(node, symbol, out var expression))
+        if (TryReplaceObjectCreation(node, symbol, out var replacement))
         {
-            return expression;
+            return replacement;
         }
 
         if (symbol is null
@@ -1222,17 +1222,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static string Global(string type) => $"global::{type}";
 
-    private static bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? singleArgExpression)
+    private static bool TryReplaceObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? replacement)
     {
         if (symbol is IMethodSymbol { ReceiverType: INamedTypeSymbol { Name: "ValueTask", IsGenericType: true } type }
             && GetNameWithoutTypeParams(type) is ValueTaskType
             && node.ArgumentList is { Arguments: [var singleArg] })
         {
-            singleArgExpression = singleArg.Expression;
+            replacement = singleArg.Expression;
             return true;
         }
 
-        singleArgExpression = default;
+        replacement = default;
         return false;
     }
 
