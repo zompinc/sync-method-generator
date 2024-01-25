@@ -131,7 +131,9 @@ public static ValueTask<int> ReturnDefault() => default;
     [Theory]
     [InlineData("{ return new(1); }")]
     [InlineData("{ return new ValueTask<int>(1); }")]
+#if NETCOREAPP1_0_OR_GREATER
     [InlineData("{ return ValueTask.FromResult(1); }")]
+#endif
     public Task ReturnValueTaskInstance(string statement) => $"""
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
 public static ValueTask<int> ReturnAsync() {statement}
