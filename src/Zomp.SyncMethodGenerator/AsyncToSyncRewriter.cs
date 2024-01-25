@@ -27,6 +27,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private const string Delay = "Delay";
+    private const string CompletedTask = "CompletedTask";
     private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
     private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
     private static readonly Dictionary<string, string?> Replacements = new()
@@ -1178,7 +1179,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
-        IPropertySymbol { Name: "CompletedTask" } ps => ps.Type.ToString() is TaskType or ValueTaskType,
+        IPropertySymbol { Name: CompletedTask } ps => ps.Type.ToString() is TaskType or ValueTaskType,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) == SpecialMethod.None
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
