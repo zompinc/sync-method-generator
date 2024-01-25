@@ -131,7 +131,7 @@ public static ValueTask<int> ReturnDefault() => default;
     [Theory]
     [InlineData("{ return new(1); }")]
     [InlineData("{ return new ValueTask<int>(1); }")]
-    [InlineData("{ return Task.FromResult(1); }")]
+    [InlineData("{ return ValueTask.FromResult(1); }")]
     public Task ReturnValueTaskInstance(string statement) => $"""
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
 public static ValueTask<int> ReturnAsync() {statement}
