@@ -110,9 +110,11 @@ public static Task DoSomethingAsync() {statement}
 
     [Theory]
     [InlineData("{ return default; }")]
+#if NETCOREAPP1_0_OR_GREATER
     [InlineData("{ return ValueTask.CompletedTask; }")]
     [InlineData("{ return ValueTask.CompletedTask; Console.WriteLine(\"123\"); }")]
     [InlineData("=> ValueTask.CompletedTask;")]
+#endif
     public Task DropUnawaitedCompletedValueTask(string statement) => $"""
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
 public static ValueTask DoSomethingAsync() {statement}
