@@ -499,10 +499,30 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
+    {
+        var @base = base.VisitImplicitObjectCreationExpression(node);
+        var symbol = GetSymbol(node);
+
+        if (ShouldRemoveObjectCreation(node, symbol, out var expression))
+        {
+            return expression;
+        }
+
+        return @base;
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
     {
         var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
         var symbol = GetSymbol(node);
+
+        if (ShouldRemoveObjectCreation(node, symbol, out var expression))
+        {
+            return expression;
+        }
+
         if (symbol is null
             or { ContainingType.IsGenericType: true }
             or INamedTypeSymbol { IsGenericType: true })
@@ -1201,6 +1221,20 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     private static string Global(string type) => $"global::{type}";
+
+    private static bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? singleArgExpression)
+    {
+        if (symbol is IMethodSymbol { ReceiverType: INamedTypeSymbol { Name: "ValueTask", IsGenericType: true } type }
+            && GetNameWithoutTypeParams(type) is ValueTaskType
+            && node.ArgumentList is { Arguments: [var singleArg] })
+        {
+            singleArgExpression = singleArg.Expression;
+            return true;
+        }
+
+        singleArgExpression = default;
+        return false;
+    }
 
     private static InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
     {

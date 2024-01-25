@@ -124,6 +124,15 @@ public static ValueTask DoSomethingAsync() {statement}
 public static ValueTask<int> ReturnDefault() => default;
 """.Verify();
 
+    [Theory]
+    [InlineData("{ return new(1); }")]
+    [InlineData("{ return new ValueTask<int>(1); }")]
+    [InlineData("{ return Task.FromResult(1); }")]
+    public Task ReturnValueTaskInstance(string statement) => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask<int> ReturnAsync() {statement}
+""".Verify(disableUnique: true);
+
     [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
