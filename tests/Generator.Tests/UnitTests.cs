@@ -119,6 +119,12 @@ public static ValueTask DoSomethingAsync() {statement}
 """.Verify(disableUnique: true);
 
     [Fact]
+    public Task KeepDefaultValueTaskWithResult() => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask<int> ReturnDefault() => default;
+""".Verify();
+
+    [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
 {

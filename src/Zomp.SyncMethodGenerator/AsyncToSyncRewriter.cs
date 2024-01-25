@@ -1526,7 +1526,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
-           && semanticModel.GetTypeInfo(literalExpression).Type is { Name: "ValueTask" };
+           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { Name: "ValueTask", IsGenericType: false };
 
     /// <summary>
     /// Keeps track of nested directives.
