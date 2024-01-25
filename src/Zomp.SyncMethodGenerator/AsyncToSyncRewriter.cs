@@ -1158,7 +1158,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
-        IPropertySymbol { Name: "CompletedTask", ContainingType.Name: "Task" or "ValueTask" } => true,
+        IPropertySymbol { Name: "CompletedTask" } ps => ps.Type.ToString() is TaskType or ValueTaskType,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) == SpecialMethod.None
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
@@ -1526,7 +1526,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
-           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { Name: "ValueTask", IsGenericType: false };
+           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { Name: "ValueTask", IsGenericType: false } t
+           && t.ToString() == ValueTaskType;
 
     /// <summary>
     /// Keeps track of nested directives.
