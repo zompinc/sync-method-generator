@@ -108,6 +108,16 @@ public async Task ExecAsync(CancellationToken ct)
 public static Task DoSomethingAsync() {statement}
 """.Verify(disableUnique: true);
 
+    [Theory]
+    [InlineData("{ return default; }")]
+    [InlineData("{ return ValueTask.CompletedTask; }")]
+    [InlineData("{ return ValueTask.CompletedTask; Console.WriteLine(\"123\"); }")]
+    [InlineData("=> ValueTask.CompletedTask;")]
+    public Task DropUnawaitedCompletedValueTask(string statement) => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask DoSomethingAsync() {statement}
+""".Verify(disableUnique: true);
+
     [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
