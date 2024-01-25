@@ -1550,7 +1550,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
         PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
+        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type) || ShouldRemoveObjectCreation(oe),
+        ImplicitObjectCreationExpressionSyntax oe => ShouldRemoveObjectCreation(oe),
         ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
         AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
         AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
@@ -1563,6 +1564,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
            && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { Name: "ValueTask", IsGenericType: false } t
            && t.ToString() == ValueTaskType;
+
+    private bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax oe)
+        => GetSymbol(oe) is IMethodSymbol { ReceiverType: INamedTypeSymbol { Name: "ValueTask", IsGenericType: false } type }
+           && type.ToString() is ValueTaskType;
 
     /// <summary>
     /// Keeps track of nested directives.

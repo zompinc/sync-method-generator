@@ -110,6 +110,8 @@ public static Task DoSomethingAsync() {statement}
 
     [Theory]
     [InlineData("{ return default; }")]
+    [InlineData("{ return new(); }")]
+    [InlineData("{ return new ValueTask(); }")]
 #if NETCOREAPP1_0_OR_GREATER
     [InlineData("{ return ValueTask.CompletedTask; }")]
     [InlineData("{ return ValueTask.CompletedTask; Console.WriteLine(\"123\"); }")]
