@@ -142,7 +142,7 @@ public static ValueTask<int> ReturnAsync() {statement}
     [Fact]
     public Task ReturnValueTask() => """
 [CreateSyncVersion]
-private ValueTask GetMemoryOrSpanAsync(bool input)
+private ValueTask ReturnAsync(bool input)
 {
     if (input)
     {
