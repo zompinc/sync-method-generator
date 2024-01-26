@@ -180,7 +180,7 @@ private Task ReturnAsync(bool input)
     return ReturnAsync();
 }
 
-private Task ReturnAsync() => default;
+private Task ReturnAsync() => Task.CompletedTask;
 private void Return() { }
 """.Verify();
 
@@ -193,7 +193,7 @@ private Task ReturnAsync(bool input)
     return ReturnAsync();
 }
 
-private Task ReturnAsync() => default;
+private Task ReturnAsync() => Task.CompletedTask;
 private void Return() { }
 """.Verify();
 
