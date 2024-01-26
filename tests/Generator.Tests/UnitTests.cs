@@ -108,6 +108,37 @@ public async Task ExecAsync(CancellationToken ct)
 public static Task DoSomethingAsync() {statement}
 """.Verify(disableUnique: true);
 
+    [Theory]
+    [InlineData("{ return default; }")]
+    [InlineData("{ return new(); }")]
+    [InlineData("{ return new ValueTask(); }")]
+#if NETCOREAPP1_0_OR_GREATER
+    [InlineData("{ return ValueTask.CompletedTask; }")]
+    [InlineData("{ return ValueTask.CompletedTask; Console.WriteLine(\"123\"); }")]
+    [InlineData("=> ValueTask.CompletedTask;")]
+#endif
+    public Task DropUnawaitedCompletedValueTask(string statement) => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask DoSomethingAsync() {statement}
+""".Verify(disableUnique: true);
+
+    [Fact]
+    public Task KeepDefaultValueTaskWithResult() => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask<int> ReturnDefault() => default;
+""".Verify();
+
+    [Theory]
+    [InlineData("{ return new(1); }")]
+    [InlineData("{ return new ValueTask<int>(1); }")]
+#if NETCOREAPP1_0_OR_GREATER
+    [InlineData("{ return ValueTask.FromResult(1); }")]
+#endif
+    public Task ReturnValueTaskInstance(string statement) => $"""
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public static ValueTask<int> ReturnAsync() {statement}
+""".Verify(disableUnique: true);
+
     [Fact]
     public Task MultipleClasses() => """
 namespace NsOne

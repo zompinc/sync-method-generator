@@ -27,6 +27,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private const string Delay = "Delay";
+    private const string CompletedTask = "CompletedTask";
     private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
     private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
     private static readonly Dictionary<string, string?> Replacements = new()
@@ -499,10 +500,30 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     /// <inheritdoc/>
+    public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
+    {
+        var @base = base.VisitImplicitObjectCreationExpression(node);
+        var symbol = GetSymbol(node);
+
+        if (TryReplaceObjectCreation(node, symbol, out var replacement))
+        {
+            return replacement;
+        }
+
+        return @base;
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
     {
         var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
         var symbol = GetSymbol(node);
+
+        if (TryReplaceObjectCreation(node, symbol, out var replacement))
+        {
+            return replacement;
+        }
+
         if (symbol is null
             or { ContainingType.IsGenericType: true }
             or INamedTypeSymbol { IsGenericType: true })
@@ -1158,6 +1179,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
     {
+        IPropertySymbol { Name: CompletedTask } ps => ps.Type.ToString() is TaskType or ValueTaskType,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) == SpecialMethod.None
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
@@ -1200,6 +1222,20 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     private static string Global(string type) => $"global::{type}";
+
+    private static bool TryReplaceObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? replacement)
+    {
+        if (symbol is IMethodSymbol { ReceiverType: INamedTypeSymbol { Name: "ValueTask", IsGenericType: true } type }
+            && GetNameWithoutTypeParams(type) is ValueTaskType
+            && node.ArgumentList is { Arguments: [var singleArg] })
+        {
+            replacement = singleArg.Expression;
+            return true;
+        }
+
+        replacement = default;
+        return false;
+    }
 
     private static InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
     {
@@ -1514,13 +1550,24 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
         PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type),
+        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type) || ShouldRemoveObjectCreation(oe),
+        ImplicitObjectCreationExpressionSyntax oe => ShouldRemoveObjectCreation(oe),
         ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
         AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
         AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
         GenericNameSyntax gn => HasSymbolAndShouldBeRemoved(gn),
+        LiteralExpressionSyntax le => ShouldRemoveLiteral(le),
         _ => false,
     };
+
+    private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
+        => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
+           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { Name: "ValueTask", IsGenericType: false } t
+           && t.ToString() == ValueTaskType;
+
+    private bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax oe)
+        => GetSymbol(oe) is IMethodSymbol { ReceiverType: INamedTypeSymbol { Name: "ValueTask", IsGenericType: false } type }
+           && type.ToString() is ValueTaskType;
 
     /// <summary>
     /// Keeps track of nested directives.
