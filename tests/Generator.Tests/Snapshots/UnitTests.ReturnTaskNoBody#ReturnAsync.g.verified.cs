@@ -2,5 +2,5 @@
 private void Return(bool input)
 {
     if (input) { Return(); return; }
-    Return(); return;
+    Return();
 }

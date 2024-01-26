@@ -535,6 +535,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     .WithTrailingTrivia(node.GetTrailingTrivia());
             }
 
+            // Don't return if the return statement is the last statement in the method.
+            if (node.Parent.Parent is MethodDeclarationSyntax { Body.Statements: [.., var lastStatement] } &&
+                lastStatement == node)
+            {
+                return ExpressionStatement(result)
+                    .WithLeadingTrivia(node.GetLeadingTrivia())
+                    .WithTrailingTrivia(node.GetTrailingTrivia());
+            }
+
             // Create a block without the braces (eg. Return(); return;)
             return Block(List(new StatementSyntax[]
                 {

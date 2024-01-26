@@ -5,5 +5,5 @@ private void Return(bool input)
     {
         Return(); return;
     }
-    Return(); return;
+    Return();
 }
