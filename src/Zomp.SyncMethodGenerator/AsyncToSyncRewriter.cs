@@ -520,9 +520,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                  semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol { Name: "Task" or "ValueTask", IsGenericType: false } returnType &&
                  returnType.ToString() is TaskType or ValueTaskType)
         {
-            var result = (ExpressionSyntax)Visit(returnExpression);
+            var result = !ShouldRemoveArgument(returnExpression)
+                ? (ExpressionSyntax)Visit(returnExpression)
+                : null;
 
-            if (node.Parent is not BlockSyntax)
+            if (result is not null && node.Parent is not BlockSyntax)
             {
                 // The parent is not a block, for example: if (true) return ReturnAsync();
                 // We need to create a block with the expression and the return statement.
@@ -536,12 +538,24 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
 
             // Don't return if the return statement is the last statement in the method.
-            if (node.Parent.Parent is MethodDeclarationSyntax { Body.Statements: [.., var lastStatement] } &&
+            if (node.Parent?.Parent is MethodDeclarationSyntax { Body.Statements: [.., var lastStatement] } &&
                 lastStatement == node)
             {
+                if (result is null)
+                {
+                    return null;
+                }
+
                 return ExpressionStatement(result)
                     .WithLeadingTrivia(node.GetLeadingTrivia())
                     .WithTrailingTrivia(node.GetTrailingTrivia());
+            }
+
+            if (result is null)
+            {
+                return ReturnStatement()
+                    .WithTrailingTrivia(node.GetTrailingTrivia())
+                    .WithLeadingTrivia(node.GetLeadingTrivia());
             }
 
             // Create a block without the braces (eg. Return(); return;)
@@ -1550,7 +1564,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         IfStatementSyntax @if => ShouldRemoveArgument(@if.Condition),
         ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
-        ReturnStatementSyntax { Expression: { } re } => ShouldRemoveArgument(re),
+        ReturnStatementSyntax { Parent.Parent: MethodDeclarationSyntax, Expression: { } re } => ShouldRemoveArgument(re),
         _ => false,
     };
 

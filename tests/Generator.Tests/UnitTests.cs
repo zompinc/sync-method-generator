@@ -198,6 +198,20 @@ private void Return() { }
 """.Verify();
 
     [Fact]
+    public Task ReturnDefaultValueTask() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    if (input)
+    {
+        return default;
+    }
+    Console.WriteLine("123");
+    return default;
+}
+""".Verify();
+
+    [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
 {
