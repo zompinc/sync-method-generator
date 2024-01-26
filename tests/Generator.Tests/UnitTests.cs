@@ -140,6 +140,64 @@ public static ValueTask<int> ReturnAsync() {statement}
 """.Verify(disableUnique: true);
 
     [Fact]
+    public Task ReturnValueTask() => """
+[CreateSyncVersion]
+private ValueTask GetMemoryOrSpanAsync(bool input)
+{
+    if (input)
+    {
+        return ReturnAsync();
+    }
+    return ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskNoBody() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    if (input) return ReturnAsync();
+    return ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnTask() => """
+[CreateSyncVersion]
+private Task ReturnAsync(bool input)
+{
+    if (input)
+    {
+        return ReturnAsync();
+    }
+    return ReturnAsync();
+}
+
+private Task ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnTaskNoBody() => """
+[CreateSyncVersion]
+private Task ReturnAsync(bool input)
+{
+    if (input) return ReturnAsync();
+    return ReturnAsync();
+}
+
+private Task ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
 {

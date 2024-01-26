@@ -513,6 +513,41 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base;
     }
 
+    public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node)
+    {
+        if (node is { Expression: { } returnExpression } &&
+                 semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol { Name: "Task" or "ValueTask", IsGenericType: false } returnType &&
+                 returnType.ToString() is TaskType or ValueTaskType)
+        {
+            var result = (ExpressionSyntax)Visit(returnExpression);
+
+            if (node.Parent is BlockSyntax)
+            {
+                return Block(List(new StatementSyntax[]
+                    {
+                        ExpressionStatement(result).WithTrailingTrivia(Space),
+                        ReturnStatement().WithTrailingTrivia(node.GetTrailingTrivia()),
+                    }))
+                    .WithOpenBraceToken(MissingToken(SyntaxKind.OpenBraceToken))
+                    .WithCloseBraceToken(MissingToken(SyntaxKind.CloseBraceToken));
+            }
+
+            var statements = List(new StatementSyntax[]
+            {
+                ExpressionStatement(result).WithLeadingTrivia(Space).WithTrailingTrivia(Space),
+                ReturnStatement().WithTrailingTrivia(Space),
+            });
+
+            var block = Block(statements)
+                .WithLeadingTrivia(node.GetLeadingTrivia())
+                .WithTrailingTrivia(node.GetTrailingTrivia());
+
+            return block;
+        }
+
+        return base.VisitReturnStatement(node)!;
+    }
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
     {
