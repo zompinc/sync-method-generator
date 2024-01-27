@@ -169,6 +169,42 @@ private void Return() { }
 """.Verify();
 
     [Fact]
+    public Task ReturnValueTaskConditional() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    return input ? ReturnAsync() : ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => ReturnAsync();
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskConditionalTrue() => """
+[CreateSyncVersion]
+private ValueTask ReturnTrueAsync(bool input)
+{
+    return input ? ReturnAsync() : default;
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskConditionalFalse() => """
+[CreateSyncVersion]
+private ValueTask ReturnFalseAsync(bool input)
+{
+    return input ? default : ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
     public Task ReturnTask() => """
 [CreateSyncVersion]
 private Task ReturnAsync(bool input)

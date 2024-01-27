@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using System.Linq.Expressions;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -520,9 +521,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                  semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol { Name: "Task" or "ValueTask", IsGenericType: false } returnType &&
                  returnType.ToString() is TaskType or ValueTaskType)
         {
-            var result = !ShouldRemoveArgument(returnExpression)
-                ? (ExpressionSyntax)Visit(returnExpression)
-                : null;
+            var result = ExpressionToStatement(returnExpression);
 
             if (result is not null && node.Parent is not BlockSyntax)
             {
@@ -530,7 +529,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 // We need to create a block with the expression and the return statement.
                 return Block(List(new StatementSyntax[]
                     {
-                        ExpressionStatement(result).WithLeadingTrivia(Space).WithTrailingTrivia(Space),
+                        result.WithLeadingTrivia(Space).WithTrailingTrivia(Space),
                         ReturnStatement().WithTrailingTrivia(Space),
                     }))
                     .WithLeadingTrivia(node.GetLeadingTrivia())
@@ -546,7 +545,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     return null;
                 }
 
-                return ExpressionStatement(result)
+                return result
                     .WithLeadingTrivia(node.GetLeadingTrivia())
                     .WithTrailingTrivia(node.GetTrailingTrivia());
             }
@@ -561,7 +560,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             // Create a block without the braces (eg. Return(); return;)
             return Block(List(new StatementSyntax[]
                 {
-                    ExpressionStatement(result).WithTrailingTrivia(Space),
+                    result.WithTrailingTrivia(Space),
                     ReturnStatement().WithTrailingTrivia(node.GetTrailingTrivia()),
                 }))
                 .WithOpenBraceToken(MissingToken(SyntaxKind.OpenBraceToken))
@@ -1596,6 +1595,34 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private bool ShouldRemoveArrowExpression(ArrowExpressionClauseSyntax? arrowNullable)
         => arrowNullable is { } arrow && ShouldRemoveArgument(arrow.Expression);
 
+    private StatementSyntax? ExpressionToStatement(ExpressionSyntax result)
+    {
+        // Conditional expression to if statement
+        if (result is ConditionalExpressionSyntax conditionalExpression)
+        {
+            var condition = conditionalExpression.Condition.WithoutTrailingTrivia();
+
+            IfStatementSyntax? syntax = (ExpressionToStatement(conditionalExpression.WhenTrue), ExpressionToStatement(conditionalExpression.WhenFalse)) switch
+            {
+                (null, null) => null,
+                (null, { } elseStatement) => IfStatement(PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, condition), elseStatement),
+                ({ } statement, null) => IfStatement(condition, statement),
+                ({ } statement, { } elseStatement) => IfStatement(condition, statement, ElseClause(elseStatement).WithElseKeyword(Token(SyntaxKind.ElseKeyword).PrependSpace().AppendSpace())),
+            };
+
+            return syntax?
+                .WithIfKeyword(syntax.IfKeyword.AppendSpace())
+                .WithCloseParenToken(syntax.CloseParenToken.AppendSpace());
+        }
+
+        if (ShouldRemoveArgument(result))
+        {
+            return null;
+        }
+
+        return ExpressionStatement((ExpressionSyntax)Visit(result).WithoutTrivia());
+    }
+
     private bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
     {
         ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
@@ -1604,7 +1631,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
         IdentifierNameSyntax id => !id.Identifier.ValueText.EndsWithAsync() && HasSymbolAndShouldBeRemoved(id),
         InvocationExpressionSyntax ie => DropInvocation(ie),
-        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) || ShouldRemoveArgument(ce.WhenFalse),
+        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) && ShouldRemoveArgument(ce.WhenFalse),
         MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
         PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
         PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
