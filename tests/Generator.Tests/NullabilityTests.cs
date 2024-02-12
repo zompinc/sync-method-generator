@@ -20,6 +20,23 @@ internal partial class WithNullableDisabled
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task NullableOmitExplicit() => """
+#nullable disable
+
+namespace Test;
+
+partial class MyClass
+{
+    [Obsolete]
+    [CreateSyncVersion(OmitNullableDirective = true)]
+    public async Task MethodAsync()
+    {
+        string f = null;
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task NoNullableSupport() => """
 namespace Test;
 

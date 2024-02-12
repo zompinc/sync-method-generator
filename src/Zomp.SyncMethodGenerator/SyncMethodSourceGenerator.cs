@@ -12,6 +12,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
 
+    internal const string OmitNullableDirective = "OmitNullableDirective";
+
     private static MethodToGenerate? last;
 
     /// <inheritdoc/>
@@ -117,6 +119,8 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
+        AttributeData syncMethodGeneratorAttributeData = null!;
+
         foreach (AttributeData attributeData in methodSymbol.GetAttributes())
         {
             if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
@@ -124,8 +128,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
+            syncMethodGeneratorAttributeData = attributeData;
             break;
         }
+
+        var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
+        disableNullable |= explicitDisableNullable;
 
         var classes = ImmutableArray.CreateBuilder<ClassDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;

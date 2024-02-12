@@ -67,6 +67,20 @@ A list of changes applied to the new synchronized method:
 - Remove `CreateSyncVersionAttribute`
 - Update XML documentation
 
+#### Properties
+
+##### OmitNullableDirective
+
+This source generator detects language version during the compilation. By default it will generate `#nullable enable` directive if and only if the language version is 8 or above. Since it is [impossible](https://github.com/dotnet/roslyn/issues/49555) to reliably determine whether nullable context is turned on or not, `OmitNullableDirective` property is available to omit that directive from generating.
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion(OmitNullableDirective = true)]
+public async Task MethodAsync()
+{
+    string f = null;
+}
+```
+
 ### SYNC_ONLY symbol
 
 In case there is logic which should only be executed in the synchronized version of the method, wrap it in `SYNC_ONLY` #if directive.
@@ -123,7 +137,7 @@ Other than required packages to run `act` itself, GitHub Actions script installs
 
 To build the project using act follow these instructions:
 
-### Windows
+#### Windows
 
 Install [chocolatey](https://chocolatey.org/install) if missing.
 
@@ -141,7 +155,7 @@ In the project directory run:
 act -P windows-latest=-self-hosted --artifact-server-path /tmp/artifacts
 ```
 
-### Linux
+#### Linux
 
 Install act by following these [instructions](https://lindevs.com/install-act-on-ubuntu).
 
