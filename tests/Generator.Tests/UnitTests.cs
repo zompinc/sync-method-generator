@@ -140,6 +140,114 @@ public static ValueTask<int> ReturnAsync() {statement}
 """.Verify(disableUnique: true);
 
     [Fact]
+    public Task ReturnValueTask() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    if (input)
+    {
+        return ReturnAsync();
+    }
+    return ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskNoBody() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    if (input) return ReturnAsync();
+    return ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskConditional() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    return input ? ReturnAsync() : ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => ReturnAsync();
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskConditionalTrue() => """
+[CreateSyncVersion]
+private ValueTask ReturnTrueAsync(bool input)
+{
+    return input ? ReturnAsync() : default;
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnValueTaskConditionalFalse() => """
+[CreateSyncVersion]
+private ValueTask ReturnFalseAsync(bool input)
+{
+    return input ? default : ReturnAsync();
+}
+
+private ValueTask ReturnAsync() => default;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnTask() => """
+[CreateSyncVersion]
+private Task ReturnAsync(bool input)
+{
+    if (input)
+    {
+        return ReturnAsync();
+    }
+    return ReturnAsync();
+}
+
+private Task ReturnAsync() => Task.CompletedTask;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnTaskNoBody() => """
+[CreateSyncVersion]
+private Task ReturnAsync(bool input)
+{
+    if (input) return ReturnAsync();
+    return ReturnAsync();
+}
+
+private Task ReturnAsync() => Task.CompletedTask;
+private void Return() { }
+""".Verify();
+
+    [Fact]
+    public Task ReturnDefaultValueTask() => """
+[CreateSyncVersion]
+private ValueTask ReturnAsync(bool input)
+{
+    if (input)
+    {
+        return default;
+    }
+    Console.WriteLine("123");
+    return default;
+}
+""".Verify();
+
+    [Fact]
     public Task MultipleClasses() => """
 namespace NsOne
 {
