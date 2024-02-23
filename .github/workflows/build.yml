@@ -3,7 +3,7 @@ name: Build
 on:
   push:
   pull_request:
-    branches: [ master ]
+    branches: [master]
   workflow_dispatch:
 
 env:
@@ -14,7 +14,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -26,99 +25,102 @@ jobs:
         shell: bash
 
     steps:
-    - name: Set path for nektos/act
-      if: ${{ runner.os  == 'Windows' && env.ACT }}
-      run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
-      shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
+      - name: Set path for nektos/act
+        if: ${{ runner.os  == 'Windows' && env.ACT }}
+        run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
+        shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
 
-    - name: 'Determine prerequisites'
-      id: prereq
-      run: |
-        echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
-        echo "need_yarn=$(command -v yarn >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
-        echo "has_git_repo=$(git rev-parse --git-dir > /dev/null 2>&1 && echo 1 || echo 0)" >> $GITHUB_OUTPUT
+      - name: "Determine prerequisites"
+        id: prereq
+        run: |
+          echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
+          echo "need_yarn=$(command -v yarn >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
+          echo "has_git_repo=$(git rev-parse --git-dir > /dev/null 2>&1 && echo 1 || echo 0)" >> $GITHUB_OUTPUT
 
-    # Switch to https://github.com/actions/setup-node when it works
-    - name: Install node
-      if: ${{ steps.prereq.outputs.need_node == '1' }}
-      run: |
-        if [ "${{ runner.os }}" = "windows" ]
-        then
-          choco install nodejs -y
-          echo "C:\Program Files\nodejs" >> $GITHUB_PATH
-        else
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&\
-          apt-get install -y nodejs
-        fi
+      # Switch to https://github.com/actions/setup-node when it works
+      - name: Install node
+        if: ${{ steps.prereq.outputs.need_node == '1' }}
+        run: |
+          if [ "${{ runner.os }}" = "windows" ]
+          then
+            choco install nodejs -y
+            echo "C:\Program Files\nodejs" >> $GITHUB_PATH
+          else
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&\
+            apt-get install -y nodejs
+          fi
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: | 
-          6.0.x
-          7.0.x
-          8.0.x
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            7.0.x
+            9.0.x
 
-    - uses: dotnet/nbgv@master
-      id: nbgv
-      if: ${{ steps.prereq.outputs.has_git_repo == '1' }}
-      with:
-        setAllVars: true
+      - uses: dotnet/nbgv@master
+        id: nbgv
+        if: ${{ steps.prereq.outputs.has_git_repo == '1' }}
+        with:
+          setAllVars: true
 
-    - name: Install yarn
-      run: |
-        npm install -g yarn
-        if [ "${{ runner.os }}" = "windows" ]
-        then
-          choco install yarn -y
-          echo "C:\Program Files (x86)\Yarn\bin" >> $GITHUB_PATH
-        else
+      - name: Install yarn
+        run: |
           npm install -g yarn
-        fi
-      if: ${{ steps.prereq.outputs.need_yarn == '1' }}
+          if [ "${{ runner.os }}" = "windows" ]
+          then
+            choco install yarn -y
+            echo "C:\Program Files (x86)\Yarn\bin" >> $GITHUB_PATH
+          else
+            npm install -g yarn
+          fi
+        if: ${{ steps.prereq.outputs.need_yarn == '1' }}
 
-    - run: yarn install
+      - run: yarn install
 
-    - run: dotnet tool restore
+      - run: dotnet tool restore
 
-    - name: 'Run pre-commit hooks'
-      run: bash $GITHUB_WORKSPACE/.husky/pre-commit normal
+      - name: "Run pre-commit hooks"
+        run: bash $GITHUB_WORKSPACE/.husky/pre-commit normal
 
-    # https://github.com/actions/cache/blob/main/examples.md
-    - uses: actions/cache@v3
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal --settings tests/coverlet.runsettings
-    - name: Generate code coverage report
-      run: dotnet tool run reportgenerator -reports:**/coverage.cobertura.xml -targetdir:./reports/coverage
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v3
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    - name: Upload artifacts (code coverage)
-      uses: actions/upload-artifact@v3
-      with:
-        name: coverage_${{ matrix.os }}
-        path: reports/coverage
-    - name: Pack
-      run: dotnet pack --configuration Release -o packages --no-build
-    - name: Upload artifacts (.nupkg)
-      uses: actions/upload-artifact@v3
-      with:
-        name: packages_${{ matrix.os }}
-        path: packages/
+      # https://github.com/actions/cache/blob/main/examples.md
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore
+      - name: Test
+        run: dotnet test --no-build --verbosity normal --settings tests/coverlet.runsettings
+      - name: Generate code coverage report
+        run: dotnet tool run reportgenerator -reports:**/coverage.cobertura.xml -targetdir:./reports/coverage
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        id: codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
+      - name: Upload artifacts (code coverage)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage_${{ matrix.os }}
+          path: reports/coverage
+        if: steps.codecov.outcome == 'success'
+      - name: Pack
+        run: dotnet pack --configuration Release -o packages --no-build
+      - name: Upload artifacts (.nupkg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages_${{ matrix.os }}
+          path: packages/
 
   publish:
     needs: build
@@ -128,64 +130,63 @@ jobs:
         shell: bash
 
     steps:
+      - name: Set path for nektos/act
+        if: ${{ runner.os  == 'Windows' && env.ACT }}
+        run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
+        shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
-    - name: Set path for nektos/act
-      if: ${{ runner.os  == 'Windows' && env.ACT }}
-      run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
-      shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
+      - name: "Determine prerequisites"
+        id: prereq
+        run: |
+          echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
 
-    - name: 'Determine prerequisites'
-      id: prereq
-      run: |
-        echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: | 
-          7.0.x
+      - name: Install node
+        if: ${{ steps.prereq.outputs.need_node == '1' }}
+        run: |
+          if [ "${{ runner.os }}" = "windows" ]
+          then
+            choco install nodejs -y
+            echo "C:\Program Files\nodejs" >> $GITHUB_PATH
+          else
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&\
+            apt-get install -y nodejs
+          fi
 
-    - name: Install node
-      if: ${{ steps.prereq.outputs.need_node == '1' }}
-      run: |
-        if [ "${{ runner.os }}" = "windows" ]
-        then
-          choco install nodejs -y
-          echo "C:\Program Files\nodejs" >> $GITHUB_PATH
-        else
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&\
-          apt-get install -y nodejs
-        fi
+      - name: Download Package artifact
+        uses: actions/download-artifact@v4
 
-    - name: Download Package artifact
-      uses: actions/download-artifact@v3
+      - run: |
+          if [ -d "packages_ubuntu-latest" ] 
+          then
+              mv packages_ubuntu-latest packages 
+          else
+              mv packages_windows-latest packages 
+          fi
 
-    - run: |
-        if [ -d "packages_ubuntu-latest" ] 
-        then
-            mv packages_ubuntu-latest packages 
-        else
-            mv packages_windows-latest packages 
-        fi
+      - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.3
 
-    - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.3
+      - name: Sign Nuget Files
+        env:
+          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }}
+        if: ${{ env.AZURE_KEY_VAULT_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+        run: ./NuGetKeyVaultSignTool sign packages/*.nupkg -kvt ${{ secrets.AZURE_TENANT_ID }} -kvu ${{ secrets.AZURE_KEY_VAULT_URL }} -kvi ${{ secrets.AZURE_KEY_VAULT_CLIENT_ID }} -kvs ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }} -kvc ${{ secrets.AZURE_KEY_VAULT_CERTIFICATE }} -tr ${{ secrets.TIMESTAMP_RFC3161 }}
 
-    - name: Sign Nuget Files
-      env:
-        AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }}
-      if: ${{ env.AZURE_KEY_VAULT_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
-      run: ./NuGetKeyVaultSignTool sign packages/*.nupkg -kvt ${{ secrets.AZURE_TENANT_ID }} -kvu ${{ secrets.AZURE_KEY_VAULT_URL }} -kvi ${{ secrets.AZURE_KEY_VAULT_CLIENT_ID }} -kvs ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }} -kvc ${{ secrets.AZURE_KEY_VAULT_CERTIFICATE }} -tr ${{ secrets.TIMESTAMP_RFC3161 }}
+      - name: Verify signatures
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        run: ./NuGetKeyVaultSignTool verify packages/*.nupkg
 
-    - name: Verify signatures
-      if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
-      run: ./NuGetKeyVaultSignTool verify packages/*.nupkg
+      - name: Push to MyGet
+        env:
+          MYGET_PUSH_KEY: ${{ secrets.MYGET_PUSH_KEY }}
+        if: ${{ env.MYGET_PUSH_KEY != '' }}
+        run: dotnet nuget push packages/*.nupkg -s https://www.myget.org/F/zomp-sync-method-generator/api/v3/index.json -k ${{ secrets.MYGET_PUSH_KEY }}
 
-    - name: Push to MyGet
-      env:
-        MYGET_PUSH_KEY: ${{ secrets.MYGET_PUSH_KEY }}
-      if: ${{ env.MYGET_PUSH_KEY != '' }}
-      run: dotnet nuget push packages/*.nupkg -s https://www.myget.org/F/zomp-sync-method-generator/api/v3/index.json -k ${{ secrets.MYGET_PUSH_KEY }}
-
-    - name: Push to NuGet
-      if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
-      run: dotnet nuget push packages/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
+      - name: Push to NuGet
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        run: dotnet nuget push packages/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}

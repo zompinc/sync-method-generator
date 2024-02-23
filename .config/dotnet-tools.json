@@ -3,13 +3,13 @@
   "isRoot": true,
   "tools": {
     "dotnet-format": {
-      "version": "8.0.453106",
+      "version": "9.0.512301",
       "commands": [
         "dotnet-format"
       ]
     },
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.2.0",
+      "version": "5.2.1",
       "commands": [
         "reportgenerator"
       ]
