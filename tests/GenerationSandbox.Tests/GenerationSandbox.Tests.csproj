@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="Verify.XUnit" />
     <PackageReference Include="Verify.SourceGenerators" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />

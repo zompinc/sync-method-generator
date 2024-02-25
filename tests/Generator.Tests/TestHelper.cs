@@ -96,6 +96,9 @@ partial class Class
             typeof(Memory<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
+#if NET6_0_OR_GREATER
+            typeof(AsyncEnumerable).Assembly.Location,
+#endif
             linqAssembly,
         };
 

@@ -1054,6 +1054,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static string MakeType(ISymbol symbol)
         => symbol switch
         {
+            INamedTypeSymbol { Name: "AsyncEnumerable" } => Global("System.Linq.Enumerable"),
             INamedTypeSymbol => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             _ => symbol.Name,
         };
