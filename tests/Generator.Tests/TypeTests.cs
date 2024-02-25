@@ -72,6 +72,11 @@ public async Task HasIsExpressionAsync(Stream stream) => _ = stream is FileStrea
         .Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task HandleTuple()
+        => "[CreateSyncVersion]public async Task MethodAsync((Stream S, int I) z) { }"
+        .Verify();
+
+    [Fact]
     public Task HandleNameOf()
         => "_ = nameof(Stream);"
         .Verify(sourceType: SourceType.MethodBody);

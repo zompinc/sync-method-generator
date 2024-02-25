@@ -329,7 +329,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
-        if (node.Type is null or NullableTypeSyntax or GenericNameSyntax)
+        if (node.Type is null or NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax)
         {
             return @base;
         }
@@ -1006,6 +1006,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (CastExpressionSyntax)base.VisitCastExpression(node)!;
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
+    public override SyntaxNode? VisitTupleType(TupleTypeSyntax node)
+    {
+        var @base = (TupleTypeSyntax)base.VisitTupleType(node)!;
+
+        var newTuples = new List<TupleElementSyntax>();
+        foreach (var t in node.Elements)
+        {
+            newTuples.Add(TupleElement(ProcessType(t.Type), t.Identifier));
+        }
+
+        return @base.WithElements(SeparatedList(newTuples, node.Elements.GetSeparators()));
     }
 
     public override SyntaxNode? VisitDeclarationPattern(DeclarationPatternSyntax node)
