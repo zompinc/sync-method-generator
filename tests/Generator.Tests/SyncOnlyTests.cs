@@ -119,6 +119,21 @@ public async Task MethodWithObsoleteSyncAsync()
 }
 """.Verify(disableUnique: true);
 
+    [Fact]
+    public Task InsideParameter() => $$"""
+[CreateSyncVersion]
+public async Task<bool> IsNullAsync(
+#if SYNC_ONLY
+global::System.Data.IDataReader reader,
+#else
+DbDataReader reader,
+#endif
+int i)
+{
+    return await reader.IsDBNullAsync(i);
+}
+""".Verify(disableUnique: true);
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
