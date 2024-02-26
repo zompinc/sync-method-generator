@@ -802,17 +802,26 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var newReturnType = GetReturnType(@base.ReturnType, symbol);
 
-        /*
-        var ds = new DirectiveStack();
-        var additionalAttributes = node.Modifiers is [var first, ..]
-            ? ProcessSyncOnlyAttributes(first.LeadingTrivia, ds)
-            : null;
-        */
+        var attrLists = new List<AttributeListSyntax>();
+        foreach (var l in @base.AttributeLists)
+        {
+            var leading = l.OpenBracketToken.LeadingTrivia;
+            if (ProcessSyncOnlyAttributes(leading, new())
+                is { Attributes.Count: > 0 } additionalAttributes2)
+            {
+                attrLists.AddRange(additionalAttributes2.Attributes);
+            }
 
-        var nonEmptyAttributes = List(@base.AttributeLists.Where(z => z.Attributes.Any()));
+            if (l.Attributes.Count > 0)
+            {
+                attrLists.Add(l);
+            }
+        }
+
+        var nonEmptyAttributes = List(attrLists);
         if (node.Modifiers is [var first, ..]
-            && ProcessSyncOnlyAttributes(first.LeadingTrivia, new()) is { } additionalAttributes
-            && additionalAttributes is { Attributes.Count: > 0 })
+            && ProcessSyncOnlyAttributes(first.LeadingTrivia, new())
+            is { Attributes.Count: > 0 } additionalAttributes)
         {
             nonEmptyAttributes = List(nonEmptyAttributes.Union(additionalAttributes.Attributes));
             var m = TokenList([first.WithLeadingTrivia(additionalAttributes.LeadingTrivia), .. @base.Modifiers.Skip(1)]);
@@ -1019,6 +1028,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
         var indices = node.Attributes.GetIndices(ShouldRemoveAttribute);
         var newList = RemoveAtRange(@base.Attributes, indices);
+
+        /*
+        if (ProcessSyncOnlyAttributes(@base.OpenBracketToken.LeadingTrivia, new())
+            is { Attributes.Count: > 0 } additionalAttributes)
+        {
+            newList.AddRange();
+        }
+        */
+
         return @base.WithAttributes(newList);
     }
 

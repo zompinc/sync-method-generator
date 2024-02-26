@@ -105,18 +105,19 @@ System.Console.Write("Sync");
 await Task.CompletedTask;
 """.Verify(sourceType: SourceType.MethodBody);
 
-    [Fact]
-    public Task SyncOnlyBeforeMethodBody() => """
-[CreateSyncVersion]
-#if SYNC_ONLY
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task SyncOnlyBeforeMethodBody(bool beforeDeclaration) => $$"""
+{{(beforeDeclaration ? "[CreateSyncVersion]\n" : string.Empty)}}#if SYNC_ONLY
 [global::System.Obsolete]
 [global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-#endif
+#endif{{(beforeDeclaration ? string.Empty : "\n[CreateSyncVersion]")}}
 public async Task MethodWithObsoleteSyncAsync()
 {
     await Task.Delay(1000);
 }
-""".Verify();
+""".Verify(disableUnique: true);
 
     [Theory]
     [InlineData(false, false)]
