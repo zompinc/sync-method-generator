@@ -105,6 +105,19 @@ System.Console.Write("Sync");
 await Task.CompletedTask;
 """.Verify(sourceType: SourceType.MethodBody);
 
+    [Fact]
+    public Task SyncOnlyBeforeMethodBody() => """
+[CreateSyncVersion]
+#if SYNC_ONLY
+[global::System.Obsolete]
+[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+#endif
+public async Task MethodWithObsoleteSyncAsync()
+{
+    await Task.Delay(1000);
+}
+""".Verify();
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
