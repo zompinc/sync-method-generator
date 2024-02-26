@@ -1602,6 +1602,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return DropInvocation(childInvocation);
         }
 
+        // Ensure that if a parameter is called, which hasn't been removed, invocation isn't dropped.
+        if (symbol is IParameterSymbol ps && !removedParameters.Contains(ps))
+        {
+            return false;
+        }
+
         return HasSymbolAndShouldBeRemoved(invocation);
     }
 

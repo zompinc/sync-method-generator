@@ -382,6 +382,16 @@ public static async Task<LinkedListNode<Point>[]> GetArrayOfTAsync<T>() where T 
 }
 """.Verify();
 
+    [Fact]
+    public Task ConvertAsyncDelegateToSync() => """
+[CreateSyncVersion]
+public async Task<int> MethodAsync(Func<Task<int>> task)
+{
+    var r = await task();
+    return r;
+}
+""".Verify();
+
     [Theory]
     [InlineData("await w.Delay(ct);")]
     [InlineData("await w.AsyncCondition(ct);")]
