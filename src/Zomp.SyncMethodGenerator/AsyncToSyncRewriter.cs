@@ -26,6 +26,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string ConfiguredCancelableAsyncEnumerable = "System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable";
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
+    private const string AsTask = "AsTask";
     private const string Delay = "Delay";
     private const string CompletedTask = "CompletedTask";
     private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
@@ -66,6 +67,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
+    private readonly Dictionary<ExpressionSyntax, ExpressionSyntax> replacements = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
 
     private enum SyncOnlyDirectiveType
@@ -370,6 +372,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// <inheritdoc/>
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
     {
+        if (replacements.TryGetValue(node, out var replacement))
+        {
+            return replacement;
+        }
+
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
         string? newName = null;
@@ -1596,10 +1603,20 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return false;
         }
 
-        if (symbol is IMethodSymbol methodSymbol && IsTaskExtension(methodSymbol)
-            && expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax childInvocation })
+        if (symbol is IMethodSymbol methodSymbol
+            && expression is MemberAccessExpressionSyntax memberAccessExpression)
         {
-            return DropInvocation(childInvocation);
+            if (IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
+            {
+                return DropInvocation(childInvocation);
+            }
+            else if (GetSymbol(memberAccessExpression.Expression) is IParameterSymbol ps2
+                && !removedParameters.Contains(ps2)
+                && methodSymbol.Name == AsTask)
+            {
+                replacements[invocation] = memberAccessExpression.Expression;
+                return false;
+            }
         }
 
         // Ensure that if a parameter is called, which hasn't been removed, invocation isn't dropped.

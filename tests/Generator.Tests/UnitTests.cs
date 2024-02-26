@@ -392,6 +392,16 @@ public async Task<int> MethodAsync(Func<Task<int>> task)
 }
 """.Verify();
 
+    [Fact]
+    public Task HandleAsTask() => """
+[CreateSyncVersion]
+public async Task<int> MethodAsync(ValueTask<int> vt)
+{
+    var r = await vt.AsTask();
+    return r;
+}
+""".Verify();
+
     [Theory]
     [InlineData("await w.Delay(ct);")]
     [InlineData("await w.AsyncCondition(ct);")]
