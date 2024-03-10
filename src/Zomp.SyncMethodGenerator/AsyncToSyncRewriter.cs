@@ -331,7 +331,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
-        if (node.Type is null or NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax)
+        if (node.Type is null || TypeAlreadyQualified(node.Type))
         {
             return @base;
         }
@@ -814,7 +814,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         // Handles nameof(Type)
         var @base = (ArgumentSyntax)base.VisitArgument(node)!;
-        if (GetSymbol(node.Expression) is ITypeSymbol { } typeSymbol)
+        if (GetSymbol(node.Expression) is ITypeSymbol { } typeSymbol
+            && !TypeAlreadyQualified(typeSymbol))
         {
             return @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base);
         }
@@ -861,6 +862,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
     {
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
+        if (TypeAlreadyQualified(node.Type))
+        {
+            return @base;
+        }
+
         return @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
@@ -1009,9 +1015,36 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return retval;
     }
 
+    public override SyntaxNode? VisitConstantPattern(ConstantPatternSyntax node)
+    {
+        var @base = (ConstantPatternSyntax)base.VisitConstantPattern(node)!;
+        if (semanticModel.GetTypeInfo(node.Expression).Type is { } type)
+        {
+            return @base.WithExpression(ProcessSymbol(type).WithTriviaFrom(@base));
+        }
+
+        return @base;
+    }
+
+    public override SyntaxNode? VisitDeclarationExpression(DeclarationExpressionSyntax node)
+    {
+        var @base = (DeclarationExpressionSyntax)base.VisitDeclarationExpression(node)!;
+        if (TypeAlreadyQualified(node.Type))
+        {
+            return @base;
+        }
+
+        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
     public override SyntaxNode? VisitCastExpression(CastExpressionSyntax node)
     {
         var @base = (CastExpressionSyntax)base.VisitCastExpression(node)!;
+        if (TypeAlreadyQualified(node.Type))
+        {
+            return @base;
+        }
+
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
@@ -1020,9 +1053,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = (TupleTypeSyntax)base.VisitTupleType(node)!;
 
         var newTuples = new List<TupleElementSyntax>();
-        foreach (var t in node.Elements)
+        foreach (var t in node.Elements.Zip(@base.Elements, (original, visited) => (original, visited)))
         {
-            newTuples.Add(TupleElement(ProcessType(t.Type), t.Identifier));
+            var newType = TypeAlreadyQualified(t.original.Type) ? t.visited.Type : ProcessType(t.original.Type);
+            newTuples.Add(TupleElement(newType, t.original.Identifier));
         }
 
         return @base.WithElements(SeparatedList(newTuples, node.Elements.GetSeparators()));
@@ -1299,6 +1333,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     private static string Global(string type) => $"global::{type}";
+
+    private static bool TypeAlreadyQualified(TypeSyntax type)
+        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax;
+
+    private static bool TypeAlreadyQualified(ITypeSymbol type)
+        => type is INamedTypeSymbol namedType
+            && namedType is { IsGenericType: true };
 
     private static bool TryReplaceObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? replacement)
     {
