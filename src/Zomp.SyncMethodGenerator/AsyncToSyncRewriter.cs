@@ -303,8 +303,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitParameterList(ParameterListSyntax node)
     {
         var newNode = (ParameterListSyntax)base.VisitParameterList(node)!;
-        bool IsValidParameter(ParameterSyntax ps)
+        var modifications = new Dictionary<int, Operation>();
+
+        var ds = new DirectiveStack();
+        bool IsValidParameter(ParameterSyntax ps, int i)
         {
+            var leading = ps.GetLeadingTrivia();
+            var extra = ProcessTrivia(leading, ds);
+            if (extra is not null && extra.AdditionalStatements.Count > 0)
+            {
+                modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
+                modifications.Add(i + 1, true);
+            }
+
             if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
             {
                 return true;
@@ -322,8 +333,57 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return true;
         }
 
-        var invalid = node.Parameters.GetIndices((v, _) => !IsValidParameter(v));
+        var invalid = node.Parameters.GetIndices((v, i) => !IsValidParameter(v, i));
         var newParams = RemoveAtRange(newNode.Parameters, invalid);
+
+        var entries
+            = modifications.OrderByDescending(z => z.Key);
+
+        foreach (var extraParameterGroup in entries)
+        {
+            var index = extraParameterGroup.Key;
+
+            if (extraParameterGroup.Value.IsNewStatements)
+            {
+                newParams = newParams.RemoveAt(index);
+                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
+                {
+                    if (extraParameter is not LocalDeclarationStatementSyntax declaration)
+                    {
+                        continue;
+                    }
+
+                    var id = Identifier(declaration.Declaration.Variables.Single(v => !string.IsNullOrWhiteSpace(v.Identifier.ValueText)).Identifier.ValueText);
+                    var p = Parameter(default, default, declaration.Declaration.Type, id, default);
+                    newParams = newParams.Insert(index, p);
+                }
+            }
+            else
+            {
+                var pRemoveEndIf = newParams[index];
+                newParams = newParams.RemoveAt(index);
+                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
+
+                var newLeadingTrivia = new List<SyntaxTrivia>();
+
+                var removed = false;
+                foreach (var st in leadingTrivia)
+                {
+                    if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+                    {
+                        removed = true;
+                        newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
+                        continue;
+                    }
+
+                    newLeadingTrivia.Add(st);
+                }
+
+                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
+                newParams = newParams.Insert(index, pRemoveEndIf);
+            }
+        }
+
         return newNode.WithParameters(newParams);
     }
 
