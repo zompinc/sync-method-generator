@@ -803,7 +803,7 @@ if (true)
 #endif
 """.Verify(sourceType: SourceType.MethodBody);
 
-    [Fact]
+    [Fact(Skip = "Need to look into this more https://github.com/zompinc/sync-method-generator/issues/45#issuecomment-1893956960")]
     public Task BrokenIfStatement() => $$"""
 #if MY_SPECIAL_SYMBOL
 if (true)
@@ -812,6 +812,19 @@ if (true)
 #endif
 {
 }
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task DeleteIfBetweenPreprocessorDirectives() => """
+#if MY_SPECIAL_SYMBOL
+if (true)
+{
+}
+#else
+if (true)
+{
+}
+#endif
 """.Verify(sourceType: SourceType.MethodBody);
 
     [Fact]

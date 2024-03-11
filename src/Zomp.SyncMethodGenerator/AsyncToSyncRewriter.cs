@@ -1304,8 +1304,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
             else if (extra is { LeadingTrivia: { } lt })
             {
-                if (lt.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia))
-                    && !lt.Any(st => st.IsKind(SyntaxKind.DisabledTextTrivia)))
+                if (lt.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia)))
                 {
                     newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(lt));
                 }
