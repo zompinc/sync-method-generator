@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using System.Globalization;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -339,6 +340,28 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var entries
             = modifications.OrderByDescending(z => z.Key);
 
+        var removeTrailingEndIf = false;
+
+        List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
+        {
+            var newLeadingTrivia = new List<SyntaxTrivia>();
+
+            var removed = false;
+            foreach (var st in list)
+            {
+                if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+                {
+                    removed = true;
+                    newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
+                    continue;
+                }
+
+                newLeadingTrivia.Add(st);
+            }
+
+            return newLeadingTrivia;
+        }
+
         foreach (var extraParameterGroup in entries)
         {
             var index = extraParameterGroup.Key;
@@ -360,31 +383,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
             else
             {
+                if (index >= newParams.Count)
+                {
+                    removeTrailingEndIf = true;
+                    continue;
+                }
+
                 var pRemoveEndIf = newParams[index];
                 newParams = newParams.RemoveAt(index);
                 var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
 
-                var newLeadingTrivia = new List<SyntaxTrivia>();
-
-                var removed = false;
-                foreach (var st in leadingTrivia)
-                {
-                    if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
-                    {
-                        removed = true;
-                        newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
-                        continue;
-                    }
-
-                    newLeadingTrivia.Add(st);
-                }
+                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
 
                 pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
                 newParams = newParams.Insert(index, pRemoveEndIf);
             }
         }
 
-        return newNode.WithParameters(newParams);
+        newNode = newNode.WithParameters(newParams);
+
+        if (removeTrailingEndIf)
+        {
+            newNode = newNode.WithCloseParenToken(newNode.CloseParenToken.WithLeadingTrivia(RemoveFirstEndIf(newNode.CloseParenToken.LeadingTrivia)));
+        }
+
+        return newNode;
     }
 
     /// <inheritdoc/>

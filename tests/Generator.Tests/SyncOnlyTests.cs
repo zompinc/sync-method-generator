@@ -134,6 +134,21 @@ int i)
 }
 """.Verify(disableUnique: true);
 
+    [Fact]
+    public Task LastParameter() => $$"""
+[CreateSyncVersion]
+public async Task<bool> IsNullAsync(
+#if SYNC_ONLY
+global::System.Data.IDataReader reader
+#else
+DbDataReader reader
+#endif
+)
+{
+    return await reader.IsDBNullAsync(i);
+}
+""".Verify(disableUnique: true);
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
