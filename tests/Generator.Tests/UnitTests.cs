@@ -795,6 +795,26 @@ private sealed class CustomProgress : IProgress<float>
 """.Verify(false, true);
 
     [Fact]
+    public Task WhenDroppingStatementLeaveTrivia() => $$"""
+#if !MY_SPECIAL_SYMBOL
+if (true)
+{
+}
+#endif
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task BrokenIfStatement() => $$"""
+#if MY_SPECIAL_SYMBOL
+if (true)
+#else
+if (true)
+#endif
+{
+}
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task VerifyParamHandling() => $$"""
 static byte[] HelperMethod(params int[] myParams) => null;
 _ = HelperMethod(1, 2);
