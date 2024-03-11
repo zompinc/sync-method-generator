@@ -1,12 +1,15 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Zomp.SyncMethodGenerator;
 
 //[N.SourceGenerators.UnionTypes.UnionType(typeof(List<StatementSyntax>), "NewStatements")]
 //[N.SourceGenerators.UnionTypes.UnionType(typeof(bool), "RemoveLeadingEndIf")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1309:Field names should not begin with underscore", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1203:Constants should appear before fields", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1503:Braces should not be omitted", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1516:Elements should be separated by blank line", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1201:Elements should appear in the correct order", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[SuppressMessage("StyleCop.CSharp.NamingRules", "SA1309:Field names should not begin with underscore", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1203:Constants should appear before fields", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1503:Braces should not be omitted", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1516:Elements should be separated by blank line", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1201:Elements should appear in the correct order", Justification = "issue https://github.com/Ne4to/N.SourceGenerators.UnionTypes/issues/34")]
+[ExcludeFromCodeCoverage]
 internal sealed partial class Operation
 {
     private readonly int _variantId;

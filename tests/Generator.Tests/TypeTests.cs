@@ -19,6 +19,16 @@ catch (OperationCanceledException)
 .Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task VariableDeclarationRedundant() =>
+"MemoryStream ms = new MemoryStream();"
+.Verify(false, true, sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task VariableDeclaration() =>
+"MemoryStream ms = new();"
+.Verify(false, true, sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task BinaryPattern() =>
 "_ = new object() is DBNull or Stream;"
 .Verify(false, true, sourceType: SourceType.MethodBody);

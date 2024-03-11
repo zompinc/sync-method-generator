@@ -1072,14 +1072,32 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return retval;
     }
 
+    public override SyntaxNode? VisitVariableDeclarator(VariableDeclaratorSyntax node)
+    {
+        var @base = (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;
+        return @base;
+    }
+
+    public override SyntaxNode? VisitSingleVariableDesignation(SingleVariableDesignationSyntax node) => base.VisitSingleVariableDesignation(node);
+
     /// <inheritdoc/>
     public override SyntaxNode? VisitVariableDeclaration(VariableDeclarationSyntax node)
     {
+        ////((Microsoft.CodeAnalysis.CSharp.Syntax.ObjectCreationExpressionSyntax)node.Variables[0].Initializer.Value).Type
+
+        ////TypeSyntax? GetInitializerType(VariableDeclarationSyntax node)
+        ////    => (node.Variables[0].Initializer?.Value as ObjectCreationExpressionSyntax)?.Type;
+
+        ////var isEqual = node.Type == GetInitializerType(node);
+
         var @base = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node)!;
         var type = node.Type;
         var newType = @base.Type;
 
-        if (newType == type)
+        if (newType == type ||
+            (newType is IdentifierNameSyntax { Identifier.ValueText: { } newTypeString }
+            && type is IdentifierNameSyntax { Identifier.ValueText: { } typeString }
+            && newTypeString == typeString))
         {
             // not replaced
             newType = ProcessType(type);
@@ -1090,6 +1108,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
         }
 
+        //return @base.WithType(ProcessType(type)).WithTriviaFrom(@base);
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
