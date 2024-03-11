@@ -5,7 +5,7 @@
     <PackageVersion Include="IsExternalInit" Version="1.0.3" />
     <PackageVersion Include="Microsoft.Bcl.HashCode" Version="1.1.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0-preview.24072.1" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
     <PackageVersion Include="N.SourceGenerators.UnionTypes" Version="0.26.0" />
@@ -15,7 +15,7 @@
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
     <PackageVersion Include="System.Runtime.Experimental" Version="6.0.2" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
-    <PackageVersion Include="Verify.XUnit" Version="23.2.1" />
+    <PackageVersion Include="Verify.XUnit" Version="23.4.0" />
     <PackageVersion Include="xunit" Version="2.7.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.7" />
   </ItemGroup>
