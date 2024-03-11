@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Data.Common;
+using System.Text.RegularExpressions;
 using Zomp.SyncMethodGenerator;
 using static Generator.Tests.ModuleInitializer;
 
@@ -12,6 +13,8 @@ public static partial class TestHelper
     private const string GlobalUsingsSource = """
 global using global::System;
 global using global::System.Collections.Generic;
+global using global::System.Data;
+global using global::System.Data.Common;
 global using global::System.Drawing;
 global using global::System.IO;
 global using global::System.Linq;
@@ -89,6 +92,7 @@ partial class Class
         var locations = new List<string>
         {
             typeof(IAsyncEnumerable<>).Assembly.Location,
+            typeof(DbDataReader).Assembly.Location,
             typeof(ValueTask<>).Assembly.Location,
             typeof(System.Drawing.Point).Assembly.Location,
             typeof(object).Assembly.Location,

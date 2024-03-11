@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using System.Globalization;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -303,8 +304,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitParameterList(ParameterListSyntax node)
     {
         var newNode = (ParameterListSyntax)base.VisitParameterList(node)!;
-        bool IsValidParameter(ParameterSyntax ps)
+        var modifications = new Dictionary<int, Operation>();
+
+        var ds = new DirectiveStack();
+        bool IsValidParameter(ParameterSyntax ps, int i)
         {
+            var leading = ps.GetLeadingTrivia();
+            var extra = ProcessTrivia(leading, ds);
+            if (extra is not null && extra.AdditionalStatements.Count > 0)
+            {
+                modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
+                modifications.Add(i + 1, true);
+            }
+
             if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
             {
                 return true;
@@ -322,9 +334,80 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return true;
         }
 
-        var invalid = node.Parameters.GetIndices((v, _) => !IsValidParameter(v));
+        var invalid = node.Parameters.GetIndices((v, i) => !IsValidParameter(v, i));
         var newParams = RemoveAtRange(newNode.Parameters, invalid);
-        return newNode.WithParameters(newParams);
+
+        var entries
+            = modifications.OrderByDescending(z => z.Key);
+
+        var removeTrailingEndIf = false;
+
+        List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
+        {
+            var newLeadingTrivia = new List<SyntaxTrivia>();
+
+            var removed = false;
+            foreach (var st in list)
+            {
+                if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+                {
+                    removed = true;
+                    newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
+                    continue;
+                }
+
+                newLeadingTrivia.Add(st);
+            }
+
+            return newLeadingTrivia;
+        }
+
+        foreach (var extraParameterGroup in entries)
+        {
+            var index = extraParameterGroup.Key;
+
+            if (extraParameterGroup.Value.IsNewStatements)
+            {
+                newParams = newParams.RemoveAt(index);
+                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
+                {
+                    if (extraParameter is not LocalDeclarationStatementSyntax declaration)
+                    {
+                        continue;
+                    }
+
+                    var id = Identifier(declaration.Declaration.Variables.Single(v => !string.IsNullOrWhiteSpace(v.Identifier.ValueText)).Identifier.ValueText);
+                    var p = Parameter(default, default, declaration.Declaration.Type, id, default);
+                    newParams = newParams.Insert(index, p);
+                }
+            }
+            else
+            {
+                if (index >= newParams.Count)
+                {
+                    removeTrailingEndIf = true;
+                    continue;
+                }
+
+                var pRemoveEndIf = newParams[index];
+                newParams = newParams.RemoveAt(index);
+                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
+
+                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
+
+                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
+                newParams = newParams.Insert(index, pRemoveEndIf);
+            }
+        }
+
+        newNode = newNode.WithParameters(newParams);
+
+        if (removeTrailingEndIf)
+        {
+            newNode = newNode.WithCloseParenToken(newNode.CloseParenToken.WithLeadingTrivia(RemoveFirstEndIf(newNode.CloseParenToken.LeadingTrivia)));
+        }
+
+        return newNode;
     }
 
     /// <inheritdoc/>
@@ -652,7 +735,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia))
         {
             var oldStatements = retVal.Statements.ToList();
-            oldStatements.AddRange(newStatements2.ToList());
+            oldStatements.AddRange([.. newStatements2]);
             retVal = retVal.WithStatements(SyntaxFactory.List(oldStatements)).WithCloseBraceToken(lastToken.WithLeadingTrivia(newTrivia));
         }
 
@@ -703,6 +786,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (CatchDeclarationSyntax)base.VisitCatchDeclaration(node)!;
         return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitGlobalStatement(GlobalStatementSyntax node)
+    {
+        var @base = (GlobalStatementSyntax)base.VisitGlobalStatement(node)!;
+        return @base;
     }
 
     /// <inheritdoc/>
@@ -769,15 +859,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         static bool Preprocessors(SyntaxTrivia st)
-        {
-            return st.IsKind(SyntaxKind.IfDirectiveTrivia)
-                || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
-                || st.IsKind(SyntaxKind.ElseDirectiveTrivia)
-                || st.IsKind(SyntaxKind.EndIfDirectiveTrivia)
-                || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
-                || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
-                || st.IsKind(SyntaxKind.DisabledTextTrivia);
-        }
+            => st.IsKind(SyntaxKind.IfDirectiveTrivia)
+            || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
+            || st.IsKind(SyntaxKind.ElseDirectiveTrivia)
+            || st.IsKind(SyntaxKind.EndIfDirectiveTrivia)
+            || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
+            || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
+            || st.IsKind(SyntaxKind.DisabledTextTrivia);
 
         var z = newTriviaList.Where(Preprocessors).ToList();
 
@@ -797,7 +885,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var newReturnType = GetReturnType(@base.ReturnType, symbol);
 
-        var nonEmptyAttributes = SyntaxFactory.List(@base.AttributeLists.Where(z => z.Attributes.Any()));
+        var attrLists = new List<AttributeListSyntax>();
+        foreach (var l in @base.AttributeLists)
+        {
+            var leading = l.OpenBracketToken.LeadingTrivia;
+            if (ProcessSyncOnlyAttributes(leading, new())
+                is { Attributes.Count: > 0 } additionalAttributes2)
+            {
+                attrLists.AddRange(additionalAttributes2.Attributes);
+            }
+
+            if (l.Attributes.Count > 0)
+            {
+                attrLists.Add(l);
+            }
+        }
+
+        var nonEmptyAttributes = List(attrLists);
+        if (node.Modifiers is [var first, ..]
+            && ProcessSyncOnlyAttributes(first.LeadingTrivia, new())
+            is { Attributes.Count: > 0 } additionalAttributes)
+        {
+            nonEmptyAttributes = List(nonEmptyAttributes.Union(additionalAttributes.Attributes));
+            var m = TokenList([first.WithLeadingTrivia(additionalAttributes.LeadingTrivia), .. @base.Modifiers.Skip(1)]);
+            @base = @base.WithModifiers(m);
+        }
 
         var retVal = @base
             .WithIdentifier(SyntaxFactory.Identifier(newName))
@@ -999,6 +1111,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
         var indices = node.Attributes.GetIndices(ShouldRemoveAttribute);
         var newList = RemoveAtRange(@base.Attributes, indices);
+
+        /*
+        if (ProcessSyncOnlyAttributes(@base.OpenBracketToken.LeadingTrivia, new())
+            is { Attributes.Count: > 0 } additionalAttributes)
+        {
+            newList.AddRange();
+        }
+        */
+
         return @base.WithAttributes(newList);
     }
 
@@ -1434,7 +1555,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return true;
     }
 
-    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    private void ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack, List<SyntaxTrivia> triviaList, Action<MemberDeclarationSyntax> process)
     {
         static SyncOnlyDirectiveType GetDirectiveType(ExpressionSyntax condition) => condition switch
         {
@@ -1450,12 +1571,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             _ => SyncOnlyDirectiveType.None,
         };
 
-        var triviaList = new List<SyntaxTrivia>();
-
         // Remembers if the last #if was SYNC_ONLY
         var ifDirectives = directiveStack.Stack;
 
-        var statements = new List<StatementSyntax>();
         foreach (var trivia in syntaxTriviaList)
         {
             if (trivia.IsKind(SyntaxKind.IfDirectiveTrivia) && trivia.GetStructure() is IfDirectiveTriviaSyntax ifDirective)
@@ -1466,7 +1584,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 {
                     var d = ReportedDiagnostic.Create(InvalidCondition, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
-                    return null;
+                    return;
                 }
 
                 if (syncOnlyDirectiveType != SyncOnlyDirectiveType.None)
@@ -1477,7 +1595,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                         {
                             var d = ReportedDiagnostic.Create(InvalidNesting, trivia.GetLocation(), trivia.ToString());
                             diagnostics.Add(d);
-                            return null;
+                            return;
                         }
                     }
                     else
@@ -1537,7 +1655,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 {
                     var d = ReportedDiagnostic.Create(InvalidElif, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
-                    return null;
+                    return;
                 }
 
                 continue;
@@ -1550,20 +1668,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                 foreach (var m in compilation.Members)
                 {
-                    if (m is GlobalStatementSyntax gs)
-                    {
-                        var statement = gs.Statement;
-                        if (triviaList.Count > 0)
-                        {
-                            triviaList.AddRange(statement.GetLeadingTrivia().ToList());
-                            statement = statement.WithLeadingTrivia(triviaList);
-                            triviaList.Clear();
-                        }
-
-                        //Cannot to the following because syntax node is not within syntax tree
-                        //var statement = (StatementSyntax)Visit(gs.Statement)!;
-                        statements.Add(statement);
-                    }
+                    process(m);
                 }
 
                 continue;
@@ -1571,8 +1676,66 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
             triviaList.Add(trivia);
         }
+    }
 
-        return new(false, SyntaxFactory.List(statements), triviaList);
+    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    {
+        var statements = new List<StatementSyntax>();
+        var triviaList = new List<SyntaxTrivia>();
+
+        ProcessTrivia(syntaxTriviaList, directiveStack, triviaList, (m) =>
+        {
+            if (m is not GlobalStatementSyntax gs)
+            {
+                return;
+            }
+
+            var statement = gs.Statement;
+            if (triviaList.Count > 0)
+            {
+                triviaList.AddRange([.. statement.GetLeadingTrivia()]);
+                statement = statement.WithLeadingTrivia(triviaList);
+                triviaList.Clear();
+            }
+
+            //Cannot to the following because syntax node is not within syntax tree
+            //var statement = (StatementSyntax)Visit(gs.Statement)!;
+            statements.Add(statement);
+        });
+
+        return new(false, List(statements), triviaList);
+    }
+
+    private SyncOnlyAttributeContext ProcessSyncOnlyAttributes(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    {
+        var attributes = new List<AttributeListSyntax>();
+        var triviaList = new List<SyntaxTrivia>();
+
+        ProcessTrivia(syntaxTriviaList, directiveStack, triviaList, (m) =>
+        {
+            if (m is not IncompleteMemberSyntax ims)
+            {
+                return;
+            }
+
+            var originalAttributes = ims.AttributeLists;
+            if (triviaList.Count > 0)
+            {
+                ////triviaList.AddRange([.. statement.GetLeadingTrivia()]);
+                ////statement = statement.WithLeadingTrivia(triviaList);
+                ////triviaList.Clear();
+            }
+
+            //Cannot to the following because syntax node is not within syntax tree
+            ////var statement = (StatementSyntax)Visit(gs.Statement)!;
+
+            foreach (var o in originalAttributes)
+            {
+                attributes.Add(o);
+            }
+        });
+
+        return new(List(attributes), triviaList);
     }
 
     private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
@@ -1747,6 +1910,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         /// </summary>
         public bool? IsSyncOnly { get; set; }
     }
+
+    private sealed record SyncOnlyAttributeContext(SyntaxList<AttributeListSyntax> Attributes, IList<SyntaxTrivia> LeadingTrivia);
 
     private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia)
     {

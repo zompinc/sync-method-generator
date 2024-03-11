@@ -157,7 +157,7 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
     /// <returns>The newly instantiated array.</returns>
     public T[] ToArray()
     {
-        return AsImmutableArray().ToArray();
+        return [.. AsImmutableArray()];
     }
 
     /// <summary>

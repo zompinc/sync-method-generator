@@ -106,6 +106,50 @@ await Task.CompletedTask;
 """.Verify(sourceType: SourceType.MethodBody);
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task SyncOnlyBeforeMethodBody(bool beforeDeclaration) => $$"""
+{{(beforeDeclaration ? "[CreateSyncVersion]\n" : string.Empty)}}#if SYNC_ONLY
+[global::System.Obsolete]
+[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+#endif{{(beforeDeclaration ? string.Empty : "\n[CreateSyncVersion]")}}
+public async Task MethodWithObsoleteSyncAsync()
+{
+    await Task.Delay(1000);
+}
+""".Verify(disableUnique: true);
+
+    [Fact]
+    public Task InsideParameter() => $$"""
+[CreateSyncVersion]
+public async Task<bool> IsNullAsync(
+#if SYNC_ONLY
+global::System.Data.IDataReader reader,
+#else
+DbDataReader reader,
+#endif
+int i)
+{
+    return await reader.IsDBNullAsync(i);
+}
+""".Verify(disableUnique: true);
+
+    [Fact]
+    public Task LastParameter() => $$"""
+[CreateSyncVersion]
+public async Task<bool> IsNullAsync(
+#if SYNC_ONLY
+global::System.Data.IDataReader reader
+#else
+DbDataReader reader
+#endif
+)
+{
+    return await reader.IsDBNullAsync(i);
+}
+""".Verify(disableUnique: true);
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
