@@ -84,6 +84,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         None,
         FromResult,
         Delay,
+        Drop,
     }
 
     /// <summary>
@@ -543,6 +544,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             else if (specialMethod == SpecialMethod.Delay)
             {
                 return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), @base.ArgumentList).WithTriviaFrom(@base);
+            }
+            else if (specialMethod == SpecialMethod.Drop)
+            {
+                return memberAccess.Expression;
             }
         }
 
@@ -1257,6 +1262,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             Delay when GetContainingType() == TaskType => SpecialMethod.Delay,
             FromResult when GetContainingType() is TaskType or ValueTaskType => SpecialMethod.FromResult,
+            AsTask when GetContainingType() is TaskType or ValueTaskType => SpecialMethod.Drop,
             _ => SpecialMethod.None,
         };
     }
@@ -1839,13 +1845,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             if (IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
             {
                 return DropInvocation(childInvocation);
-            }
-            else if (GetSymbol(memberAccessExpression.Expression) is IParameterSymbol ps2
-                && !removedParameters.Contains(ps2)
-                && methodSymbol.Name == AsTask)
-            {
-                replacements[invocation] = memberAccessExpression.Expression;
-                return false;
             }
         }
 

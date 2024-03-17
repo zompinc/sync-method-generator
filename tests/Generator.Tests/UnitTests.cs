@@ -393,13 +393,23 @@ public async Task<int> MethodAsync(Func<Task<int>> task)
 """.Verify();
 
     [Fact]
-    public Task HandleAsTask() => """
+    public Task HandleAsTaskOnParameter() => """
 [CreateSyncVersion]
 public async Task<int> MethodAsync(ValueTask<int> vt)
 {
     var r = await vt.AsTask();
     return r;
 }
+""".Verify();
+
+    [Fact]
+    public Task HandleAsTask() => """
+public void OtherMethod() { }
+
+public async ValueTask OtherMethodAsync() { }
+
+[CreateSyncVersion]
+public async Task MethodAsync() => await OtherMethodAsync().AsTask();
 """.Verify();
 
     [Theory]
