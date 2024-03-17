@@ -68,8 +68,18 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
+        static string BuildClassName(ClassDeclaration c)
+        {
+            if (c.TypeParameterListSyntax.IsEmpty)
+            {
+                return c.ClassName;
+            }
+
+            return c.ClassName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
+        }
+
         var sourcePath = $"{string.Join(".", m.Namespaces)}" +
-            $".{string.Join(".", m.Classes.Select(c => c.ClassName))}" +
+            $".{string.Join(".", m.Classes.Select(BuildClassName))}" +
             $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
 
         var source = SourceGenerationHelper.GenerateExtensionClass(m);
