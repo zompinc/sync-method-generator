@@ -1528,7 +1528,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         SyntaxToken[] newSeparators = arguments.Count < 1 ? []
             : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
 
-        var @as = Argument(expression);
+        var @as = Argument(expression.WithoutLeadingTrivia());
         var newList = SeparatedList([@as, .. arguments], newSeparators);
 
         var newName = reducedFrom.Name;
@@ -1543,9 +1543,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
 
-        var es = ies.Expression is MemberAccessExpressionSyntax mae
+        var es = (ies.Expression is MemberAccessExpressionSyntax mae
             ? mae.ChangeIdentifier(fullyQualifiedName)
-            : IdentifierName(Identifier(fullyQualifiedName));
+            : IdentifierName(Identifier(fullyQualifiedName)))
+            .WithLeadingTrivia(expression.GetLeadingTrivia());
 
         return ies
             .WithExpression(es)
