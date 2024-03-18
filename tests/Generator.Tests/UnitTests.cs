@@ -393,6 +393,11 @@ public async Task<int> MethodAsync(Func<Task<int>> task)
 """.Verify();
 
     [Fact]
+    public Task ConvertAsyncDelegateToDelegate() => """
+Action a = async delegate () { await Task.Delay(100); };
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task HandleAsTaskOnParameter() => """
 [CreateSyncVersion]
 public async Task<int> MethodAsync(ValueTask<int> vt)

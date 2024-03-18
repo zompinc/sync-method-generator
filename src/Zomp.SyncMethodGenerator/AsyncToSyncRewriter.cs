@@ -591,6 +591,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
     }
 
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitAnonymousMethodExpression(AnonymousMethodExpressionSyntax node)
+    {
+        var @base = (AnonymousMethodExpressionSyntax)base.VisitAnonymousMethodExpression(node)!;
+        return @base.WithModifiers(StripAsyncModifier(@base.Modifiers));
+    }
+
+    /// <inheritdoc/>
     public override SyntaxNode? VisitInterpolation(InterpolationSyntax node)
     {
         var @base = (InterpolationSyntax)base.VisitInterpolation(node)!;
