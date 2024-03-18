@@ -126,6 +126,11 @@ public async Task HasIsExpressionAsync(Stream stream) => _ = stream is FileStrea
         .Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task HandleAsCast()
+        => "_ = new object() as Stream;"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task HandleNameOfGenericTuple()
         => "_ = nameof(IEnumerable<(Stream? S, int I)>);"
         .Verify(sourceType: SourceType.MethodBody);

@@ -1092,8 +1092,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return @base;
     }
 
-    public override SyntaxNode? VisitSingleVariableDesignation(SingleVariableDesignationSyntax node) => base.VisitSingleVariableDesignation(node);
-
     /// <inheritdoc/>
     public override SyntaxNode? VisitVariableDeclaration(VariableDeclarationSyntax node)
     {
@@ -1232,7 +1230,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
 
-        if (@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) && GetSymbol(node.Right) is INamedTypeSymbol typeSymbol)
+        if ((@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) || @base.OperatorToken.IsKind(SyntaxKind.AsKeyword))
+            && GetSymbol(node.Right) is INamedTypeSymbol typeSymbol)
         {
             @base = @base.WithRight(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base);
         }
