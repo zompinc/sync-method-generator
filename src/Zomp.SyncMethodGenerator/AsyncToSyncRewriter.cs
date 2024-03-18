@@ -242,7 +242,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
         else
         {
-            newType = symbol.ToDisplayString(GlobalDisplayFormat);
+            if (symbol.ContainingSymbol is INamedTypeSymbol { IsGenericType: true } parentSymbol)
+            {
+                newType = parentSymbol.ToDisplayString(GlobalDisplayFormatWithTypeParameters) + "." + symbol.Name;
+            }
+            else
+            {
+                newType = symbol.ToDisplayString(GlobalDisplayFormat);
+            }
         }
 
         if (newType is not null)

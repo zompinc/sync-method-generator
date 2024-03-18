@@ -147,4 +147,17 @@ public async Task SwitchAsync(Stream stream)
     };
 }
 """.Verify();
+
+    [Fact]
+    public Task GenericClassWithGenericInnerClass() => """
+namespace Test;
+
+internal partial class Class<T>
+{
+    [CreateSyncVersion]
+    public async Task FooAsync(Int<int> i) { }
+
+    internal class Int<TU> { }
+}
+""".Verify(sourceType: SourceType.Full);
 }
