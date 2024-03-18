@@ -29,6 +29,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string FromResult = "FromResult";
     private const string AsTask = "AsTask";
     private const string Delay = "Delay";
+    private const string Span = "Span";
     private const string CompletedTask = "CompletedTask";
     private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
     private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
@@ -68,7 +69,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
-    private readonly Dictionary<ExpressionSyntax, ExpressionSyntax> replacements = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
 
     private enum SyncOnlyDirectiveType
@@ -428,7 +428,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     {
         var @base = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
 
-        var exprSymbol = GetSymbol(node.Expression);
+        if (GetSymbol(node.Expression) is not { } exprSymbol)
+        {
+            return @base;
+        }
+
         if (exprSymbol is ITypeSymbol && node.Expression is TypeSyntax type)
         {
             // Rewrite static invocation (eg. File.ReadAllTextAsync)
@@ -439,9 +443,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             }
         }
 
-        if (@base.Name.Identifier.ValueText == "Span"
-            && GetSymbol(node.Expression) is { } symbol
-            && GetNameWithoutTypeParams(GetReturnType(symbol)) is Memory or ReadOnlyMemory)
+        if (@base.Name.Identifier.ValueText == Span
+            && GetNameWithoutTypeParams(GetReturnType(exprSymbol)) is Memory or ReadOnlyMemory)
         {
             return @base.Expression;
         }
@@ -450,17 +453,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             return @base.WithName(@base.ChangeIdentifier(RemoveAsync(@base.Name.Identifier.ValueText)));
         }
 
+        if (GetSymbol(node) is IPropertySymbol property
+            && GetNameWithoutTypeParams(property.Type) is ReadOnlyMemory or Memory)
+        {
+            return AppendSpan(@base);
+        }
+
         return @base;
     }
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
     {
-        if (replacements.TryGetValue(node, out var replacement))
-        {
-            return replacement;
-        }
-
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
         string? newName = null;
@@ -512,6 +516,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         if (@base.Expression is not MemberAccessExpressionSyntax { } memberAccess)
         {
+            if (isMemory)
+            {
+                return AppendSpan(@base);
+            }
+
             return @base;
         }
 
@@ -1451,6 +1460,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => ShouldRemoveType(GetReturnType(symbol)),
     };
 
+    private static MemberAccessExpressionSyntax AppendSpan(ExpressionSyntax @base)
+        => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, @base, IdentifierName(Span));
+
     private static bool IsTaskExtension(IMethodSymbol methodSymbol)
     {
         var returnType = GetNameWithoutTypeParams(methodSymbol.ReturnType);
@@ -1543,7 +1555,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static string GetNewName(IMethodSymbol methodSymbol)
     {
         var containingType = methodSymbol.ContainingType;
-        var replacement = Regex.Replace(methodSymbol.Name, "Memory", "Span");
+        var replacement = Regex.Replace(methodSymbol.Name, "Memory", Span);
         var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
         return replacement;
     }

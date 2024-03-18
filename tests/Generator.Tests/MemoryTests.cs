@@ -91,4 +91,20 @@ namespace N2
     }
 }
 """.Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task ConvertMemoryToSpan() => """
+Memory<byte> GetMemory() => MemoryPool<byte>.Shared.Rent().Memory;
+
+[CreateSyncVersion]
+async Task MethodAsync()
+{
+    var m = GetMemory();
+}
+""".Verify();
+
+    [Fact]
+    public Task ConvertMemoryToSpanAfterPropertyAccess() => """
+var m = MemoryPool<byte>.Shared.Rent().Memory;
+""".Verify(sourceType: SourceType.MethodBody);
 }

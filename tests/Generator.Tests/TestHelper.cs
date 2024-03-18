@@ -12,6 +12,7 @@ public static partial class TestHelper
 {
     private const string GlobalUsingsSource = """
 global using global::System;
+global using global::System.Buffers;
 global using global::System.Collections.Generic;
 global using global::System.Data;
 global using global::System.Data.Common;
@@ -98,6 +99,7 @@ partial class Class
             typeof(object).Assembly.Location,
             typeof(Console).Assembly.Location,
             typeof(Memory<>).Assembly.Location,
+            typeof(System.Buffers.MemoryPool<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
 #if NET6_0_OR_GREATER
