@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -31,6 +30,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string Delay = "Delay";
     private const string Span = "Span";
     private const string CompletedTask = "CompletedTask";
+    private const string IsCancellationRequested = "IsCancellationRequested";
     private static readonly HashSet<string> Drops = [IProgressInterface, CancellationTokenType];
     private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
     private static readonly Dictionary<string, string?> Replacements = new()
@@ -108,7 +108,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             var ext = whenNotNull switch
             {
                 InvocationExpressionSyntax ies => GetExtensionExprSymbol(ies),
-                ConditionalAccessExpressionSyntax { Expression: InvocationExpressionSyntax ies } caes => GetExtensionExprSymbol(ies),
+                ConditionalAccessExpressionSyntax { Expression: InvocationExpressionSyntax ies } => GetExtensionExprSymbol(ies),
                 _ => null,
             };
 
@@ -727,6 +727,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             retVal = retVal.WithElse(SyntaxFactory.ElseClause(SyntaxFactory.Block()));
         }
 
+        if (ChecksIfNegatedIsCancellationRequested(node.Condition))
+        {
+            retVal = retVal.WithCondition(LiteralExpression(SyntaxKind.TrueLiteralExpression));
+        }
+
         return retVal;
     }
 
@@ -1022,6 +1027,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         return @base.WithModifiers(StripAsyncModifier(@base.Modifiers)).WithTriviaFrom(@base);
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node)
+    {
+        var @base = (WhileStatementSyntax)base.VisitWhileStatement(node)!;
+
+        if (ChecksIfNegatedIsCancellationRequested(node.Condition))
+        {
+            return @base.WithCondition(LiteralExpression(SyntaxKind.TrueLiteralExpression));
+        }
+
+        return @base;
     }
 
     /// <inheritdoc/>
@@ -1464,9 +1482,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => throw new NotSupportedException($"Can't process {symbol}"),
     };
 
-    private static bool ShouldRemoveArgument(ISymbol symbol) => symbol switch
+    private static bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
     {
         IPropertySymbol { Name: CompletedTask } ps => ps.Type.ToString() is TaskType or ValueTaskType,
+        IPropertySymbol { Name: IsCancellationRequested } ps => ps.ContainingType.ToString() is CancellationTokenType && !isNegated,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) == SpecialMethod.None
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
@@ -1476,6 +1495,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private static MemberAccessExpressionSyntax AppendSpan(ExpressionSyntax @base)
         => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, @base, IdentifierName(Span));
+
+    private static ExpressionSyntax RemoveParentheses(ExpressionSyntax condition)
+    {
+        var node = condition;
+        while (node is ParenthesizedExpressionSyntax p)
+        {
+            node = p.Expression;
+        }
+
+        return node;
+    }
 
     private static bool IsTaskExtension(IMethodSymbol methodSymbol)
     {
@@ -1850,8 +1880,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         _ => false,
     };
 
-    private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr)
-        => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol);
+    private bool ChecksIfNegatedIsCancellationRequested(ExpressionSyntax condition)
+        => RemoveParentheses(condition) is PrefixUnaryExpressionSyntax { OperatorToken.RawKind: (int)SyntaxKind.ExclamationToken } pe
+        && RemoveParentheses(pe.Operand) is MemberAccessExpressionSyntax { Name.Identifier.ValueText: IsCancellationRequested } mae
+        && GetSymbol(mae) is { } t
+        && GetNameWithoutTypeParams(t.ContainingType) is CancellationTokenType;
+
+    private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr, bool isNegated = false)
+        => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol, isNegated);
 
     private bool DropInvocation(InvocationExpressionSyntax invocation)
     {
@@ -1915,27 +1951,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         return ExpressionStatement((ExpressionSyntax)Visit(result).WithoutTrivia());
     }
 
-    private bool ShouldRemoveArgument(ExpressionSyntax expr) => expr switch
+    private bool ShouldRemoveArgument(ExpressionSyntax expr)
+        => ShouldRemoveArgument(expr, new());
+
+    private bool ShouldRemoveArgument(ExpressionSyntax expr, RemoveArgumentContext context) => expr switch
     {
-        ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression),
-        BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left) || ShouldRemoveArgument(be.Right),
-        CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression),
-        ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression),
-        IdentifierNameSyntax id => !id.Identifier.ValueText.EndsWithAsync() && HasSymbolAndShouldBeRemoved(id),
+        ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression, context),
+        BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left, context) || ShouldRemoveArgument(be.Right, context),
+        CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression, context),
+        ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression, context),
+        IdentifierNameSyntax id => !id.Identifier.ValueText.EndsWithAsync() && HasSymbolAndShouldBeRemoved(id, context.IsNegated),
         InvocationExpressionSyntax ie => DropInvocation(ie),
-        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue) && ShouldRemoveArgument(ce.WhenFalse),
-        MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name),
-        PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        PrefixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand),
-        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type) || ShouldRemoveObjectCreation(oe),
+        ConditionalExpressionSyntax ce => ShouldRemoveArgument(ce.WhenTrue, context) && ShouldRemoveArgument(ce.WhenFalse, context),
+        MemberAccessExpressionSyntax mae => ShouldRemoveArgument(mae.Name, context),
+        PostfixUnaryExpressionSyntax pue => ShouldRemoveArgument(pue.Operand, context),
+        PrefixUnaryExpressionSyntax pue => ProcessUnaryExpression(pue, context),
+        ObjectCreationExpressionSyntax oe => ShouldRemoveArgument(oe.Type, context) || ShouldRemoveObjectCreation(oe),
         ImplicitObjectCreationExpressionSyntax oe => ShouldRemoveObjectCreation(oe),
-        ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression),
-        AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression),
-        AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right),
+        ConditionalAccessExpressionSyntax cae => ShouldRemoveArgument(cae.Expression, context),
+        AwaitExpressionSyntax ae => ShouldRemoveArgument(ae.Expression, context),
+        AssignmentExpressionSyntax ae => ShouldRemoveArgument(ae.Right, context),
         GenericNameSyntax gn => HasSymbolAndShouldBeRemoved(gn),
         LiteralExpressionSyntax le => ShouldRemoveLiteral(le),
         _ => false,
     };
+
+    private bool ProcessUnaryExpression(PrefixUnaryExpressionSyntax pue, RemoveArgumentContext context)
+    {
+        if (pue.OperatorToken.IsKind(SyntaxKind.ExclamationToken))
+        {
+            context = context with { IsNegated = !context.IsNegated };
+        }
+
+        return ShouldRemoveArgument(pue.Operand, context);
+    }
 
     private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
@@ -2012,4 +2061,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     }
 
     private sealed record ExtensionExprSymbol(InvocationExpressionSyntax InvocationExpression, IMethodSymbol ReducedFrom, ITypeSymbol ReturnType);
+
+    private sealed record RemoveArgumentContext(bool IsNegated = false);
 }

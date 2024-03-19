@@ -3,7 +3,7 @@
 public enum SourceType
 {
     /// <summary>
-    /// Listing of a body of a block method.
+    /// Listing of a body of a block method. A single parameter is passed: CancellationToken ct.
     /// </summary>
     MethodBody,
 
