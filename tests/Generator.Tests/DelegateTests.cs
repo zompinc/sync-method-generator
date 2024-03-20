@@ -15,6 +15,15 @@ var delAsync = async () => await Task.CompletedTask;
 await delAsync();
 """.Verify(sourceType: SourceType.MethodBody);
 
+    [Fact]
+    public Task FuncToActionInParameter() => """
+[CreateSyncVersion]
+async Task MethodAsync(Func<int, Task> bar)
+{
+    await bar(5);
+}
+""".Verify();
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

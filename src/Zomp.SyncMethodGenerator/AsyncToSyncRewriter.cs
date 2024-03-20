@@ -422,6 +422,22 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
+
+        if (node.Type is not null && @base.Type is not null)
+        {
+            var originalType = node.Type;
+            var variableType = GetSymbol(originalType);
+
+            if (variableType is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
+                && GetNameWithoutTypeParams(namedTypeSymbol) is SystemFunc)
+            {
+                if (ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax)
+                {
+                    return @base.WithType(newTypeSyntax.WithTriviaFrom(originalType));
+                }
+            }
+        }
+
         if (node.Type is null || TypeAlreadyQualified(node.Type))
         {
             return @base;
@@ -1056,8 +1072,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         TypeSyntax? newTypeSyntax = null;
 
         SeparatedSyntaxList<VariableDeclaratorSyntax>? separatedVariableNames = null;
-        if (variableType is INamedTypeSymbol { IsGenericType: true } n
-            && GetNameWithoutTypeParams(n) is SystemFunc)
+        if (variableType is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
+            && GetNameWithoutTypeParams(namedTypeSymbol) is SystemFunc)
         {
             var newVariableNames = new List<VariableDeclaratorSyntax>();
             foreach (var variable in @base.Declaration.Variables)
@@ -1066,7 +1082,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     .WithTrailingTrivia(variable.Identifier.TrailingTrivia).WithInitializer(variable.Initializer));
             }
 
-            var typeArgs = n.TypeArguments;
+            var typeArgs = namedTypeSymbol.TypeArguments;
+
+            if (ConvertFuncToAction(@base.Declaration.Type, namedTypeSymbol) is { } newTypeSyntax2)
+            {
+                newTypeSyntax = newTypeSyntax2;
+            }
 
             if (typeArgs[^1].ToString() is TaskType or ValueTaskType
                 && @base.Declaration.Type is GenericNameSyntax gns)
@@ -1603,6 +1624,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var replacement = Regex.Replace(methodSymbol.Name, "Memory", Span);
         var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
         return replacement;
+    }
+
+    private static TypeSyntax? ConvertFuncToAction(TypeSyntax originalType, INamedTypeSymbol namedTypeSymbol)
+    {
+        var typeArgs = namedTypeSymbol.TypeArguments;
+
+        if (typeArgs[^1].ToString() is not TaskType and not ValueTaskType
+            || originalType is not GenericNameSyntax gns)
+        {
+            return null;
+        }
+
+        TypeSyntax newTypeSyntax;
+        var newType = Global("System.Action");
+
+        var list = new List<TypeSyntax>();
+        if (typeArgs.Length > 1)
+        {
+            for (var i = 0; i < typeArgs.Length - 1; i++)
+            {
+                list.Add(ProcessSymbol(typeArgs[i]));
+            }
+
+            var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
+
+            var separatedList = SeparatedList(list, originalSeparators);
+            newTypeSyntax = GenericName(Identifier(newType), TypeArgumentList(separatedList));
+        }
+        else
+        {
+            newTypeSyntax = IdentifierName(newType);
+        }
+
+        return newTypeSyntax;
     }
 
     private bool PreProcess(
