@@ -1026,10 +1026,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
         if (TypeAlreadyQualified(node.Type))
         {
-            return @base;
+            return @base.WithAwaitKeyword(default);
         }
 
         return @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitForEachVariableStatement(ForEachVariableStatementSyntax node)
+    {
+        var @base = (ForEachVariableStatementSyntax)base.VisitForEachVariableStatement(node)!;
+
+        return @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node)
