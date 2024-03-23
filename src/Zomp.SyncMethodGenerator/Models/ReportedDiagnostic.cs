@@ -9,7 +9,7 @@
 /// <param name="LineSpan">Line span.</param>
 /// <param name="Trivia">Trivia.</param>
 /// <see href="https://github.com/dotnet/roslyn/issues/62269#issuecomment-1170760367" />
-internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, string FilePath, TextSpan TextSpan, LinePositionSpan LineSpan, string Trivia)
+internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, string FilePath, TextSpan TextSpan, LinePositionSpan LineSpan, string? Trivia = null)
 {
     /// <summary>
     /// Implicitly converts <see cref="ReportedDiagnostic"/> to <see cref="Diagnostic"/>.
@@ -20,7 +20,7 @@ internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, strin
         return Diagnostic.Create(
             descriptor: diagnostic.Descriptor,
             location: Location.Create(diagnostic.FilePath, diagnostic.TextSpan, diagnostic.LineSpan),
-            messageArgs: new object[] { diagnostic.Trivia });
+            messageArgs: diagnostic.Trivia is null ? [] : [diagnostic.Trivia]);
     }
 
     /// <summary>
@@ -30,7 +30,7 @@ internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, strin
     /// <param name="location">Location.</param>
     /// <param name="trivia">Trivia.</param>
     /// <returns>A new <see cref="ReportedDiagnostic"/>.</returns>
-    public static ReportedDiagnostic Create(DiagnosticDescriptor descriptor, Location location, string trivia)
+    public static ReportedDiagnostic Create(DiagnosticDescriptor descriptor, Location location, string? trivia = null)
     {
         return new(descriptor, location.SourceTree?.FilePath ?? string.Empty, location.SourceSpan, location.GetLineSpan().Span, trivia);
     }

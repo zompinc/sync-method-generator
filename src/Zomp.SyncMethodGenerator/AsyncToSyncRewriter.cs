@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using Zomp.SyncMethodGenerator.Visitors;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -2081,11 +2082,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private sealed class StatementProcessor
     {
+        private readonly AsyncToSyncRewriter rewriter;
         private readonly DirectiveStack directiveStack = new();
         private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = [];
 
         public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
         {
+            this.rewriter = rewriter;
             HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, directiveStack);
         }
 
@@ -2095,10 +2098,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         public SyntaxList<StatementSyntax> PostProcess(SyntaxList<StatementSyntax> statements)
         {
+            var removeRemaining = false;
+
             for (var i = 0; i < statements.Count; ++i)
             {
                 var statement = statements[i];
-                if (CanDropEmptyStatement(statement))
+                if (removeRemaining || CanDropEmptyStatement(statement))
                 {
                     if (extraNodeInfoList.TryGetValue(i, out var zz))
                     {
@@ -2108,6 +2113,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     {
                         extraNodeInfoList.Add(i, true);
                     }
+                }
+
+                if (!removeRemaining && statement is WhileStatementSyntax { Condition: LiteralExpressionSyntax ls } ws && ls.IsKind(SyntaxKind.TrueLiteralExpression) && !BreakVisitor.Instance.Visit(ws.Statement))
+                {
+                    if (!StopIterationVisitor.Instance.Visit(ws.Statement))
+                    {
+                        rewriter.diagnostics.Add(ReportedDiagnostic.Create(EndlessLoop, ws.WhileKeyword.GetLocation()));
+                    }
+
+                    removeRemaining = true;
                 }
             }
 
