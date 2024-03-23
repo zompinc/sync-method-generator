@@ -26,12 +26,13 @@ internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, strin
     /// <summary>
     /// Creates a new <see cref="ReportedDiagnostic"/> from <see cref="DiagnosticDescriptor"/> and <see cref="Location"/>.
     /// </summary>
+    /// <param name="filePath">File path.</param>
     /// <param name="descriptor">Descriptor.</param>
     /// <param name="location">Location.</param>
     /// <param name="trivia">Trivia.</param>
     /// <returns>A new <see cref="ReportedDiagnostic"/>.</returns>
-    public static ReportedDiagnostic Create(DiagnosticDescriptor descriptor, Location location, string? trivia = null)
+    public static ReportedDiagnostic Create(string filePath, DiagnosticDescriptor descriptor, Location location, string? trivia = null)
     {
-        return new(descriptor, location.SourceTree?.FilePath ?? string.Empty, location.SourceSpan, location.GetLineSpan().Span, trivia);
+        return new(descriptor, filePath, location.SourceSpan, location.GetLineSpan().Span, trivia);
     }
 }
