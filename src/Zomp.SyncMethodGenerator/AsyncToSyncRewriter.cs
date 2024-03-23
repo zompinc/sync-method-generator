@@ -1,4 +1,5 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using Zomp.SyncMethodGenerator.Visitors;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -91,6 +92,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     /// Gets the diagnostics messages.
     /// </summary>
     public ImmutableArray<ReportedDiagnostic> Diagnostics => diagnostics.ToImmutable();
+
+    /// <summary>
+    /// Gets the path of the current file.
+    /// </summary>
+    public string Path => semanticModel.SyntaxTree.FilePath;
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
@@ -318,7 +324,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         bool IsValidParameter(ParameterSyntax ps, int i)
         {
             var leading = ps.GetLeadingTrivia();
-            var extra = ProcessTrivia(leading, ds);
+            var extra = ProcessTrivia(leading, ds, ps);
             if (extra is not null && extra.AdditionalStatements.Count > 0)
             {
                 modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
@@ -782,7 +788,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack, node) is var (_, newStatements2, newTrivia, _))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange([.. newStatements2]);
@@ -1351,7 +1357,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 continue;
             }
 
-            var (statementGetsDropped, statements, trivia) = extra;
+            var (statementGetsDropped, statements, trivia, _) = extra;
 
             for (var j = 0; j < statements.Count; ++j)
             {
@@ -1677,7 +1683,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         for (var i = 0; i < statements.Count; ++i)
         {
             var statement = statements[i];
-            if (ProcessTrivia(statement.GetLeadingTrivia(), directiveStack) is not { } eni)
+            if (ProcessTrivia(statement.GetLeadingTrivia(), directiveStack, statement) is not { } eni)
             {
                 return false;
             }
@@ -1701,7 +1707,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 eni = eni with { DropOriginal = true };
             }
 
-            extraNodeInfoList.Add(i, eni);
+            extraNodeInfoList.Add(i, eni with { OriginalStatement = statement });
         }
 
         return true;
@@ -1734,7 +1740,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                 if (syncOnlyDirectiveType == SyncOnlyDirectiveType.Invalid)
                 {
-                    var d = ReportedDiagnostic.Create(InvalidCondition, trivia.GetLocation(), trivia.ToString());
+                    var d = ReportedDiagnostic.Create(Path, InvalidCondition, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
                     return;
                 }
@@ -1745,7 +1751,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     {
                         if (isStackSyncOnly ^ syncOnlyDirectiveType == SyncOnlyDirectiveType.SyncOnly)
                         {
-                            var d = ReportedDiagnostic.Create(InvalidNesting, trivia.GetLocation(), trivia.ToString());
+                            var d = ReportedDiagnostic.Create(Path, InvalidNesting, trivia.GetLocation(), trivia.ToString());
                             diagnostics.Add(d);
                             return;
                         }
@@ -1805,7 +1811,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                 }
                 else
                 {
-                    var d = ReportedDiagnostic.Create(InvalidElif, trivia.GetLocation(), trivia.ToString());
+                    var d = ReportedDiagnostic.Create(Path, InvalidElif, trivia.GetLocation(), trivia.ToString());
                     diagnostics.Add(d);
                     return;
                 }
@@ -1830,7 +1836,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
     }
 
-    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack, SyntaxNode originalNode)
     {
         var statements = new List<StatementSyntax>();
         var triviaList = new List<SyntaxTrivia>();
@@ -1855,7 +1861,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             statements.Add(statement);
         });
 
-        return new(false, List(statements), triviaList);
+        return new(false, List(statements), triviaList, originalNode);
     }
 
     private SyncOnlyAttributeContext ProcessSyncOnlyAttributes(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
@@ -2077,10 +2083,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private sealed record SyncOnlyAttributeContext(SyntaxList<AttributeListSyntax> Attributes, IList<SyntaxTrivia> LeadingTrivia);
 
-    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia)
+    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia, SyntaxNode OriginalStatement)
     {
-        public ExtraNodeInfo(bool dropOriginal)
-            : this(dropOriginal, SyntaxFactory.List(Array.Empty<StatementSyntax>()), Array.Empty<SyntaxTrivia>())
+        public ExtraNodeInfo(bool dropOriginal, SyntaxNode originalStatement)
+            : this(dropOriginal, SyntaxFactory.List(Array.Empty<StatementSyntax>()), Array.Empty<SyntaxTrivia>(), originalStatement)
         {
         }
 
@@ -2089,11 +2095,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
     private sealed class StatementProcessor
     {
+        private readonly AsyncToSyncRewriter rewriter;
         private readonly DirectiveStack directiveStack = new();
         private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = [];
 
         public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
         {
+            this.rewriter = rewriter;
             HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, directiveStack);
         }
 
@@ -2103,10 +2111,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         public SyntaxList<StatementSyntax> PostProcess(SyntaxList<StatementSyntax> statements)
         {
+            var removeRemaining = false;
+
             for (var i = 0; i < statements.Count; ++i)
             {
                 var statement = statements[i];
-                if (CanDropEmptyStatement(statement))
+                if (removeRemaining || CanDropEmptyStatement(statement))
                 {
                     if (extraNodeInfoList.TryGetValue(i, out var zz))
                     {
@@ -2116,6 +2126,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
                     {
                         extraNodeInfoList.Add(i, true);
                     }
+                }
+
+                if (!removeRemaining && statement is WhileStatementSyntax { Condition: LiteralExpressionSyntax ls } ws && ls.IsKind(SyntaxKind.TrueLiteralExpression) && !BreakVisitor.Instance.Visit(ws.Statement))
+                {
+                    var originalStatement = extraNodeInfoList.TryGetValue(i, out var zz) && zz.OriginalStatement is WhileStatementSyntax os
+                        ? os : null;
+
+                    if (originalStatement != null && !new StopIterationVisitor(rewriter.semanticModel).Visit(originalStatement.Statement))
+                    {
+                        var location = originalStatement.WhileKeyword.GetLocation() ?? Location.None;
+
+                        rewriter.diagnostics.Add(ReportedDiagnostic.Create(rewriter.Path, EndlessLoop, location));
+                    }
+
+                    removeRemaining = true;
                 }
             }
 
