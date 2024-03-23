@@ -57,4 +57,23 @@ while (!ct.IsCancellationRequested)
 
 throw new OperationCanceledException();
 """.Verify(sourceType: SourceType.MethodBody);
+
+#if NET6_0_OR_GREATER
+
+    [Fact]
+    public Task WhileCancelled() => $$"""
+[System.Diagnostics.CodeAnalysis.DoesNotReturn]
+public void ThrowError() => throw new Exception();
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task CallProgressMethodAsync(CancellationToken ct)
+{
+    while (!ct.IsCancellationRequested)
+    {
+        ThrowError();
+    }
+}
+""".Verify();
+
+#endif
 }

@@ -1,12 +1,22 @@
 ﻿namespace Zomp.SyncMethodGenerator.Visitors;
 
-internal sealed class StopIterationVisitor : CSharpSyntaxVisitor<bool>
+internal sealed class StopIterationVisitor(SemanticModel semanticModel) : CSharpSyntaxVisitor<bool>
 {
-    public static readonly StopIterationVisitor Instance = new();
-
     public override bool VisitReturnStatement(ReturnStatementSyntax node) => true;
 
     public override bool VisitThrowExpression(ThrowExpressionSyntax node) => true;
+
+    public override bool VisitInvocationExpression(InvocationExpressionSyntax node)
+    {
+        var methodSymbol = semanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
+
+        if (methodSymbol?.GetAttributes().Any(a => a.AttributeClass?.Name == "DoesNotReturnAttribute") ?? false)
+        {
+            return true;
+        }
+
+        return base.VisitInvocationExpression(node);
+    }
 
     public override bool DefaultVisit(SyntaxNode node)
     {

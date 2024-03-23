@@ -2122,11 +2122,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
                 if (!removeRemaining && statement is WhileStatementSyntax { Condition: LiteralExpressionSyntax ls } ws && ls.IsKind(SyntaxKind.TrueLiteralExpression) && !BreakVisitor.Instance.Visit(ws.Statement))
                 {
-                    if (!StopIterationVisitor.Instance.Visit(ws.Statement))
+                    var originalStatement = extraNodeInfoList.TryGetValue(i, out var zz) && zz.OriginalStatement is WhileStatementSyntax os
+                        ? os : null;
+
+                    if (originalStatement != null && !new StopIterationVisitor(rewriter.semanticModel).Visit(originalStatement.Statement))
                     {
-                        var location = extraNodeInfoList.TryGetValue(i, out var zz) && zz.OriginalStatement is WhileStatementSyntax os
-                            ? os.WhileKeyword.GetLocation()
-                            : Location.None;
+                        var location = originalStatement.WhileKeyword.GetLocation() ?? Location.None;
 
                         rewriter.diagnostics.Add(ReportedDiagnostic.Create(rewriter.Path, EndlessLoop, location));
                     }
