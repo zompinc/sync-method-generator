@@ -111,6 +111,6 @@ public class IncrementalGeneratorTests
         var (value, reason) = Assert.Single(sourceOutputs);
         Assert.Equal(sourceStepReason, reason);
         Assert.Equal(executeStepReason, result.TrackedSteps["GetMethodToGenerate"].Single().Outputs[0].Reason);
-        Assert.Equal(combineStepReason, result.TrackedSteps["GenerateSource"].Single().Outputs[0].Reason);
+        Assert.Equal(combineStepReason, result.TrackedSteps["GenerateMethodSource"].Single().Outputs[0].Reason);
     }
 }
