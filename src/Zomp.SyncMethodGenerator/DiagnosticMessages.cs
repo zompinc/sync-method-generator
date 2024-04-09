@@ -26,5 +26,14 @@ internal static class DiagnosticMessages
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    internal static readonly DiagnosticDescriptor EndlessLoop = new(
+        id: "ZSMGEN004",
+        title: "While loop will never end after transformation",
+        messageFormat: "It is detected that the while loop will never end after transforming to synchronous version",
+        category: SyncMethodGenerator,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private const string Preprocessor = "Preprocessor";
+    private const string SyncMethodGenerator = "SyncMethodGenerator";
 }
