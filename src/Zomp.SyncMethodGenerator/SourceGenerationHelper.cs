@@ -13,13 +13,18 @@ namespace Zomp.SyncMethodGenerator
     /// <summary>
     /// An attribute that can be used to automatically generate a synchronous version of an async method. Must be used in a partial class.
     /// </summary>
-    [System.AttributeUsage(System.AttributeTargets.Method)]
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
     internal class {{SyncMethodSourceGenerator.CreateSyncVersionAttribute}} : System.Attribute
     {
         /// <summary>
         /// Gets or sets a value indicating whether "#nullable enable" directive will be omitted from generated code. False by default.
         /// </summary>
         public bool {{SyncMethodSourceGenerator.OmitNullableDirective}} { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the name of the generated method or class. If not set, the name will be the same as the original method or class.
+        /// </summary>
+        public string {{SyncMethodSourceGenerator.Name}} { get; set; }
     }
     #endif
 }

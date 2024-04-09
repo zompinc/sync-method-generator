@@ -13,8 +13,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
-
-    private static MethodToGenerate? last;
+    internal const string Name = "Name";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -33,22 +32,38 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             context.CompilationProvider.Select((c, _)
                 => c is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 });
 
-        var methodDeclarations = context.SyntaxProvider
+        var methodSourceTexts = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 QualifiedCreateSyncVersionAttribute,
-                predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, ct) => ctx)
+                predicate: static (s, _) => s is MethodDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (ctx, _) => ctx)
             .Combine(disableNullable)
             .Select((data, ct) => GetMethodToGenerate(data.Left, (MethodDeclarationSyntax)data.Left.TargetNode, data.Right, ct)!)
             .WithTrackingName("GetMethodToGenerate")
-            .Where(static s => s is not null);
-
-        var sourceTexts = methodDeclarations
+            .Where(static s => s is not null)
             .Select(static (m, _) => GenerateSource(m))
-            .WithTrackingName("GenerateSource");
+            .WithTrackingName("GenerateMethodSource");
 
+        AddSourceTexts(context, methodSourceTexts);
+
+        var classSourceTexts = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                QualifiedCreateSyncVersionAttribute,
+                predicate: static (s, _) => s is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (ctx, _) => ctx)
+            .Combine(disableNullable)
+            .SelectMany((data, ct) => GetClassToGenerate(data.Left, (TypeDeclarationSyntax)data.Left.TargetNode, data.Right, ct)!)
+            .WithTrackingName("GetClassToGenerate")
+            .Select(static (m, _) => GenerateSource(m))
+            .WithTrackingName("GenerateClassSource");
+
+        AddSourceTexts(context, classSourceTexts);
+    }
+
+    private static void AddSourceTexts(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<(MethodToGenerate MethodToGenerate, string Path, string Content)> classSourceTexts)
+    {
         context.RegisterSourceOutput(
-            sourceTexts,
+            classSourceTexts,
             static (spc, source) =>
             {
                 foreach (var diagnostic in source.MethodToGenerate.Diagnostics)
@@ -62,9 +77,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 }
             });
     }
-
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-        => node is MethodDeclarationSyntax { AttributeLists.Count: > 0 };
 
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
@@ -87,15 +99,81 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         return (m, sourcePath, source);
     }
 
-    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
+    private static ImmutableArray<MethodToGenerate> GetClassToGenerate(GeneratorAttributeSyntaxContext context, TypeDeclarationSyntax typeDeclartionSyntax, bool disableNullable, CancellationToken ct)
+    {
+        if (context.TargetSymbol is not ITypeSymbol typeSymbol)
+        {
+            // the attribute isn't on a method
+            return default;
+        }
+
+        INamedTypeSymbol? attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
+        if (attribute == null)
+        {
+            // nothing to do if this type isn't available
+            return default;
+        }
+
+        AttributeData syncMethodGeneratorAttributeData = null!;
+
+        foreach (AttributeData attributeData in typeSymbol.GetAttributes())
+        {
+            if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                continue;
+            }
+
+            syncMethodGeneratorAttributeData = attributeData;
+            break;
+        }
+
+        var className = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == Name).Value.Value as string;
+        var array = ImmutableArray.CreateBuilder<MethodToGenerate>();
+
+        foreach (var member in typeDeclartionSyntax.Members)
+        {
+            if (member is not MethodDeclarationSyntax method)
+            {
+                continue;
+            }
+
+            var m = GetMethodToGenerate(context, method, disableNullable, ct, attributeOptional: true);
+
+            if (m is null)
+            {
+                continue;
+            }
+
+            if (className != null)
+            {
+                m = m with
+                {
+                    Classes = ImmutableArray.Create(CreateClassDeclaration(typeDeclartionSyntax, className)),
+                };
+            }
+
+            array.Add(m);
+        }
+
+        return array.ToImmutable();
+    }
+
+    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct, bool attributeOptional = false)
     {
         // stop if we're asked to
         ct.ThrowIfCancellationRequested();
 
         if (context.TargetSymbol is not IMethodSymbol methodSymbol)
         {
-            // the attribute isn't on a method
-            return null;
+            var symbolFromModel = context.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax);
+
+            if (symbolFromModel is null)
+            {
+                // the attribute isn't on a method
+                return null;
+            }
+
+            methodSymbol = symbolFromModel;
         }
 
         INamedTypeSymbol? attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
@@ -129,7 +207,10 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        AttributeData syncMethodGeneratorAttributeData = null!;
+        string? name = null;
+        var explicitDisableNullable = false;
+
+        AttributeData? syncMethodGeneratorAttributeData = null;
 
         foreach (AttributeData attributeData in methodSymbol.GetAttributes())
         {
@@ -142,7 +223,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             break;
         }
 
-        var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
+        if (syncMethodGeneratorAttributeData != null)
+        {
+            explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
+            name = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == Name).Value.Value as string;
+        }
+
         disableNullable |= explicitDisableNullable;
 
         var classes = ImmutableArray.CreateBuilder<ClassDeclaration>();
@@ -155,27 +241,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 break;
             }
 
-            var modifiers = ImmutableArray.CreateBuilder<ushort>();
-
-            foreach (var mod in classSyntax.Modifiers)
-            {
-                var kind = mod.RawKind;
-                if (kind == (int)SyntaxKind.PartialKeyword)
-                {
-                    continue;
-                }
-
-                modifiers.Add((ushort)kind);
-            }
-
-            var typeParameters = ImmutableArray.CreateBuilder<string>();
-
-            foreach (var typeParameter in classSyntax.TypeParameterList?.Parameters ?? default)
-            {
-                typeParameters.Add(typeParameter.Identifier.ValueText);
-            }
-
-            classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable()));
+            classes.Insert(0, CreateClassDeclaration(classSyntax));
         }
 
         if (classes.Count == 0)
@@ -219,9 +285,31 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+        return new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), name ?? methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+    }
 
-        last = result;
-        return result;
+    private static ClassDeclaration CreateClassDeclaration(TypeDeclarationSyntax classSyntax, string? name = null)
+    {
+        var modifiers = ImmutableArray.CreateBuilder<ushort>();
+
+        foreach (var mod in classSyntax.Modifiers)
+        {
+            var kind = mod.RawKind;
+            if (kind == (int)SyntaxKind.PartialKeyword)
+            {
+                continue;
+            }
+
+            modifiers.Add((ushort)kind);
+        }
+
+        var typeParameters = ImmutableArray.CreateBuilder<string>();
+
+        foreach (var typeParameter in classSyntax.TypeParameterList?.Parameters ?? default)
+        {
+            typeParameters.Add(typeParameter.Identifier.ValueText);
+        }
+
+        return new ClassDeclaration(name ?? classSyntax.Identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable());
     }
 }
