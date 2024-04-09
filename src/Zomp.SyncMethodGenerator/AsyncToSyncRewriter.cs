@@ -1573,7 +1573,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static string Global(string type) => $"global::{type}";
 
     private static bool TypeAlreadyQualified(TypeSyntax type)
-        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax;
+        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax or ArrayTypeSyntax;
 
     private static bool TypeAlreadyQualified(ITypeSymbol type)
         => type is INamedTypeSymbol namedType

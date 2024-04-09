@@ -67,10 +67,19 @@ String myStr;
 string myStrPredefined;
 Exception ex;
 Int16 myShort;
+Int16[] myShorts;
 long myLong;
 
 await Task.CompletedTask;
 """.Verify(false, true, sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task ArrayParameter() => """
+[CreateSyncVersion]
+public async Task MethodAsync(Int32[] o)
+{
+}
+""".Verify();
 
     [Fact]
     public Task CastFullyQualifiedType() => """
