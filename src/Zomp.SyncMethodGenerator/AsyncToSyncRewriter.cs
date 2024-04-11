@@ -24,6 +24,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private const string ConfiguredTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredTaskAwaitable";
     private const string ConfiguredValueTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable";
     private const string ConfiguredCancelableAsyncEnumerable = "System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable";
+    private const string ConfiguredAsyncDisposable = "System.Runtime.CompilerServices.ConfiguredAsyncDisposable";
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private const string AsTask = "AsTask";
@@ -483,6 +484,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         }
 
         return @base;
+    }
+
+    public override SyntaxNode? VisitUsingStatement(UsingStatementSyntax node)
+    {
+        var @base = (UsingStatementSyntax)base.VisitUsingStatement(node)!;
+        return @base.WithAwaitKeyword(default);
     }
 
     /// <inheritdoc/>
@@ -1539,7 +1546,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
     private static bool IsTaskExtension(IMethodSymbol methodSymbol)
     {
         var returnType = GetNameWithoutTypeParams(methodSymbol.ReturnType);
-        return returnType is ConfiguredTaskAwaitable or ConfiguredValueTaskAwaitable or ConfiguredCancelableAsyncEnumerable;
+        return returnType is ConfiguredTaskAwaitable
+            or ConfiguredValueTaskAwaitable
+            or ConfiguredCancelableAsyncEnumerable
+            or ConfiguredAsyncDisposable;
     }
 
     private static bool CanDropEmptyStatement(StatementSyntax statement)

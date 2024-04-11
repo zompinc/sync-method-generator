@@ -6,7 +6,7 @@
     <NoWarn>$(NoWarn);CS0219;CS0162;CS1998;CS8603;CS8619</NoWarn>
     <NoWarn>$(NoWarn);IDE0035</NoWarn>
     <NoWarn>$(NoWarn);RS1035</NoWarn>
-    <NoWarn>$(NoWarn);SA1201;SA1402;SA1404</NoWarn>
+    <NoWarn>$(NoWarn);SA1201;SA1400;SA1402;SA1404</NoWarn>
     <ImplicitUsings>false</ImplicitUsings>
     <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>

@@ -312,6 +312,25 @@ CancellationToken ct)
 #endif
 
     [Fact]
+    public Task PassIAsyncDisposable() => """
+
+class ImplementsBothDisposables : IDisposable, IAsyncDisposable
+{
+    public void Dispose() => throw new NotImplementedException();
+
+    public ValueTask DisposeAsync() => throw new NotImplementedException();
+}
+
+[CreateSyncVersion]
+async Task MethodAsync(ImplementsBothDisposables a)
+{
+    await using (a.ConfigureAwait(false))
+    {
+    }
+}
+""".Verify();
+
+    [Fact]
     public Task CallWithTypeParameters() => """
 [CreateSyncVersion]
 public async Task MyFuncAsync<T>()
