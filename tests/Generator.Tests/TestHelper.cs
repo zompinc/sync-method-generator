@@ -8,7 +8,7 @@ namespace Generator.Tests;
 /// <summary>
 /// Helps set up the test cases.
 /// </summary>
-public static partial class TestHelper
+internal static partial class TestHelper
 {
     private const string GlobalUsingsSource = """
 global using global::System;
@@ -31,7 +31,7 @@ global using global::Zomp.SyncMethodGenerator;
 
     private static readonly string[] PreprocessorSymbols
 #if NETFRAMEWORK
-        = Array.Empty<string>();
+        = [];
 #else
         =
     [
@@ -85,8 +85,8 @@ partial class Class
 """;
         }
 
-        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
-        SyntaxTree globalUsings = CSharpSyntaxTree.ParseText(GlobalUsingsSource, parseOptions);
+        var syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
+        var globalUsings = CSharpSyntaxTree.ParseText(GlobalUsingsSource, parseOptions);
 
         // SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
         var linqAssembly = typeof(Enumerable).Assembly.Location;
@@ -117,7 +117,7 @@ partial class Class
 
         var distinct = locations.Distinct().ToArray();
 
-        IEnumerable<PortableExecutableReference> references = distinct
+        var references = distinct
             .Select(l => MetadataReference.CreateFromFile(l));
 
         var compilation = CSharpCompilation.Create(
@@ -128,7 +128,7 @@ partial class Class
 
         var generator = new SyncMethodSourceGenerator();
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(generator).WithUpdatedParseOptions(parseOptions);
+        var driver = CSharpGeneratorDriver.Create(generator).WithUpdatedParseOptions(parseOptions);
 
         driver = driver.RunGenerators(compilation);
 

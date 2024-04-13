@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace GenerationSandbox.Tests;
 
@@ -37,7 +36,7 @@ public static partial class AsyncExtensions
         var queue = new Queue<double>(windowSize);
 
         var i = 0;
-        await foreach (double d in source)
+        await foreach (var d in source)
         {
             ct.ThrowIfCancellationRequested();
 

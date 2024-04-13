@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿#if NET6_0_OR_GREATER
+using System.Linq;
+#endif
 using Xunit;
 
 namespace GenerationSandbox.Tests;

@@ -14,8 +14,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
 
-    private static MethodToGenerate? last;
-
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -69,14 +67,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
         static string BuildClassName(ClassDeclaration c)
-        {
-            if (c.TypeParameterListSyntax.IsEmpty)
-            {
-                return c.ClassName;
-            }
-
-            return c.ClassName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
-        }
+            => c.TypeParameterListSyntax.IsEmpty
+                ? c.ClassName
+                : c.ClassName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
 
         var sourcePath = $"{string.Join(".", m.Namespaces)}" +
             $".{string.Join(".", m.Classes.Select(BuildClassName))}" +
@@ -98,7 +91,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        INamedTypeSymbol? attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
+        var attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
         if (attribute == null)
         {
             // nothing to do if this type isn't available
@@ -131,7 +124,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         AttributeData syncMethodGeneratorAttributeData = null!;
 
-        foreach (AttributeData attributeData in methodSymbol.GetAttributes())
+        foreach (var attributeData in methodSymbol.GetAttributes())
         {
             if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
             {
@@ -200,7 +193,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         if (!hasErrors)
         {
-            while (node is not null && node is not CompilationUnitSyntax)
+            while (node is not null and not CompilationUnitSyntax)
             {
                 switch (node)
                 {
@@ -221,7 +214,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
 
-        last = result;
         return result;
     }
 }

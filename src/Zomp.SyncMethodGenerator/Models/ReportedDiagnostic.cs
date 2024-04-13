@@ -16,12 +16,10 @@ internal sealed record ReportedDiagnostic(DiagnosticDescriptor Descriptor, strin
     /// </summary>
     /// <param name="diagnostic">Diagnostic to convert.</param>
     public static implicit operator Diagnostic(ReportedDiagnostic diagnostic)
-    {
-        return Diagnostic.Create(
+        => Diagnostic.Create(
             descriptor: diagnostic.Descriptor,
             location: Location.Create(diagnostic.FilePath, diagnostic.TextSpan, diagnostic.LineSpan),
-            messageArgs: new object[] { diagnostic.Trivia });
-    }
+            messageArgs: [diagnostic.Trivia]);
 
     /// <summary>
     /// Creates a new <see cref="ReportedDiagnostic"/> from <see cref="DiagnosticDescriptor"/> and <see cref="Location"/>.

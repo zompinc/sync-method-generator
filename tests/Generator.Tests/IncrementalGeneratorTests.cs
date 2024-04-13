@@ -84,18 +84,18 @@ public class IncrementalGeneratorTests
         string source,
         string sourceUpdated)
     {
-        SyntaxTree baseSyntaxTree = CSharpSyntaxTree.ParseText(source);
+        var baseSyntaxTree = CSharpSyntaxTree.ParseText(source);
 
         Compilation compilation = CSharpCompilation.Create(
             "compilation",
-            new[] { baseSyntaxTree },
-            new[] { MetadataReference.CreateFromFile(typeof(Binder).GetTypeInfo().Assembly.Location) },
+            [baseSyntaxTree],
+            [MetadataReference.CreateFromFile(typeof(Binder).GetTypeInfo().Assembly.Location)],
             new CSharpCompilationOptions(OutputKind.ConsoleApplication));
 
-        ISourceGenerator sourceGenerator = new SyncMethodSourceGenerator().AsSourceGenerator();
+        var sourceGenerator = new SyncMethodSourceGenerator().AsSourceGenerator();
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            generators: new[] { sourceGenerator },
+            generators: [sourceGenerator],
             driverOptions: new GeneratorDriverOptions(default, trackIncrementalGeneratorSteps: true));
 
         // Run the generator
@@ -105,8 +105,8 @@ public class IncrementalGeneratorTests
         compilation = compilation.ReplaceSyntaxTree(baseSyntaxTree, CSharpSyntaxTree.ParseText(sourceUpdated));
         driver = driver.RunGenerators(compilation);
 
-        GeneratorRunResult result = driver.GetRunResult().Results.Single();
-        IEnumerable<(object Value, IncrementalStepRunReason Reason)> sourceOutputs =
+        var result = driver.GetRunResult().Results.Single();
+        var sourceOutputs =
             result.TrackedOutputSteps.SelectMany(outputStep => outputStep.Value).SelectMany(output => output.Outputs);
         var (value, reason) = Assert.Single(sourceOutputs);
         Assert.Equal(sourceStepReason, reason);

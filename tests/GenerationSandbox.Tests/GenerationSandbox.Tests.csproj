@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <!--Suppress warninigs alphabetically and numerically-->
-    <NoWarn>$(NoWarn);CA1303;CA1812;CA1822;CA1852;CA5394</NoWarn>
+    <NoWarn>$(NoWarn);CA1303;CA1515;CA1812;CA1822;CA1852;CA5394</NoWarn>
     <NoWarn>$(NoWarn);CS0219;CS0162;CS1998;CS8603;CS8619</NoWarn>
-    <NoWarn>$(NoWarn);IDE0035</NoWarn>
+    <NoWarn>$(NoWarn);IDE0011;IDE0035;IDE0058;IDE0060</NoWarn>
     <NoWarn>$(NoWarn);RS1035</NoWarn>
     <NoWarn>$(NoWarn);SA1201;SA1400;SA1402;SA1404</NoWarn>
     <ImplicitUsings>false</ImplicitUsings>

@@ -25,6 +25,7 @@ namespace Zomp.SyncMethodGenerator
 }
 """;
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0072:Add missing cases", Justification = "Only deal with selected SyntaxKinds")]
     internal static string GenerateExtensionClass(MethodToGenerate methodToGenerate)
     {
         static string GetKeyword(SyntaxKind sk) => sk switch
@@ -49,12 +50,12 @@ namespace Zomp.SyncMethodGenerator
             foreach (var @namespace in methodToGenerate.Namespaces)
             {
                 var indent = new string(' ', 4 * i);
-                sbBegin.Append($$"""
+                _ = sbBegin.Append($$"""
 {{indent}}namespace {{@namespace}}
 {{indent}}{
 
 """);
-                sbEnd.Insert(0, $$"""
+                _ = sbEnd.Insert(0, $$"""
 {{indent}}}
 
 """);
@@ -71,12 +72,12 @@ namespace Zomp.SyncMethodGenerator
             var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}{(@class.TypeParameterListSyntax.IsEmpty ? string.Empty
                 : "<" + string.Join(", ", @class.TypeParameterListSyntax) + ">")}";
 
-            sbBegin.Append($$"""
+            _ = sbBegin.Append($$"""
 {{indent}}{{classDeclarationLine}}
 {{indent}}{
 
 """);
-            sbEnd.Insert(0, $$"""
+            _ = sbEnd.Insert(0, $$"""
 {{indent}}}
 
 """);
