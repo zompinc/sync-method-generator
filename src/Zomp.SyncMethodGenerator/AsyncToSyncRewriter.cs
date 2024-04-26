@@ -133,7 +133,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             CastExpression(NullableType(IdentifierName(SystemObject)), expr).AppendSpace(),
             LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
 
-        var argumentType = GetSymbol(leftOfTheDot) ?? throw new InvalidOperationException("Can't process");
+        var argumentType = GetSymbol(node.Expression) ?? throw new InvalidOperationException("Can't process");
         var funcArgumentType = GetReturnType(argumentType);
 
         IdentifierNameSyntax toCheckForNullExpr;
