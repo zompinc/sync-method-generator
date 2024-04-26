@@ -37,6 +37,69 @@ partial class MyClass
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task ConditionalNullable() => """
+#nullable disable
+
+namespace Test;
+
+partial class MyClass
+{
+    [CreateSyncVersion(OmitNullableDirective = true)]
+    public async Task MethodAsync(Stream stream)
+    {
+        _ = stream?.DoSomething();
+    }
+}
+
+internal static class Extension
+{
+    public static Stream DoSomething(this Stream stream) => stream;
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task ConditionalNullableTwice() => """
+#nullable disable
+
+namespace Test;
+
+partial class MyClass
+{
+    [CreateSyncVersion(OmitNullableDirective = true)]
+    public async Task MethodAsync(Stream stream)
+    {
+        _ = stream?.DoSomething()?.DoSomething();
+    }
+}
+
+internal static class Extension
+{
+    public static Stream DoSomething(this Stream stream) => stream;
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task ConditionalNullableStructTwice() => """
+#nullable disable
+
+namespace Test;
+
+partial class MyClass
+{
+    [CreateSyncVersion(OmitNullableDirective = true)]
+    public async Task MethodAsync(int? myInt)
+    {
+        _ = myInt?.DoSomething().DoSomething();
+    }
+}
+
+internal static class Extension
+{
+    public static int DoSomething(this int myInt) => myInt;
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task NoNullableSupport() => """
 namespace Test;
 

@@ -9,7 +9,8 @@ namespace Zomp.SyncMethodGenerator;
 /// Creates a new instance of <see cref="AsyncToSyncRewriter"/>.
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpSyntaxRewriter
+/// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
     private const string SystemObject = "object";
@@ -68,6 +69,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
     private readonly SemanticModel semanticModel = semanticModel;
+    private readonly bool disableNullable = disableNullable;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
@@ -128,9 +130,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         var leftOfTheDot = (ExpressionSyntax)Visit(node.Expression)!;
 
-        static BinaryExpressionSyntax CheckNull(ExpressionSyntax expr) => BinaryExpression(
+        TypeSyntax GetNullableObject()
+            => MaybeNullableType(IdentifierName(SystemObject));
+
+        BinaryExpressionSyntax CheckNull(ExpressionSyntax expr) => BinaryExpression(
             SyntaxKind.EqualsExpression,
-            CastExpression(NullableType(IdentifierName(SystemObject)), expr).AppendSpace(),
+            CastExpression(GetNullableObject(), expr).AppendSpace(),
             LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
 
         var argumentType = GetSymbol(node.Expression) ?? throw new InvalidOperationException("Can't process");
@@ -149,7 +154,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         {
             var argumentTypeExpr = ProcessSymbol(funcArgumentType);
 
-            var separated = SeparatedList([(TypeSyntax)NullableType(argumentTypeExpr), NullableType(ProcessSymbol(chain[^1].ReturnType))]);
+            var separated = SeparatedList([MaybeNullableType(argumentTypeExpr), MaybeNullableType(ProcessSymbol(chain[^1].ReturnType))]);
 
             var type = TypeArgumentList(separated);
             funcExpr = GenericName(
@@ -164,15 +169,30 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
         for (var i = 0; i < chain.Count; i++)
         {
             var (callSymbol, reducedSymbol, returnType) = chain[i];
-            var unwrappedExpr = UnwrapExtension(callSymbol, /*Fixme*/ false, reducedSymbol, toCheckForNullExpr);
 
-            var condition = CheckNull(toCheckForNullExpr);
+            ExpressionSyntax firstArgument = funcArgumentType.IsValueType
+                ? MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    toCheckForNullExpr,
+                    IdentifierName(nameof(Nullable<int>.Value)))
+                : toCheckForNullExpr;
+            var unwrappedExpr = UnwrapExtension(callSymbol, /*Fixme*/ false, reducedSymbol, firstArgument);
 
             if (i == chain.Count - 1)
             {
+                ExpressionSyntax condition = returnType.IsValueType
+                    ? PrefixUnaryExpression(
+                        SyntaxKind.LogicalNotExpression,
+                        MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            toCheckForNullExpr,
+                            IdentifierName(nameof(Nullable<int>.HasValue))))
+                    : CheckNull(toCheckForNullExpr);
+                var castTo = MaybeNullableType(ProcessSymbol(returnType), returnType.IsValueType);
+
                 var conditional = ConditionalExpression(
                     condition,
-                    CastExpression(NullableType(ProcessSymbol(returnType)), LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                    CastExpression(castTo, LiteralExpression(SyntaxKind.NullLiteralExpression)),
                     unwrappedExpr.PrependSpace());
 
                 lastExpression = conditional;
@@ -1647,6 +1667,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel) : CSharpS
 
         return true;
     }
+
+    private TypeSyntax MaybeNullableType(TypeSyntax argumentTypeExpr, bool isValueType = false)
+        => disableNullable && !isValueType ? argumentTypeExpr : NullableType(argumentTypeExpr);
 
     private void ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack, List<SyntaxTrivia> triviaList, Action<MemberDeclarationSyntax> process)
     {

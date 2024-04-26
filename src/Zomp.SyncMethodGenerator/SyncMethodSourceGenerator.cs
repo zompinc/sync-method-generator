@@ -176,7 +176,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var rewriter = new AsyncToSyncRewriter(context.SemanticModel);
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable);
         var sn = rewriter.Visit(methodDeclarationSyntax);
         var content = sn.ToFullString();
 
