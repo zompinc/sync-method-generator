@@ -62,6 +62,11 @@ foreach (Stream? i in Array.Empty<Stream?>())
     .Verify(sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task NestedGenerics()
+    => "var dict = new Dictionary<DateTime, List<int>>();"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task TestTypes() => $$"""
 String myStr;
 string myStrPredefined;
@@ -133,6 +138,29 @@ public async Task HasIsExpressionAsync(Stream stream) => _ = stream is FileStrea
     public Task HandleNameOf()
         => "_ = nameof(Stream);"
         .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task QualifiedGenericName()
+        => "System.Collections.Generic.HashSet<byte> z = null!;"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("System.")]
+    [InlineData("global::System.")]
+    public Task QualifiedNonGenericName(string prefix)
+        => $$"""
+namespace System;
+
+public partial class Class
+{
+    [CreateSyncVersion]
+    public async Task MethodAsync()
+    {
+        {{prefix}}Security.Cryptography.CryptographicException z = null!;
+    }
+}
+""".Verify(disableUnique: true, sourceType: SourceType.Full);
 
     [Fact]
     public Task HandleAsCast()

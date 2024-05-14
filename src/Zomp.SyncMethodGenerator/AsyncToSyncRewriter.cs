@@ -288,8 +288,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
             return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}"));
         }
+        else if (node.Parent is TypeArgumentListSyntax)
+        {
+            return ProcessType(node);
+        }
 
         return @base;
+    }
+
+    public override SyntaxNode? VisitQualifiedName(QualifiedNameSyntax node)
+    {
+        var @base = (QualifiedNameSyntax)base.VisitQualifiedName(node)!;
+        return @base.Right is GenericNameSyntax ? @base.Right : (SyntaxNode)ProcessType(node);
     }
 
     public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
@@ -804,8 +814,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newSep = RemoveSeparators(@base.Arguments.GetSeparators().ToList(), indicesToRemove);
 
         var newArguments = SeparatedList(
-            RemoveAtRange(@base.Arguments, indicesToRemove)
-            .Select(z => z.SyntaxTree == node.SyntaxTree ? ProcessType(z) : z),
+            RemoveAtRange(@base.Arguments, indicesToRemove),
             newSep);
         return @base.WithArguments(newArguments);
     }
