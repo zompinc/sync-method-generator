@@ -64,13 +64,27 @@ namespace Zomp.SyncMethodGenerator
         }
 
         // Handle classes
-        foreach (var @class in methodToGenerate.Classes)
+        foreach (var parent in methodToGenerate.Parents)
         {
             var indent = new string(' ', 4 * i);
 
-            var modifiers = string.Join(string.Empty, @class.Modifiers.Select(z => GetKeyword((SyntaxKind)z) + " "));
-            var classDeclarationLine = $"{modifiers}partial class {@class.ClassName}{(@class.TypeParameterListSyntax.IsEmpty ? string.Empty
-                : "<" + string.Join(", ", @class.TypeParameterListSyntax) + ">")}";
+            var modifiers = string.Join(string.Empty, parent.Modifiers.Select(z => GetKeyword((SyntaxKind)z) + " "));
+            var parentType = parent.MethodParent switch
+            {
+                MethodParent.Class => "class",
+                MethodParent.Struct => "struct",
+                MethodParent.Record => "record"
+                + parent.ClassOrStructKeyword.Kind() switch
+                {
+                    SyntaxKind.StructKeyword => " struct",
+                    SyntaxKind.ClassKeyword => " class",
+                    _ => string.Empty,
+                },
+                _ => throw new NotImplementedException("Cannot handle the parent of the method"),
+            };
+
+            var classDeclarationLine = $"{modifiers}partial {parentType} {parent.ParentName}{(parent.TypeParameterListSyntax.IsEmpty ? string.Empty
+                : "<" + string.Join(", ", parent.TypeParameterListSyntax) + ">")}";
 
             _ = sbBegin.Append($$"""
 {{indent}}{{classDeclarationLine}}

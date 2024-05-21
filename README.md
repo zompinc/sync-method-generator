@@ -18,7 +18,7 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
 
 ### CreateSyncVersionAttribute
 
-Decorate your async method with `CreateSyncVersionAttribute` in your `partial` class
+Decorate your async method with `CreateSyncVersionAttribute` in your `partial` class, struct or record
 
 ```cs
 [Zomp.SyncMethodGenerator.CreateSyncVersion]

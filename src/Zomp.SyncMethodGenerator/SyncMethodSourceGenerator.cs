@@ -66,13 +66,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
-        static string BuildClassName(ClassDeclaration c)
+        static string BuildClassName(MethodParentDeclaration c)
             => c.TypeParameterListSyntax.IsEmpty
-                ? c.ClassName
-                : c.ClassName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
+                ? c.ParentName
+                : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
 
         var sourcePath = $"{string.Join(".", m.Namespaces)}" +
-            $".{string.Join(".", m.Classes.Select(BuildClassName))}" +
+            $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
             $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
 
         var source = SourceGenerationHelper.GenerateExtensionClass(m);
@@ -138,19 +138,48 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
         disableNullable |= explicitDisableNullable;
 
-        var classes = ImmutableArray.CreateBuilder<ClassDeclaration>();
+        var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;
         while (node.Parent is not null)
         {
             node = node.Parent;
-            if (node is not ClassDeclarationSyntax classSyntax)
+            SyntaxTokenList originalModifiers;
+            SyntaxToken identifier;
+            SyntaxToken classOrStructKeyword = default;
+            TypeParameterListSyntax? typeParameterList;
+            MethodParent methodParent;
+            if (node is ClassDeclarationSyntax classSyntax)
+            {
+                originalModifiers = classSyntax.Modifiers;
+                typeParameterList = classSyntax.TypeParameterList;
+                identifier = classSyntax.Identifier;
+                methodParent = MethodParent.Class;
+            }
+            else if (node is StructDeclarationSyntax structSyntax)
+            {
+                originalModifiers = structSyntax.Modifiers;
+                typeParameterList = structSyntax.TypeParameterList;
+                identifier = structSyntax.Identifier;
+                methodParent = MethodParent.Struct;
+            }
+            else if (node is RecordDeclarationSyntax recordSyntax)
+            {
+                originalModifiers = recordSyntax.Modifiers;
+                typeParameterList = recordSyntax.TypeParameterList;
+                identifier = recordSyntax.Identifier;
+                methodParent = MethodParent.Record;
+                classOrStructKeyword = recordSyntax.ClassOrStructKeyword;
+            }
+            else
             {
                 break;
             }
 
+            ////var modifiers = classSyntax?.Modifiers ?? structSyntax.Modifiers;
+
             var modifiers = ImmutableArray.CreateBuilder<ushort>();
 
-            foreach (var mod in classSyntax.Modifiers)
+            foreach (var mod in originalModifiers)
             {
                 var kind = mod.RawKind;
                 if (kind == (int)SyntaxKind.PartialKeyword)
@@ -163,12 +192,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
             var typeParameters = ImmutableArray.CreateBuilder<string>();
 
-            foreach (var typeParameter in classSyntax.TypeParameterList?.Parameters ?? default)
+            foreach (var typeParameter in typeParameterList?.Parameters ?? default)
             {
                 typeParameters.Add(typeParameter.Identifier.ValueText);
             }
 
-            classes.Insert(0, new(classSyntax.Identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable()));
+            classes.Insert(0, new(methodParent, classOrStructKeyword, identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable()));
         }
 
         if (classes.Count == 0)
