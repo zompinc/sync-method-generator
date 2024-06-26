@@ -12,7 +12,7 @@ namespace Test
         /// <param name="items">Items to scan.</param>
         /// <returns>Max indices</returns>
         public static global::System.Collections.Generic.IEnumerable<int> IndexOfMaxSoFar<T>(this global::System.Collections.Generic.IEnumerable<T> items)
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
             where T : IComparisonOperators<T, T, bool>
 #else
             where T : global::System.IComparisonOperators<T, T>

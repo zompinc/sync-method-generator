@@ -19,7 +19,7 @@ global using global::System.Data.Common;
 global using global::System.Drawing;
 global using global::System.IO;
 global using global::System.Linq;
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
 global using global::System.Numerics;
 #endif
 global using global::System.Reflection;
@@ -35,11 +35,11 @@ global using global::Zomp.SyncMethodGenerator;
 #else
         =
     [
-#if NET7_0
-        "NET7_0",
+#if NET8_0
+        "NET8_0",
 #endif
-#if NET7_0_OR_GREATER
-        "NET7_0_OR_GREATER",
+#if NET8_0_OR_GREATER
+        "NET8_0_OR_GREATER",
 #endif
 #if NET6_0
         "NET6_0",
@@ -173,7 +173,7 @@ partial class Class
 
     internal static string ChangeIndentation(string source, Func<string, string> func)
     {
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
         var lines = NewLineRegex().Split(source);
 #else
         var lines = Regex.Split(source, "\r\n");
@@ -182,7 +182,7 @@ partial class Class
         return linesWithIndentation;
     }
 
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
     [GeneratedRegex("\r\n")]
     private static partial Regex NewLineRegex();
 #endif

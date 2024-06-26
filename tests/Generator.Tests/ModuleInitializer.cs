@@ -61,7 +61,7 @@ public static partial class ModuleInitializer
 
     private static Target SourceToTarget(GeneratedSourceResult source)
     {
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
         var r = DefaultTestRegex();
 #else
         var r = new Regex(SimpleTestCasePattern, RegexOptions.Singleline | RegexOptions.Compiled);
@@ -74,7 +74,7 @@ public static partial class ModuleInitializer
         {
             sourceToStore = TestHelper.ChangeIndentation(match.Groups[1].Value, TestHelper.RemoveIndentation);
 
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
             var methodMatch = DefaultMethodTestRegex();
 #else
             var methodMatch = new Regex(MethodTestCasePattern, RegexOptions.Singleline | RegexOptions.Compiled);
@@ -93,7 +93,7 @@ public static partial class ModuleInitializer
             """;
 
         var path = Path.GetFileNameWithoutExtension(source.HintName);
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
         var r2 = DefaultTestPathRegex();
 #else
         var r2 = new Regex(DefaultTestPathPattern, RegexOptions.Singleline | RegexOptions.Compiled);
@@ -102,7 +102,7 @@ public static partial class ModuleInitializer
         return new("cs", data, path);
     }
 
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
     [GeneratedRegex(SimpleTestCasePattern, RegexOptions.Singleline | RegexOptions.Compiled)]
     private static partial Regex DefaultTestRegex();
 

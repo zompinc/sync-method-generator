@@ -18,7 +18,7 @@ namespace Test
         /// <returns>Max indices</returns>
         [CreateSyncVersion]
         public static async IAsyncEnumerable<int> IndexOfMaxSoFarAsync<T>(this IAsyncEnumerable<T> items, IProgress<int>? progress = null, [EnumeratorCancellation] CancellationToken ct = default)
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
             where T : IComparisonOperators<T, T, bool>
 #else
             where T : IComparisonOperators<T, T>
