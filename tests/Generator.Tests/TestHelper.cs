@@ -1,4 +1,5 @@
 ﻿using System.Data.Common;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Zomp.SyncMethodGenerator;
 using static Generator.Tests.ModuleInitializer;
@@ -16,6 +17,7 @@ global using global::System.Buffers;
 global using global::System.Collections.Generic;
 global using global::System.Data;
 global using global::System.Data.Common;
+global using global::System.Diagnostics;
 global using global::System.Drawing;
 global using global::System.IO;
 global using global::System.Linq;
@@ -93,6 +95,7 @@ partial class Class
         var locations = new List<string>
         {
             typeof(IAsyncEnumerable<>).Assembly.Location,
+            typeof(DataReceivedEventHandler).Assembly.Location,
             typeof(DbDataReader).Assembly.Location,
             typeof(ValueTask<>).Assembly.Location,
             typeof(System.Drawing.Point).Assembly.Location,

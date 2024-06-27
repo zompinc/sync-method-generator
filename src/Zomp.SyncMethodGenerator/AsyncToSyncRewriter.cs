@@ -717,14 +717,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return replacement;
         }
 
-        if (symbol is null
-            or { ContainingType.IsGenericType: true }
-            or INamedTypeSymbol { IsGenericType: true })
+        if (semanticModel.GetTypeInfo(node).Type is not { } t
+            || t is INamedTypeSymbol { IsGenericType: true })
         {
             return @base;
         }
 
-        var newType = ProcessSymbol(symbol.ContainingType);
+        var newType = ProcessSymbol(t);
         return newType == node.Type ? @base : @base.WithType(newType);
     }
 

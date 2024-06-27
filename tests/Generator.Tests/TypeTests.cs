@@ -197,4 +197,14 @@ internal partial class Class<T>
     internal class Int<TU> { }
 }
 """.Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task EventHandlerType()
+        => "_ = new DataReceivedEventHandler((s, e) => { });"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task CreateNullableType()
+        => "new Dictionary<int, (int I, Stream? S)?>().TryGetValue(0, out (int I, Stream? S)? a);"
+        .Verify(sourceType: SourceType.MethodBody);
 }
