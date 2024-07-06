@@ -827,4 +827,15 @@ _ = HelperMethod(1, 2);
 static async Task<byte[]> HelperMethod(params int[] myParams) => null;
 _ = await HelperMethod(1, 2);
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task BasicEvent() => """
+public event EventHandler? MyEvent;
+
+[CreateSyncVersion]
+private async Task MethodAsync()
+{
+    MyEvent?.Invoke(this, EventArgs.Empty);
+}
+""".Verify();
 }

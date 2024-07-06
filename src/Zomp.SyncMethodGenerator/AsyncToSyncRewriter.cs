@@ -1497,6 +1497,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IParameterSymbol ps => ps.Type,
         IMethodSymbol ms => ms.ReturnType,
         IDiscardSymbol ds => ds.Type,
+        IEventSymbol es => es.Type,
         _ => throw new NotSupportedException($"Can't process {symbol}"),
     };
 
