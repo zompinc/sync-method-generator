@@ -5,6 +5,6 @@ partial class MyClass
 {
     public void Method(global::System.IO.Stream stream)
     {
-        _ = ((object)stream == null?(global::System.IO.Stream)null: global::Test.Extension.DoSomething(stream));
+        _ = ((object)stream == null ? (global::System.IO.Stream)null : global::Test.Extension.DoSomething(stream));
     }
 }

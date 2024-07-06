@@ -5,6 +5,6 @@ partial class MyClass
 {
     public void Method(int? myInt)
     {
-        _ = (!myInt.HasValue?(int?)null: global::Test.Extension.DoSomething(myInt.Value));
+        _ = (!myInt.HasValue ? (int?)null : global::Test.Extension.DoSomething2(global::Test.Extension.DoSomething(myInt.Value)));
     }
 }

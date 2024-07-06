@@ -7,13 +7,13 @@ partial class MyClass
     {
         _ = ((global::System.Func<global::System.IO.Stream,global::System.IO.Stream>)((param)=>
         {
-            if((object)param == null)
+            if ((object)param == null)
             {
                 return null;
             }
 
-            global::System.IO.Stream check0 =global::Test.Extension.DoSomething(param);
-            return (object)check0 == null?(global::System.IO.Stream)null: global::Test.Extension.DoSomething(check0);
+            global::System.IO.Stream check0 = global::Test.Extension.DoSomething(param);
+            return (object)check0 == null ? (global::System.IO.Stream)null : global::Test.Extension.DoSomething(check0);
         }))(stream);
     }
 }

@@ -89,13 +89,14 @@ partial class MyClass
     [CreateSyncVersion(OmitNullableDirective = true)]
     public async Task MethodAsync(int? myInt)
     {
-        _ = myInt?.DoSomething().DoSomething();
+        _ = myInt?.DoSomething().DoSomething2();
     }
 }
 
 internal static class Extension
 {
     public static int DoSomething(this int myInt) => myInt;
+    public static int DoSomething2(this int myInt) => myInt;
 }
 """.Verify(sourceType: SourceType.Full);
 

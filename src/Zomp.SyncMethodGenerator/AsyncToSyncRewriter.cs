@@ -73,6 +73,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
+    private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
 
     private enum SyncOnlyDirectiveType
     {
@@ -103,8 +104,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         ExtensionExprSymbol? GetExtensionExprSymbol(InvocationExpressionSyntax invocation)
             => GetSymbol(invocation) is not IMethodSymbol
-            { IsExtensionMethod: true, ReducedFrom: { } reducedFrom, ReturnType: { } returnType }
-            ? null : new(invocation, reducedFrom, returnType);
+            { IsExtensionMethod: true, ReturnType: { } returnType }
+            ? null : new(invocation, returnType);
 
         while (curNode is { WhenNotNull: { } whenNotNull })
         {
@@ -146,6 +147,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var statements = new List<StatementSyntax>();
         var parameter = Identifier("param");
+
         if (leftOfTheDot is IdentifierNameSyntax ins && chain.Count == 1)
         {
             toCheckForNullExpr = ins;
@@ -168,7 +170,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         for (var i = 0; i < chain.Count; i++)
         {
-            var (callSymbol, reducedSymbol, returnType) = chain[i];
+            var (callSymbol, returnType) = chain[i];
 
             ExpressionSyntax firstArgument = funcArgumentType.IsValueType
                 ? MemberAccessExpression(
@@ -176,11 +178,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                     toCheckForNullExpr,
                     IdentifierName(nameof(Nullable<int>.Value)))
                 : toCheckForNullExpr;
-            var unwrappedExpr = UnwrapExtension(callSymbol, /*Fixme*/ false, reducedSymbol, firstArgument);
+            replaceInInvocation.Push(firstArgument);
+            var unwrappedExpr = (InvocationExpressionSyntax)Visit(callSymbol);
 
             if (i == chain.Count - 1)
             {
-                ExpressionSyntax condition = returnType.IsValueType
+                ExpressionSyntax condition = funcArgumentType.IsValueType
                     ? PrefixUnaryExpression(
                         SyntaxKind.LogicalNotExpression,
                         MemberAccessExpression(
@@ -191,8 +194,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 var castTo = MaybeNullableType(ProcessSymbol(returnType), returnType.IsValueType);
 
                 var conditional = ConditionalExpression(
-                    condition,
-                    CastExpression(castTo, LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                    condition.AppendSpace(),
+                    CastExpression(castTo, LiteralExpression(SyntaxKind.NullLiteralExpression)).PrependSpace().AppendSpace(),
                     unwrappedExpr.PrependSpace());
 
                 lastExpression = conditional;
@@ -204,12 +207,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var returnNullStatement = ReturnStatement(LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
 
             var ifBlock = ((ICollection<StatementSyntax>)[returnNullStatement]).CreateBlock(3);
-            statements.Add(IfStatement(CheckNull(toCheckForNullExpr), ifBlock));
+            var ifStatement = IfStatement(Token(SyntaxKind.IfKeyword), Token(SyntaxKind.OpenParenToken).PrependSpace(), CheckNull(toCheckForNullExpr), Token(SyntaxKind.CloseParenToken), ifBlock, null);
+            statements.Add(ifStatement);
 
             var toCheckForNull = Identifier($"check{i}");
             var localType = ProcessSymbol(returnType); // reduced will return generic
 
-            var declarator = VariableDeclarator(toCheckForNull.AppendSpace(), null, EqualsValueClause(unwrappedExpr));
+            var declarator = VariableDeclarator(toCheckForNull.AppendSpace(), null, EqualsValueClause(unwrappedExpr.PrependSpace()));
             var declaration = VariableDeclaration(localType.AppendSpace(), SeparatedList([declarator]));
             var intermediaryNullCheck = LocalDeclarationStatement(declaration);
 
@@ -557,19 +561,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             newName = GetNewName(methodSymbol);
         }
 
+        var reducedFromExtensionMethod = methodSymbol.IsExtensionMethod ? methodSymbol.ReducedFrom : null;
+
+        // Handle non null conditional access expression eg. arr?.First()
+        if (@base.Expression is MemberBindingExpressionSyntax
+            && reducedFromExtensionMethod is not null
+            && replaceInInvocation.Count > 0)
+        {
+            return UnwrapExtension(@base, isMemory, reducedFromExtensionMethod, replaceInInvocation.Pop());
+        }
+
         if (@base.Expression is not MemberAccessExpressionSyntax { } memberAccess)
         {
             return isMemory ? AppendSpan(@base) : @base;
         }
 
+        // Handle .ConfigureAwait() and return the part in front of it
         if (IsTaskExtension(methodSymbol))
         {
             return memberAccess.Expression;
         }
 
-        if (methodSymbol is { IsExtensionMethod: true, ReducedFrom: { } reducedFrom })
+        // Handle all other extension methods eg. arr.First()
+        if (reducedFromExtensionMethod is not null)
         {
-            return UnwrapExtension(@base, isMemory, reducedFrom, memberAccess.Expression);
+            return UnwrapExtension(@base, isMemory, reducedFromExtensionMethod, memberAccess.Expression);
         }
 
         if (memberAccess.Name is not SimpleNameSyntax { Identifier.ValueText: { } name })
@@ -2081,7 +2097,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
     }
 
-    private sealed record ExtensionExprSymbol(InvocationExpressionSyntax InvocationExpression, IMethodSymbol ReducedFrom, ITypeSymbol ReturnType);
+    private sealed record ExtensionExprSymbol(InvocationExpressionSyntax InvocationExpression, ITypeSymbol ReturnType);
 
     private sealed record RemoveArgumentContext(bool IsNegated = false);
 }
