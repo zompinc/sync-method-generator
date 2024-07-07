@@ -24,6 +24,42 @@ async Task MethodAsync(Func<int, Task> bar)
 }
 """.Verify();
 
+    [Fact]
+    public Task FuncToActionInParameterExplicitInvoke() => """
+[CreateSyncVersion]
+async Task MethodAsync(Func<Task> bar)
+{
+    await bar.Invoke();
+}
+""".Verify();
+
+    [Fact]
+    public Task FuncToActionInParameterTwice() => """
+[CreateSyncVersion]
+async Task MethodAsync(Func<Func<Task>> bar)
+{
+    await bar()();
+}
+""".Verify();
+
+    [Fact]
+    public Task FuncToActionInParameterTwiceExplicitInvoke() => """
+[CreateSyncVersion]
+async Task MethodAsync(Func<Func<Task>> bar)
+{
+    await bar().Invoke();
+}
+""".Verify();
+
+    [Fact]
+    public Task FuncToActionInParameterTwiceWithArgument() => """
+[CreateSyncVersion]
+async Task MethodAsync(Func<int, Func<Task>> bar)
+{
+    await bar(9)();
+}
+""".Verify();
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -63,7 +99,7 @@ var result = await delAsync({iProgressArg}, CancellationToken.None);
 
     [InlineData("null")]
     [InlineData("new Progress<int>()")]
-    public Task AsyncDelegateWithMullableIProgress(string iProgressArg) => $"""
+    public Task AsyncDelegateWithNullableIProgress(string iProgressArg) => $"""
 Func<IProgress<int>?, CancellationToken, Task<int>> delAsync = async (p, ct) => await Task.FromResult(2);
 var result = await delAsync({iProgressArg}, CancellationToken.None);
 """.Verify(disableUnique: true, sourceType: SourceType.MethodBody);

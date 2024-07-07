@@ -448,23 +448,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
 
-        if (node.Type is not null && @base.Type is not null)
-        {
-            var originalType = node.Type;
-            var variableType = GetSymbol(originalType);
+        return node.Type is { } originalType && @base.Type is not null
 
-            if (variableType is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
-                && GetNameWithoutTypeParams(namedTypeSymbol) is SystemFunc)
-            {
-                if (ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax)
-                {
-                    return @base.WithType(newTypeSyntax.WithTriviaFrom(originalType));
-                }
-            }
-        }
+            // If type is generic
+            && GetSymbol(originalType) is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
 
-        return node.Type is null || TypeAlreadyQualified(node.Type) ? @base
-            : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+            // And it is System.Func
+            && GetNameWithoutTypeParams(namedTypeSymbol) is SystemFunc
+
+            // And can be converter to Action
+            && ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax
+            ? @base.WithType(newTypeSyntax.WithTriviaFrom(originalType))
+            : (node.Type is null || TypeAlreadyQualified(node.Type) ? @base
+            : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base));
     }
 
     /// <inheritdoc/>
@@ -1624,8 +1620,27 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         var typeArgs = namedTypeSymbol.TypeArguments;
 
-        if (typeArgs[^1].ToString() is not TaskType and not ValueTaskType
+        if (typeArgs[^1] is not INamedTypeSymbol lastTypeArgument
             || originalType is not GenericNameSyntax gns)
+        {
+            return null;
+        }
+
+        if (GetNameWithoutTypeParams(lastTypeArgument) is SystemFunc)
+        {
+            if (ConvertFuncToAction(gns.TypeArgumentList.Arguments[^1], lastTypeArgument) is not { } child)
+            {
+                return null;
+            }
+
+            var newList = (List<TypeSyntax>)[.. gns.TypeArgumentList.Arguments];
+            newList.RemoveAt(newList.Count - 1);
+            newList.Add(child);
+            var newSeparatedList = SeparatedList(newList, gns.TypeArgumentList.Arguments.GetSeparators());
+            var res = gns.WithTypeArgumentList(TypeArgumentList(newSeparatedList));
+            return res;
+        }
+        else if (lastTypeArgument.ToString() is not TaskType and not ValueTaskType)
         {
             return null;
         }
@@ -1636,18 +1651,25 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var list = new List<TypeSyntax>();
         if (typeArgs.Length > 1)
         {
+            // Func<something, Task> => Action<something>
             for (var i = 0; i < typeArgs.Length - 1; i++)
             {
                 list.Add(ProcessSymbol(typeArgs[i]));
             }
 
-            var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
+            var originalSeparators = (List<SyntaxToken>)[.. gns.TypeArgumentList.Arguments.GetSeparators()];
+
+            if (originalSeparators.Count > 0 && list.Count == originalSeparators.Count)
+            {
+                originalSeparators.RemoveAt(originalSeparators.Count - 1);
+            }
 
             var separatedList = SeparatedList(list, originalSeparators);
             newTypeSyntax = GenericName(Identifier(newType), TypeArgumentList(separatedList));
         }
         else
         {
+            // Func<Task> => Action
             newTypeSyntax = IdentifierName(newType);
         }
 
@@ -1950,16 +1972,34 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         if (symbol is IMethodSymbol methodSymbol
-            && expression is MemberAccessExpressionSyntax memberAccessExpression)
+            && expression is MemberAccessExpressionSyntax memberAccessExpression
+            && IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
         {
-            if (IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
-            {
-                return DropInvocation(childInvocation);
-            }
+            return DropInvocation(childInvocation);
         }
 
+        IParameterSymbol? GetParameter(ISymbol symbol, InvocationExpressionSyntax node) => symbol switch
+        {
+            IParameterSymbol ps => ps,
+            IMethodSymbol { MethodKind: MethodKind.DelegateInvoke }
+                => node.Expression switch
+                {
+                    MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax mae }
+                        when GetSymbol(mae.Expression) is { } parentSymbol
+                        => GetParameter(parentSymbol, mae),
+                    MemberAccessExpressionSyntax mae
+                        when GetSymbol(mae.Expression) is IParameterSymbol ps
+                        => ps,
+                    InvocationExpressionSyntax parentIes
+                        when GetSymbol(parentIes.Expression) is { } parentSymbol
+                        => GetParameter(parentSymbol, parentIes),
+                    _ => null,
+                },
+            _ => null,
+        };
+
         // Ensure that if a parameter is called, which hasn't been removed, invocation isn't dropped.
-        return (symbol is not IParameterSymbol ps || removedParameters.Contains(ps)) && HasSymbolAndShouldBeRemoved(invocation);
+        return (GetParameter(symbol, invocation) is not IParameterSymbol ps || removedParameters.Contains(ps)) && HasSymbolAndShouldBeRemoved(invocation);
     }
 
     private bool ShouldRemoveArrowExpression(ArrowExpressionClauseSyntax? arrowNullable)
