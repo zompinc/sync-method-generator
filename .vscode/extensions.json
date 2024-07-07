@@ -3,8 +3,8 @@
     "ban.spellright",
     "DavidAnson.vscode-markdownlint",
     "esbenp.prettier-vscode",
-    "formulahendry.dotnet-test-explorer",
     "foxundermoon.shell-format",
+    "GitHub.vscode-github-actions",
     "ms-dotnettools.csharp"
   ]
 }
