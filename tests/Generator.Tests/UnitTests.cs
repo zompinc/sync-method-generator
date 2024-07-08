@@ -552,6 +552,19 @@ public static async Task<int> InternalExampleAsync(Stream stream, CancellationTo
 """.Verify();
 
     [Fact]
+    public Task BasicInterface() => """
+namespace Test;
+
+public partial interface IMyInterface
+{
+    [CreateSyncVersion]
+    async Task MethodAsync()
+    {
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task LocalFunctionNonGeneric() => """
 [CreateSyncVersion]
 public static async Task<int> InternalExampleAsync(Stream stream, CancellationToken ct)

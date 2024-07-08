@@ -72,6 +72,7 @@ namespace Zomp.SyncMethodGenerator
             var parentType = parent.MethodParent switch
             {
                 MethodParent.Class => "class",
+                MethodParent.Interface => "interface",
                 MethodParent.Struct => "struct",
                 MethodParent.Record => "record"
                 + parent.ClassOrStructKeyword.Kind() switch

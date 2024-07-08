@@ -5,4 +5,5 @@ internal enum MethodParent
     Class,
     Struct,
     Record,
+    Interface,
 }

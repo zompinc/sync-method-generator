@@ -170,6 +170,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 methodParent = MethodParent.Record;
                 classOrStructKeyword = recordSyntax.ClassOrStructKeyword;
             }
+            else if (node is InterfaceDeclarationSyntax idx)
+            {
+                originalModifiers = idx.Modifiers;
+                typeParameterList = idx.TypeParameterList;
+                identifier = idx.Identifier;
+                methodParent = MethodParent.Interface;
+            }
             else
             {
                 break;
