@@ -143,68 +143,21 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         while (node.Parent is not null)
         {
             node = node.Parent;
-            SyntaxTokenList originalModifiers;
-            SyntaxToken identifier;
-            SyntaxToken classOrStructKeyword = default;
-            TypeParameterListSyntax? typeParameterList;
-            MethodParent methodParent;
-            if (node is ClassDeclarationSyntax classSyntax)
+            MethodParentDeclaration? mpd = node switch
             {
-                originalModifiers = classSyntax.Modifiers;
-                typeParameterList = classSyntax.TypeParameterList;
-                identifier = classSyntax.Identifier;
-                methodParent = MethodParent.Class;
-            }
-            else if (node is StructDeclarationSyntax structSyntax)
-            {
-                originalModifiers = structSyntax.Modifiers;
-                typeParameterList = structSyntax.TypeParameterList;
-                identifier = structSyntax.Identifier;
-                methodParent = MethodParent.Struct;
-            }
-            else if (node is RecordDeclarationSyntax recordSyntax)
-            {
-                originalModifiers = recordSyntax.Modifiers;
-                typeParameterList = recordSyntax.TypeParameterList;
-                identifier = recordSyntax.Identifier;
-                methodParent = MethodParent.Record;
-                classOrStructKeyword = recordSyntax.ClassOrStructKeyword;
-            }
-            else if (node is InterfaceDeclarationSyntax idx)
-            {
-                originalModifiers = idx.Modifiers;
-                typeParameterList = idx.TypeParameterList;
-                identifier = idx.Identifier;
-                methodParent = MethodParent.Interface;
-            }
-            else
+                ClassDeclarationSyntax o => new(MethodParent.Class, o.Identifier, o.Modifiers, o.TypeParameterList),
+                StructDeclarationSyntax o => new(MethodParent.Struct, o.Identifier, o.Modifiers, o.TypeParameterList),
+                RecordDeclarationSyntax o => new(MethodParent.Record, o.Identifier, o.Modifiers, o.TypeParameterList, o.ClassOrStructKeyword),
+                InterfaceDeclarationSyntax o => new(MethodParent.Interface, o.Identifier, o.Modifiers, o.TypeParameterList),
+                _ => null,
+            };
+
+            if (mpd is null)
             {
                 break;
             }
 
-            ////var modifiers = classSyntax?.Modifiers ?? structSyntax.Modifiers;
-
-            var modifiers = ImmutableArray.CreateBuilder<ushort>();
-
-            foreach (var mod in originalModifiers)
-            {
-                var kind = mod.RawKind;
-                if (kind == (int)SyntaxKind.PartialKeyword)
-                {
-                    continue;
-                }
-
-                modifiers.Add((ushort)kind);
-            }
-
-            var typeParameters = ImmutableArray.CreateBuilder<string>();
-
-            foreach (var typeParameter in typeParameterList?.Parameters ?? default)
-            {
-                typeParameters.Add(typeParameter.Identifier.ValueText);
-            }
-
-            classes.Insert(0, new(methodParent, classOrStructKeyword, identifier.ValueText, modifiers.ToImmutable(), typeParameters.ToImmutable()));
+            classes.Insert(0, mpd);
         }
 
         if (classes.Count == 0)
