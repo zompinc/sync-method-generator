@@ -25,10 +25,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string ConfiguredTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredTaskAwaitable";
     private const string ConfiguredValueTaskAwaitable = "System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable";
     private const string ConfiguredCancelableAsyncEnumerable = "System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable";
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1310:Field names should not contain underscore", Justification = "Nested class")]
+    private const string ConfiguredCancelableAsyncEnumerable_Enumerator = ConfiguredCancelableAsyncEnumerable + ".Enumerator";
     private const string ConfiguredAsyncDisposable = "System.Runtime.CompilerServices.ConfiguredAsyncDisposable";
+    private const string IEnumerable = "System.Collections.Generic.IEnumerable";
+    private const string IEnumerator = "System.Collections.Generic.IEnumerator";
+    private const string IAsyncEnumerable = "System.Collections.Generic.IAsyncEnumerable";
     private const string IAsyncEnumerator = "System.Collections.Generic.IAsyncEnumerator";
     private const string FromResult = "FromResult";
     private const string AsTask = "AsTask";
+    private const string MoveNextAsync = "MoveNextAsync";
     private const string Delay = "Delay";
     private const string Span = "Span";
     private const string CompletedTask = "CompletedTask";
@@ -37,8 +43,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static readonly HashSet<string> InterfacesToDrop = [IProgressInterface, IAsyncResultInterface];
     private static readonly Dictionary<string, string?> Replacements = new()
     {
-        { "System.Collections.Generic.IAsyncEnumerable", "System.Collections.Generic.IEnumerable" },
-        { IAsyncEnumerator, "System.Collections.Generic.IEnumerator" },
+        { IAsyncEnumerable, IEnumerable },
+        { IAsyncEnumerator, IEnumerator },
+        { ConfiguredCancelableAsyncEnumerable_Enumerator, IEnumerator },
         { TaskType, null },
         { ValueTaskType, null },
         { ReadOnlyMemory, "System.ReadOnlySpan" },
@@ -303,7 +310,25 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitQualifiedName(QualifiedNameSyntax node)
     {
         var @base = (QualifiedNameSyntax)base.VisitQualifiedName(node)!;
-        return @base.Right is GenericNameSyntax ? @base.Right : (SyntaxNode)ProcessType(node);
+
+        GenericNameSyntax? GetConfiguredCancelableAsyncEnumerableEnumerator()
+        {
+            var symbol = GetSymbol(node);
+
+            if (symbol == null)
+            {
+                return null;
+            }
+
+            var name = GetNameWithoutTypeParams(symbol);
+
+            return node.Left is GenericNameSyntax gns
+                && name == ConfiguredCancelableAsyncEnumerable_Enumerator
+            ? GenericName(IEnumerator).WithTypeArgumentList(gns.TypeArgumentList).WithTriviaFrom(node)
+            : null;
+        }
+
+        return GetConfiguredCancelableAsyncEnumerableEnumerator() ?? (@base.Right is GenericNameSyntax ? @base.Right : (SyntaxNode)ProcessType(node));
     }
 
     public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
@@ -572,8 +597,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return isMemory ? AppendSpan(@base) : @base;
         }
 
-        // Handle .ConfigureAwait() and return the part in front of it
-        if (IsTaskExtension(methodSymbol))
+        if (GetNameWithoutTypeParams(methodSymbol.ReturnType) == ConfiguredCancelableAsyncEnumerable_Enumerator)
+        {
+            return @base.WithExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, memberAccess.Expression, IdentifierName(nameof(IEnumerable.GetEnumerator)))).WithArgumentList(ArgumentList([]));
+        }
+
+        // Handle .ConfigureAwait(), .WithCancellationToken() and return the part in front of it
+        if (IsTaskExtension(methodSymbol) && methodSymbol.Name is not MoveNextAsync)
         {
             return memberAccess.Expression;
         }
@@ -589,7 +619,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return @base;
         }
 
-        if (name.EndsWithAsync() || returnType == IAsyncEnumerator)
+        if (name.EndsWithAsync() || returnType is IAsyncEnumerator or ConfiguredCancelableAsyncEnumerable_Enumerator)
         {
             newName = RemoveAsync(name);
         }

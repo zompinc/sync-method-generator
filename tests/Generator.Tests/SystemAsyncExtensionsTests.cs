@@ -93,4 +93,52 @@ async Task<int> SumAsync(IAsyncEnumerable<(int a, int b)> enumerable)
     return sum;
 }
 """.Verify();
+
+    [Fact]
+    public Task ConfiguredCancelableAsyncEnumerable() => """
+[CreateSyncVersion]
+internal async Task<int> MethodAsync(IAsyncEnumerable<(Stream A, int B)> enumerable, CancellationToken ct)
+{
+    var enumerator = enumerable.WithCancellation(ct).ConfigureAwait(false).GetAsyncEnumerator();
+
+    int sum = 0;
+    while (await enumerator.MoveNextAsync())
+    {
+        sum += (int)enumerator.Current.A.Length + enumerator.Current.B;
+    }
+
+    return sum;
+}
+""".Verify();
+
+    [Fact]
+    public Task ConfiguredCancelableAsyncEnumerableExtension() => """
+// From https://github.com/dotnet/reactive/blob/5f831de0bc70bc660d21c3b9e04e581269691a2a/Ix.NET/Source/System.Linq.Async/System/Threading/Tasks/AsyncEnumerableExt.cs#L15
+
+[CreateSyncVersion]
+public static ConfiguredCancelableAsyncEnumerable<T>.Enumerator GetConfiguredEnumeratorAsync<T>(IAsyncEnumerable<T> enumerable, CancellationToken ct)
+{
+    return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
+}
+""".Verify();
+
+    [Fact]
+    public Task DropConfiguredCancelableAsyncEnumerableExtensionInvocation() => """
+namespace Test;
+
+internal static partial class Extensions
+{
+    // From https://github.com/dotnet/reactive/blob/5f831de0bc70bc660d21c3b9e04e581269691a2a/Ix.NET/Source/System.Linq.Async/System/Threading/Tasks/AsyncEnumerableExt.cs#L15
+    internal static ConfiguredCancelableAsyncEnumerable<T>.Enumerator GetConfiguredAsyncEnumerator<T>(this IAsyncEnumerable<T> enumerable, CancellationToken ct)
+    {
+        return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
+    }
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    internal static async Task MethodAsync(IAsyncEnumerable<int> enumerable, CancellationToken ct)
+    {
+        await using ConfiguredCancelableAsyncEnumerable<int>.Enumerator enumerator = enumerable.GetConfiguredAsyncEnumerator(ct);
+    }
+}
+""".Verify(sourceType: SourceType.Full);
 }
