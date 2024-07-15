@@ -117,7 +117,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        if (!methodSymbol.IsAsync && !AsyncToSyncRewriter.IsTypeOfInterest(methodSymbol.ReturnType))
+        if (!methodSymbol.IsAsync
+            && (methodSymbol.ReturnType is not INamedTypeSymbol named
+                || !AsyncToSyncRewriter.IsTypeOfInterest(named)))
         {
             return null;
         }

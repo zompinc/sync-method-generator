@@ -123,6 +123,21 @@ public static ConfiguredCancelableAsyncEnumerable<T>.Enumerator GetConfiguredEnu
 """.Verify();
 
     [Fact]
+    public Task ConfiguredCancelableAsyncEnumerableExtensionUsingStatic() => """
+using static System.Runtime.CompilerServices.ConfiguredCancelableAsyncEnumerable<int>;
+namespace Test;
+
+internal static partial class Extensions
+{
+    [CreateSyncVersion]
+    public static Enumerator GetConfiguredAsyncEnumerator(IAsyncEnumerable<int> enumerable, CancellationToken ct)
+    {
+        return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task DropConfiguredCancelableAsyncEnumerableExtensionInvocation() => """
 namespace Test;
 
@@ -134,7 +149,7 @@ internal static partial class Extensions
         return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
     }
 
-    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    [CreateSyncVersion]
     internal static async Task MethodAsync(IAsyncEnumerable<int> enumerable, CancellationToken ct)
     {
         await using ConfiguredCancelableAsyncEnumerable<int>.Enumerator enumerator = enumerable.GetConfiguredAsyncEnumerator(ct);
