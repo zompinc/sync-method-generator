@@ -238,7 +238,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
     {
         var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
-        return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
+
+        return TypeAlreadyQualified(node.ElementType) ? @base : (SyntaxNode)@base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -1681,7 +1682,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static string Global(string type) => $"global::{type}";
 
     private static bool TypeAlreadyQualified(TypeSyntax type)
-        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax or ArrayTypeSyntax;
+        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax or ArrayTypeSyntax or QualifiedNameSyntax;
 
     private static bool TypeAlreadyQualified(ITypeSymbol type)
         => type is INamedTypeSymbol namedType

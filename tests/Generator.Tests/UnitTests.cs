@@ -851,4 +851,13 @@ private async Task MethodAsync()
     MyEvent?.Invoke(this, EventArgs.Empty);
 }
 """.Verify();
+
+    [Fact]
+    public Task FullyQualifiedAndNullable() => """
+[CreateSyncVersion]
+async Task<string> MethodAsync(System.Net.HttpStatusCode? bar)
+{
+    return string.Empty;
+}
+""".Verify();
 }
