@@ -34,6 +34,27 @@ catch (OperationCanceledException)
 .Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task EnumPattern() =>
+"_ = System.Data.ConnectionState.Closed is System.Data.ConnectionState.Closed;"
+.Verify(false, true, sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task EnumPatternName() =>
+"""
+enum Test { Test }
+
+partial class Class
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public Task<bool> ReturnTrueAsync()
+    {
+        return Task.FromResult(Test.Test is Test.Test);
+    }
+}
+"""
+.Verify(false, true, sourceType: SourceType.Full);
+
+    [Fact]
     public Task DeclarationExpression() =>
 "new Dictionary<int, Stream>().TryGetValue(0, out Stream a);"
 .Verify(false, true, sourceType: SourceType.MethodBody);

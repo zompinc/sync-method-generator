@@ -2088,7 +2088,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
     {
         var typeSymbol = semanticModel.GetTypeInfo(typeSyntax).Type;
-        return typeSymbol is null ? typeSyntax : ProcessSymbol(typeSymbol).WithTriviaFrom(typeSyntax);
+
+        return typeSymbol switch
+        {
+            null => typeSyntax,
+            { TypeKind: TypeKind.Enum } when typeSyntax is QualifiedNameSyntax { Right: IdentifierNameSyntax r } && (r.Identifier.ValueText != typeSymbol.Name || typeSymbol.ToString() != typeSyntax.WithoutTrivia().ToString())
+                => QualifiedName(ProcessSymbol(typeSymbol).WithTriviaFrom(typeSyntax), r),
+            _ => ProcessSymbol(typeSymbol).WithTriviaFrom(typeSyntax),
+        };
     }
 
     private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
