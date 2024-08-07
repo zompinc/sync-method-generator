@@ -289,7 +289,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             && GetSymbol(node) is IFieldSymbol { IsStatic: true } fieldSymbol)
         {
             var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
-            return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}"));
+            return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
         }
         else if (node.Parent is TypeArgumentListSyntax)
         {
@@ -1304,10 +1304,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
 
-        if ((@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) || @base.OperatorToken.IsKind(SyntaxKind.AsKeyword))
-            && GetSymbol(node.Right) is INamedTypeSymbol typeSymbol)
+        if (@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) || @base.OperatorToken.IsKind(SyntaxKind.AsKeyword))
         {
-            @base = @base.WithRight(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base);
+            if (GetSymbol(node.Left) is IFieldSymbol leftSymbol)
+            {
+                @base = @base.WithLeft(ProcessSymbol(leftSymbol).WithTriviaFrom(node.Left));
+            }
+
+            if (GetSymbol(node.Right) is ISymbol typeSymbol)
+            {
+                @base = @base.WithRight(ProcessSymbol(typeSymbol).WithTriviaFrom(node.Right));
+            }
+
+            return @base.WithTriviaFrom(@base);
         }
 
         return @base;
@@ -1353,7 +1362,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => symbol.Name,
         };
 
-    private static SimpleNameSyntax ProcessSymbol(ITypeSymbol typeSymbol) => typeSymbol switch
+    private static SimpleNameSyntax ProcessSymbol(ISymbol typeSymbol) => typeSymbol switch
     {
         INamedTypeSymbol
         {
@@ -1374,6 +1383,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         symbol => symbol.IsGenericType ? ProcessSymbol(symbol.TypeArguments[0]) : IdentifierName("void"),
         INamedTypeSymbol nts => IdentifierName(MakeType(nts)),
         IArrayTypeSymbol ats => IdentifierName(MakeType(ats.ElementType) + "[]"),
+        IFieldSymbol fs => IdentifierName(MakeType(fs.Type) + '.' + fs.Name),
         _ => IdentifierName(typeSymbol.Name),
     };
 
