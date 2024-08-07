@@ -33,10 +33,24 @@ catch (OperationCanceledException)
 "_ = new object() is DBNull or Stream;"
 .Verify(false, true, sourceType: SourceType.MethodBody);
 
-    [Fact]
-    public Task EnumPattern() =>
-"_ = System.Data.ConnectionState.Closed is System.Data.ConnectionState.Closed;"
-.Verify(false, true, sourceType: SourceType.MethodBody);
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task EnumPattern(bool isQualified) =>
+$$"""
+using static System.Data.ConnectionState;
+namespace Test;
+
+partial class Class
+{
+    [CreateSyncVersion]
+    public Task MethodAsync()
+    {
+        _ = {{(isQualified ? "System.Data.ConnectionState." : string.Empty)}}Closed is System.Data.ConnectionState.Closed;
+    }
+}
+"""
+.Verify(false, true, sourceType: SourceType.Full);
 
     [Fact]
     public Task EnumPatternName() =>
