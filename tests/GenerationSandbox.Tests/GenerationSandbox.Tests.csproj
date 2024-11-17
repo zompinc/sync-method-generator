@@ -8,12 +8,8 @@
     <NoWarn>$(NoWarn);RS1035</NoWarn>
     <NoWarn>$(NoWarn);SA1200;SA1201;SA1202;SA1204;SA1400;SA1402;SA1403;SA1404;SA1601</NoWarn>
     <ImplicitUsings>false</ImplicitUsings>
-    <TargetFrameworks>net8.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' != 'net472'">
-    <EnablePreviewFeatures>true</EnablePreviewFeatures>
-    <GenerateRequiresPreviewFeaturesAttribute>true</GenerateRequiresPreviewFeaturesAttribute>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,16 +22,13 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <PackageReference Include="coverlet.collector" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
-    <PackageReference Include="System.Runtime.Experimental" />
-  </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
     <Compile Remove="AsyncExtensions.GenericMath.cs" />
     <None Include="AsyncExtensions.GenericMath.cs" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="System.Runtime.CompilerServices" />
-    <Using Include="System.Numerics" Condition="$(TargetFramework) != 'net6.0'" />
+    <Using Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Zomp.SyncMethodGenerator\Zomp.SyncMethodGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

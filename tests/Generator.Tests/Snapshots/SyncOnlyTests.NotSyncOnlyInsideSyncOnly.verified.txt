@@ -1,14 +1,17 @@
 ﻿{
   Diagnostics: [
     {
-      Id: ZSMGEN001,
-      Title: SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other,
-      Severity: Error,
-      WarningLevel: 0,
       Location: : (8,0)-(8,14),
-      MessageFormat: Couldn't process directive '{0}'. SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other.,
       Message: Couldn't process directive '#if !SYNC_ONLY'. SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other.,
-      Category: Preprocessor
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN001,
+        Title: SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other,
+        MessageFormat: Couldn't process directive '{0}'. SYNC_ONLY and !SYNC_ONLY cannot be nested inside each other.,
+        Category: Preprocessor,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
     }
   ]
 }

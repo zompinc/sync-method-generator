@@ -43,12 +43,6 @@ global using global::Zomp.SyncMethodGenerator;
 #if NET8_0_OR_GREATER
         "NET8_0_OR_GREATER",
 #endif
-#if NET6_0
-        "NET6_0",
-#endif
-#if NET6_0_OR_GREATER
-        "NET6_0_OR_GREATER",
-#endif
     ];
 #endif
 
@@ -105,7 +99,7 @@ partial class Class
             typeof(System.Buffers.MemoryPool<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
-#if NET6_0_OR_GREATER
+#if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
 #endif
             linqAssembly,

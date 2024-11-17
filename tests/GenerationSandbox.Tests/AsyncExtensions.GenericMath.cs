@@ -19,20 +19,9 @@ public static partial class AsyncExtensions
     /// <returns>Max indices.</returns>
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public static async IAsyncEnumerable<int> IndexOfMaxSoFarAsync<T>(this IAsyncEnumerable<T> items, IProgress<int>? progress = null, [EnumeratorCancellation] CancellationToken ct = default)
-#if NET8_0_OR_GREATER
         where T : IComparisonOperators<T, T, bool>
-#else
-        where T : IComparisonOperators<T, T>
-#endif
     {
-#if NET6_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(items);
-#else
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(items));
-        }
-#endif
 
         var i = 0;
 

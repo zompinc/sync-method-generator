@@ -1,4 +1,4 @@
-﻿#if NET6_0_OR_GREATER
+﻿#if NET8_0_OR_GREATER
 using System.Linq;
 #endif
 using Xunit;
@@ -18,11 +18,9 @@ public class SyncTests
 
     [Fact]
     public void TestStaticAsyncWithIProgress()
-    {
-        AsyncWithIProgress.CallWithIProgress();
-    }
+        => AsyncWithIProgress.CallWithIProgress();
 
-#if NET6_0_OR_GREATER
+#if NET8_0_OR_GREATER
     [Fact]
     public void TestIndexOfMaxSoFar()
     {

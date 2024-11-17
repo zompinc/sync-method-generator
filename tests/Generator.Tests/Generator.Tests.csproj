@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
@@ -12,9 +12,6 @@
     <GenerateRequiresPreviewFeaturesAttribute>true</GenerateRequiresPreviewFeaturesAttribute>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
-    <PackageReference Include="System.Runtime.Experimental" />
-  </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
     <Compile Remove="GenericMathTests.cs" />
     <None Include="GenericMathTests.cs" />
@@ -41,6 +38,6 @@
     <Using Include="Microsoft.CodeAnalysis" />
     <Using Include="Microsoft.CodeAnalysis.CSharp" />
     <Using Include="System.Collections.Immutable" />
-    <Using Include="System.Numerics" Condition="$(TargetFramework) != 'net6.0'" />
+    <Using Include="System.Numerics" />
   </ItemGroup>
 </Project>

@@ -705,11 +705,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             {
                 // The parent is not a block, for example: if (true) return ReturnAsync();
                 // We need to create a block with the expression and the return statement.
-                return Block(List(new StatementSyntax[]
-                    {
+                return Block(List(
+                    [
                         result.WithLeadingTrivia(Space).WithTrailingTrivia(Space),
                         ReturnStatement().WithTrailingTrivia(Space),
-                    }))
+                    ]))
                     .WithLeadingTrivia(node.GetLeadingTrivia())
                     .WithTrailingTrivia(node.GetTrailingTrivia());
             }
@@ -733,11 +733,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
 
             // Create a block without the braces (eg. Return(); return;)
-            return Block(List(new StatementSyntax[]
-                {
+            return Block(List(
+                [
                     result.WithTrailingTrivia(Space),
                     ReturnStatement().WithTrailingTrivia(node.GetTrailingTrivia()),
-                }))
+                ]))
                 .WithOpenBraceToken(MissingToken(SyntaxKind.OpenBraceToken))
                 .WithCloseBraceToken(MissingToken(SyntaxKind.CloseBraceToken));
         }

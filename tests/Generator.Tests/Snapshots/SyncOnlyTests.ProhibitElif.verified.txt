@@ -1,14 +1,17 @@
 ﻿{
   Diagnostics: [
     {
-      Id: ZSMGEN003,
-      Title: SYNC_ONLY cannot be used with #elif,
-      Severity: Error,
-      WarningLevel: 0,
       Location: : (8,0)-(8,12),
-      MessageFormat: Couldn't process directive '{0}'. SYNC_ONLY cannot be used with #elif.,
       Message: Couldn't process directive '#elif Symbol'. SYNC_ONLY cannot be used with #elif.,
-      Category: Preprocessor
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN003,
+        Title: SYNC_ONLY cannot be used with #elif,
+        MessageFormat: Couldn't process directive '{0}'. SYNC_ONLY cannot be used with #elif.,
+        Category: Preprocessor,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
     }
   ]
 }

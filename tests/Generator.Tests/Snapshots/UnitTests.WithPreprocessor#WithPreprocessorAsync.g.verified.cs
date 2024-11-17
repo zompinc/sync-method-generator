@@ -3,6 +3,6 @@
 namespace Test;
 public partial class Class
 {
-    #if NET6_0_OR_GREATER
+    #if NET8_0_OR_GREATER
     private void WithPreprocessor() { }
 }
