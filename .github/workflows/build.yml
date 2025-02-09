@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
 
       - name: "Determine prerequisites"
-        id: prereq
+        id: prerequisite
         run: |
           echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
           echo "need_yarn=$(command -v yarn >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
@@ -43,7 +43,7 @@ jobs:
 
       # Switch to https://github.com/actions/setup-node when it works
       - name: Install node
-        if: ${{ steps.prereq.outputs.need_node == '1' }}
+        if: ${{ steps.prerequisite.outputs.need_node == '1' }}
         run: |
           if [ "${{ runner.os }}" = "windows" ]
           then
@@ -55,6 +55,7 @@ jobs:
           fi
 
       - name: Setup .NET
+        if: ${{ runner.os != 'Windows' || !env.ACT }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
@@ -63,7 +64,7 @@ jobs:
 
       - uses: dotnet/nbgv@master
         id: nbgv
-        if: ${{ steps.prereq.outputs.has_git_repo == '1' }}
+        if: ${{ steps.prerequisite.outputs.has_git_repo == '1' }}
         with:
           setAllVars: true
 
@@ -77,7 +78,7 @@ jobs:
           else
             npm install -g yarn
           fi
-        if: ${{ steps.prereq.outputs.need_yarn == '1' }}
+        if: ${{ steps.prerequisite.outputs.need_yarn == '1' }}
 
       - run: yarn install
 
@@ -135,7 +136,7 @@ jobs:
         shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
       - name: "Determine prerequisites"
-        id: prereq
+        id: prerequisite
         run: |
           echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
 
@@ -146,7 +147,7 @@ jobs:
             8.0.x
 
       - name: Install node
-        if: ${{ steps.prereq.outputs.need_node == '1' }}
+        if: ${{ steps.prerequisite.outputs.need_node == '1' }}
         run: |
           if [ "${{ runner.os }}" = "windows" ]
           then
@@ -168,17 +169,26 @@ jobs:
               mv packages_windows-latest packages 
           fi
 
-      - run: dotnet tool install nugetkeyvaultsigntool --tool-path . --version 3.2.3
-
-      - name: Sign Nuget Files
+      - name: Install sign tool
         env:
-          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }}
-        if: ${{ env.AZURE_KEY_VAULT_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
-        run: ./NuGetKeyVaultSignTool sign packages/*.nupkg -kvt ${{ secrets.AZURE_TENANT_ID }} -kvu ${{ secrets.AZURE_KEY_VAULT_URL }} -kvi ${{ secrets.AZURE_KEY_VAULT_CLIENT_ID }} -kvs ${{ secrets.AZURE_KEY_VAULT_CLIENT_SECRET }} -kvc ${{ secrets.AZURE_KEY_VAULT_CERTIFICATE }} -tr ${{ secrets.TIMESTAMP_RFC3161 }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
+        run: dotnet tool install sign --tool-path . --version 0.9.1-beta.24529.1
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
 
-      - name: Verify signatures
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
-        run: ./NuGetKeyVaultSignTool verify packages/*.nupkg
+      - name: Sign
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        run: |
+          ./sign code trusted-signing \
+          --base-directory "${{ github.workspace }}/packages" \
+          "*.nupkg" \
+          --trusted-signing-endpoint "${{ secrets.TRUSTED_SIGNING_ENDPOINT }}" \
+          --trusted-signing-account "${{ secrets.TRUSTED_SIGNING_ACCOUNT }}" \
+          --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}" \
+          -v trace
 
       - name: Push to MyGet
         env:

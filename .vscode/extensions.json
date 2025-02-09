@@ -2,9 +2,10 @@
   "recommendations": [
     "ban.spellright",
     "DavidAnson.vscode-markdownlint",
-    "esbenp.prettier-vscode",
+    "streetsidesoftware.code-spell-checker",
     "foxundermoon.shell-format",
     "GitHub.vscode-github-actions",
     "ms-dotnettools.csharp"
-  ]
+  ],
+  "unwantedRecommendations": ["ban.spellright"]
 }
