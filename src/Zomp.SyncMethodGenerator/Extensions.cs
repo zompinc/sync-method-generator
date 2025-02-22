@@ -44,6 +44,13 @@ internal static class Extensions
             : IdentifierName(Identifier(id));
     }
 
+    internal static SimpleNameSyntax ChangeIdentifier(this MemberBindingExpressionSyntax mae, string id)
+    {
+        return mae is { Name: GenericNameSyntax gns }
+            ? GenericName(Identifier(id), gns.TypeArgumentList)
+            : IdentifierName(Identifier(id));
+    }
+
     internal static BlockSyntax CreateBlock(this ICollection<StatementSyntax> statements, int indentationLevel = 0)
     {
         var list = new List<StatementSyntax>();

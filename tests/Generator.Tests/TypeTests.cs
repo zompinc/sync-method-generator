@@ -133,6 +133,11 @@ public async Task<object> GetCustomObjectAsync(object o)
 """.Verify();
 
     [Fact]
+    public Task FullyQualifiedArray()
+        => "System.Text.RegularExpressions.Regex[] variable = null!;"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task CastFullyQualifiedTypeTwice() => """
 class CustomClass { }
 

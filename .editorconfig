@@ -41,5 +41,8 @@ dotnet_diagnostic.SA1005.severity = none
 # SA1512: Single-line comments should not be followed by blank line
 dotnet_diagnostic.SA1512.severity = none
 
+dotnet_diagnostic.IDE0305.severity = error
+dotnet_diagnostic.IDE0340.severity = error
+
 [*.sh]
 end_of_line = lf

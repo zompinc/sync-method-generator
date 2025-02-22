@@ -41,6 +41,22 @@ int[]? array = null;
 var z = array?.Single();
 """.Verify(sourceType: SourceType.MethodBody);
 
+    [Fact]
+    public Task KeepTypeParameters() => """
+string[]? arr = [];
+_ = arr?.Select<string, double?>(z => null);
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task HandleCastForNull()
+        => "_ = ((string[]?)null)?.Select<string, double?>(z => null);"
+        .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task HandleCastForArray()
+        => "_ = ((string[]?)[])?.Select<string, double?>(z => null);"
+        .Verify(sourceType: SourceType.MethodBody);
+
 #if NET8_0_OR_GREATER
     [Fact]
     public Task ConditionalToExtension() => """

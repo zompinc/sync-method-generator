@@ -138,7 +138,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             CastExpression(GetNullableObject(), expr).AppendSpace(),
             LiteralExpression(SyntaxKind.NullLiteralExpression).PrependSpace());
 
-        var argumentType = GetSymbol(node.Expression) ?? throw new InvalidOperationException("Can't process");
+        var withoutParentheses = RemoveParentheses(node.Expression);
+        var expr = withoutParentheses switch
+        {
+            CastExpressionSyntax ces => ces.Type,
+            _ => withoutParentheses,
+        };
+
+        var argumentType = GetSymbol(expr) ?? throw new InvalidOperationException("Can't process");
         var funcArgumentType = GetReturnType(argumentType);
 
         IdentifierNameSyntax toCheckForNullExpr;
@@ -175,7 +182,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 ? MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     toCheckForNullExpr,
-                    IdentifierName(nameof(Nullable<int>.Value)))
+                    IdentifierName(nameof(Nullable<>.Value)))
                 : toCheckForNullExpr;
             replaceInInvocation.Push(firstArgument);
             var unwrappedExpr = (InvocationExpressionSyntax)Visit(callSymbol);
@@ -188,7 +195,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                         MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
                             toCheckForNullExpr,
-                            IdentifierName(nameof(Nullable<int>.HasValue))))
+                            IdentifierName(nameof(Nullable<>.HasValue))))
                     : CheckNull(toCheckForNullExpr);
                 var castTo = MaybeNullableType(ProcessSymbol(returnType), returnType.IsValueType);
 
@@ -240,7 +247,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
 
-        return TypeAlreadyQualified(node.ElementType) ? @base : (SyntaxNode)@base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.ElementType) ? @base : @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -661,7 +668,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
     {
         var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
-        return @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
+        var elementType = TypeAlreadyQualified(node.ElementType)
+            ? @base.ElementType
+            : ProcessType(@base.ElementType);
+        return @base.WithElementType(elementType).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -849,7 +859,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var indicesToRemove = node.Arguments.GetIndices(RemoveType);
 
         var @base = (TypeArgumentListSyntax)base.VisitTypeArgumentList(node)!;
-        var newSep = RemoveSeparators(@base.Arguments.GetSeparators().ToList(), indicesToRemove);
+        var newSep = RemoveSeparators([.. @base.Arguments.GetSeparators()], indicesToRemove);
 
         var newArguments = SeparatedList(
             RemoveAtRange(@base.Arguments, indicesToRemove),
@@ -862,7 +872,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         var @base = (TypeConstraintSyntax)base.VisitTypeConstraint(node)!;
         var newType = ProcessType(@base.Type);
-        return newType == @base.Type ? @base : (SyntaxNode)@base.WithType(newType).WithTriviaFrom(@base);
+        return newType == @base.Type ? @base : @base.WithType(newType).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -1265,13 +1275,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitDeclarationExpression(DeclarationExpressionSyntax node)
     {
         var @base = (DeclarationExpressionSyntax)base.VisitDeclarationExpression(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : (SyntaxNode)@base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitCastExpression(CastExpressionSyntax node)
     {
         var @base = (CastExpressionSyntax)base.VisitCastExpression(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : (SyntaxNode)@base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitTupleType(TupleTypeSyntax node)
@@ -1736,9 +1746,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
 
-        var es = (ies.Expression is MemberAccessExpressionSyntax mae
-            ? mae.ChangeIdentifier(fullyQualifiedName)
-            : IdentifierName(Identifier(fullyQualifiedName)))
+        var es = (ies.Expression switch
+        {
+            MemberAccessExpressionSyntax mae => mae.ChangeIdentifier(fullyQualifiedName),
+            MemberBindingExpressionSyntax mbae => mbae.ChangeIdentifier(fullyQualifiedName),
+            _ => IdentifierName(Identifier(fullyQualifiedName)),
+        })
             .WithLeadingTrivia(expression.GetLeadingTrivia());
 
         return ies
