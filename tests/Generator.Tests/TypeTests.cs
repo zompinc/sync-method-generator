@@ -19,6 +19,21 @@ catch (OperationCanceledException)
 .Verify(false, true, sourceType: SourceType.MethodBody);
 
     [Fact]
+    public Task PatternMatchingWithConstant() =>
+"_ = 1 is 2;"
+.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task PatternIsNotLiteral() =>
+"_ = StringComparison.CurrentCulture is not StringComparison.CurrentCulture;"
+.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task PatternIsEnumMember() =>
+"_ = StringComparison.CurrentCulture is StringComparison.CurrentCulture;"
+.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
     public Task VariableDeclarationRedundant() =>
 "MemoryStream ms = new MemoryStream();"
 .Verify(false, true, sourceType: SourceType.MethodBody);

@@ -1267,9 +1267,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitConstantPattern(ConstantPatternSyntax node)
     {
         var @base = (ConstantPatternSyntax)base.VisitConstantPattern(node)!;
-        return semanticModel.GetTypeInfo(node.Expression).Type is { } type
-            ? @base.WithExpression(ProcessSymbol(type).WithTriviaFrom(@base))
-            : @base;
+        return node.Expression switch
+        {
+            LiteralExpressionSyntax or MemberAccessExpressionSyntax => @base,
+            _ => semanticModel.GetTypeInfo(node.Expression).Type is { } type
+                ? @base.WithExpression(ProcessSymbol(type).WithTriviaFrom(@base))
+                : @base,
+        };
     }
 
     public override SyntaxNode? VisitDeclarationExpression(DeclarationExpressionSyntax node)
@@ -1321,9 +1325,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 @base = @base.WithLeft(ProcessSymbol(leftSymbol).WithTriviaFrom(node.Left));
             }
 
-            if (GetSymbol(node.Right) is ISymbol typeSymbol)
+            if (GetSymbol(node.Right) is ISymbol symbol)
             {
-                @base = @base.WithRight(ProcessSymbol(typeSymbol).WithTriviaFrom(node.Right));
+                @base = @base.WithRight(ProcessSymbol(symbol).WithTriviaFrom(node.Right));
             }
 
             return @base.WithTriviaFrom(@base);
