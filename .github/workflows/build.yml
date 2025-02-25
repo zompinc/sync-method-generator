@@ -141,6 +141,7 @@ jobs:
           echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
 
       - name: Setup .NET
+        if: ${{ runner.os != 'Windows' || !env.ACT }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
