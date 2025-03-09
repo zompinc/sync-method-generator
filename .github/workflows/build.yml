@@ -173,7 +173,7 @@ jobs:
       - name: Install sign tool
         env:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
-        run: dotnet tool install sign --tool-path . --version 0.9.1-beta.24529.1
+        run: dotnet tool install sign --tool-path . --version 0.9.1-beta.25157.1
         if: ${{ env.AZURE_CLIENT_SECRET != '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
 
       - name: Sign

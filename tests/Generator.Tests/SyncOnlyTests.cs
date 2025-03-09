@@ -237,4 +237,21 @@ switch (i)
 
 await Task.CompletedTask;
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task MultipleBlocksArentInterfering() => """
+        string a = await Task.FromResult("");
+        int b = 0;
+
+        if (a != null)
+        {
+            b = 50;
+        }
+
+#if SYNC_ONLY
+        _ = a + b;
+#else
+        _ = a + b + await Task.FromResult(30);
+#endif
+""".Verify(sourceType: SourceType.MethodBody);
 }

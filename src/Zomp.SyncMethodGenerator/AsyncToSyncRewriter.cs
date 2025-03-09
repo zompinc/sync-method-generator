@@ -72,7 +72,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
-    private readonly DirectiveStack directiveStack = new();
 
     private enum SyncOnlyDirectiveType
     {
@@ -804,7 +803,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
     {
-        var statementProcessor = new StatementProcessor(this, node.Statements, directiveStack);
+        var statementProcessor = new StatementProcessor(this, node.Statements);
         if (statementProcessor.HasErrors)
         {
             return node;
@@ -820,7 +819,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var statementProcessor = new StatementProcessor(this, node.Statements, directiveStack);
+        var statementProcessor = new StatementProcessor(this, node.Statements);
         if (statementProcessor.HasErrors)
         {
             return node;
@@ -832,7 +831,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack) is var (_, newStatements2, newTrivia))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange([.. newStatements2]);
@@ -1980,7 +1979,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
             if (trivia.IsKind(SyntaxKind.EndIfDirectiveTrivia))
             {
-                if (!ifDirectives.Pop())
+                if (ifDirectives.Count == 0 || !ifDirectives.Pop())
                 {
                     triviaList.Add(trivia);
                 }
@@ -2290,12 +2289,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = [];
 
-        public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements, DirectiveStack directiveStack)
+        public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
         {
-            HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, directiveStack);
+            HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, DirectiveStack);
         }
 
         public bool HasErrors { get; }
+
+        public DirectiveStack DirectiveStack { get; } = new();
 
         public SyntaxList<StatementSyntax> PostProcess(SyntaxList<StatementSyntax> statements)
         {
