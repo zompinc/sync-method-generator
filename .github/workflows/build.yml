@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Set path for nektos/act
-        if: ${{ runner.os  == 'Windows' && env.ACT }}
+        if: ${{ runner.os == 'Windows' && env.ACT }}
         run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
         shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
@@ -115,14 +115,16 @@ jobs:
           path: reports/coverage
         if: steps.codecov.outcome == 'success'
       - name: Pack
+        if: ${{ runner.os != 'Windows' }}
         run: dotnet pack --configuration Release -o packages --no-build
       - name: Upload artifacts (.nupkg)
+        if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: packages_${{ matrix.os }}
+          name: packages
           path: packages/
 
-  publish:
+  sign:
     needs: build
     runs-on: windows-latest
     defaults:
@@ -131,7 +133,7 @@ jobs:
 
     steps:
       - name: Set path for nektos/act
-        if: ${{ runner.os  == 'Windows' && env.ACT }}
+        if: ${{ runner.os == 'Windows' && env.ACT }}
         run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
         shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
@@ -162,26 +164,18 @@ jobs:
       - name: Download Package artifact
         uses: actions/download-artifact@v4
 
-      - run: |
-          if [ -d "packages_ubuntu-latest" ] 
-          then
-              mv packages_ubuntu-latest packages 
-          else
-              mv packages_windows-latest packages 
-          fi
-
       - name: Install sign tool
         env:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
         run: dotnet tool install sign --tool-path . --version 0.9.1-beta.25157.1
-        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
 
       - name: Sign
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
-        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
         run: |
           ./sign code trusted-signing \
           --base-directory "${{ github.workspace }}/packages" \
@@ -191,12 +185,40 @@ jobs:
           --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}" \
           -v trace
 
+      - name: Upload artifacts (.nupkg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-signed
+          path: packages/
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set path for nektos/act
+        if: ${{ runner.os == 'Windows' && env.ACT }}
+        run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
+        shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
+
+      - name: Setup .NET
+        if: ${{ runner.os != 'Windows' || !env.ACT }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+
+      - name: Download Package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-signed
+
       - name: Push to MyGet
         env:
           MYGET_PUSH_KEY: ${{ secrets.MYGET_PUSH_KEY }}
         if: ${{ env.MYGET_PUSH_KEY != '' }}
-        run: dotnet nuget push packages/*.nupkg -s https://www.myget.org/F/zomp-sync-method-generator/api/v3/index.json -k ${{ secrets.MYGET_PUSH_KEY }}
+        run: dotnet nuget push *.nupkg -s https://www.myget.org/F/zomp-sync-method-generator/api/v3/index.json -k ${{ secrets.MYGET_PUSH_KEY }}
 
       - name: Push to NuGet
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
-        run: dotnet nuget push packages/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
+        run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
