@@ -4,5 +4,5 @@ if [ -n "$1" ]; then
 fi
 
 EXIT_STATUS=0
-dotnet tool run dotnet-format --verify-no-changes Zomp.SyncMethodGenerator.sln --exclude tests/Generator.Tests/Snapshots/*g.verified.cs -v $formatLevel whitespace || EXIT_STATUS=$?
+dotnet format --verify-no-changes Zomp.SyncMethodGenerator.sln --exclude tests/Generator.Tests/Snapshots/*g.verified.cs -v $formatLevel whitespace || EXIT_STATUS=$?
 exit $EXIT_STATUS
