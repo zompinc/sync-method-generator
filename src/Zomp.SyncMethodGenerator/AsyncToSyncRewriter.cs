@@ -10,7 +10,8 @@ namespace Zomp.SyncMethodGenerator;
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable) : CSharpSyntaxRewriter
+/// <param name="methodName">Name of the method to rewrite. Only used for C#14 extensions.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, MethodDeclarationSyntax methodName) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -68,6 +69,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
+    private readonly MethodDeclarationSyntax methodName = methodName;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
@@ -891,6 +893,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
+        if (methodName != node)
+        {
+            return default;
+        }
+
         var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
         var returnType = node.ReturnType;
 
