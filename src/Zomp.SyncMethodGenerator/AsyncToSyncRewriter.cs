@@ -181,7 +181,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 ? MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     toCheckForNullExpr,
-                    IdentifierName(nameof(Nullable<>.Value)))
+                    IdentifierName(nameof(Nullable<int>.Value)))
                 : toCheckForNullExpr;
             replaceInInvocation.Push(firstArgument);
             var unwrappedExpr = (InvocationExpressionSyntax)Visit(callSymbol);
@@ -194,7 +194,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                         MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
                             toCheckForNullExpr,
-                            IdentifierName(nameof(Nullable<>.HasValue))))
+                            IdentifierName(nameof(Nullable<int>.HasValue))))
                     : CheckNull(toCheckForNullExpr);
                 var castTo = MaybeNullableType(ProcessSymbol(returnType), returnType.IsValueType);
 
