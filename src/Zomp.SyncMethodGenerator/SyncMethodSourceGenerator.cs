@@ -73,6 +73,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var sourcePath = $"{string.Join(".", m.Namespaces)}" +
             $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
+            (m.IsCSharp14Extension ? ".ext" : string.Empty) +
             $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
 
         var source = SourceGenerationHelper.GenerateExtensionClass(m);
@@ -142,15 +143,23 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;
+        ExtensionDeclarationSyntax? extensionParent = null;
         while (node.Parent is not null)
         {
             node = node.Parent;
+            if (node is ExtensionDeclarationSyntax eds)
+            {
+                extensionParent = eds;
+                continue;
+            }
+
             MethodParentDeclaration? mpd = node switch
             {
                 ClassDeclarationSyntax o => new(MethodParent.Class, o.Identifier, o.Modifiers, o.TypeParameterList),
                 StructDeclarationSyntax o => new(MethodParent.Struct, o.Identifier, o.Modifiers, o.TypeParameterList),
                 RecordDeclarationSyntax o => new(MethodParent.Record, o.Identifier, o.Modifiers, o.TypeParameterList, o.ClassOrStructKeyword),
                 InterfaceDeclarationSyntax o => new(MethodParent.Interface, o.Identifier, o.Modifiers, o.TypeParameterList),
+                ////ExtensionDeclarationSyntax o => new(MethodParent.ExtensionDeclaration, o.Identifier, o.Modifiers, o.TypeParameterList),
                 _ => null,
             };
 
@@ -167,8 +176,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable);
-        var sn = rewriter.Visit(methodDeclarationSyntax);
+        var toVisit = extensionParent ?? (SyntaxNode)methodDeclarationSyntax;
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, methodDeclarationSyntax);
+        var sn = rewriter.Visit(toVisit);
         var content = sn.ToFullString();
 
         var diagnostics = rewriter.Diagnostics;
@@ -203,7 +213,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, extensionParent is not null, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
 
         return result;
     }

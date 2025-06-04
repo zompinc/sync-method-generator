@@ -70,4 +70,53 @@ internal static class BarExtension
     public static Bar DoSomething(this Bar bar) => bar;
 }
 """.Verify(sourceType: SourceType.Full);
+
+#if NET8_0_OR_GREATER
+    [Fact]
+    public Task CSharp_14_Extensions() => """
+namespace Tests;
+
+static partial class Class
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async IAsyncEnumerable<T> WhereGreaterThan(this IAsyncEnumerable<T> source, T threshold, int dummy)
+    {
+        await foreach (var item in source)
+        {
+            if (item > threshold)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    extension<T>(IAsyncEnumerable<T> source)
+        where T : INumber<T>
+    {
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async IAsyncEnumerable<T> WhereGreaterThan(T threshold)
+        {
+            await foreach (var item in source)
+            {
+                if (item > threshold)
+                {
+                    yield return item;
+                }
+            }
+        }
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async IAsyncEnumerable<T> WhereLessThan(T threshold)
+        {
+            await foreach (var item in source)
+            {
+                if (item < threshold)
+                {
+                    yield return item;
+                }
+            }
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+#endif
 }
