@@ -1057,7 +1057,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var invalid = node.Arguments.GetIndices(ShouldRemoveArgumentLocal);
 
         var newList = RemoveAtRange(@base.Arguments, invalid);
-        return @base.WithArguments(newList);
+
+        var retval = @base.WithArguments(newList);
+        if (invalid.Contains(node.Arguments.Count - 1))
+        {
+            retval = retval
+                .WithCloseParenToken(@base.CloseParenToken.WithLeadingTrivia())
+                .WithOpenParenToken(@base.OpenParenToken.WithTrailingTrivia());
+        }
+
+        return retval;
     }
 
     /// <inheritdoc/>
