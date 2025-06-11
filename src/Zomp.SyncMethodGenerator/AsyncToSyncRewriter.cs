@@ -1406,7 +1406,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         symbol => symbol.IsGenericType ? ProcessSymbol(symbol.TypeArguments[0]) : IdentifierName("void"),
         INamedTypeSymbol nts => IdentifierName(MakeType(nts)),
-        IArrayTypeSymbol ats => IdentifierName(MakeType(ats.ElementType) + "[]"),
+        IArrayTypeSymbol ats => IdentifierName(MakeType(ats.ElementType) + $"[{new string(',', ats.Rank - 1)}]"),
         IFieldSymbol fs => IdentifierName(MakeType(fs.Type) + '.' + fs.Name),
         _ => IdentifierName(typeSymbol.Name),
     };

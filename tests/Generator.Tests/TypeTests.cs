@@ -137,6 +137,14 @@ public async Task MethodAsync(Int32[] o)
 """.Verify();
 
     [Fact]
+    public Task TwoDArrayParameter() => """
+[CreateSyncVersion]
+public async Task MethodAsync(Func<object[,], Task> o)
+{
+}
+""".Verify();
+
+    [Fact]
     public Task CastFullyQualifiedType() => """
 class CustomClass { }
 
