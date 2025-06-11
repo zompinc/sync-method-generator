@@ -25,30 +25,31 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string Tasks = "Tasks";
 
     // Type names
-    private const string CancellationToken = "CancellationToken";
-    private const string Enumerator = "Enumerator";
-    private const string Memory = "Memory";
-    private const string ReadOnlyMemory = "ReadOnlyMemory";
-    private const string IAsyncEnumerable = "IAsyncEnumerable";
-    private const string IAsyncEnumerator = "IAsyncEnumerator";
-    private const string IAsyncResult = "IAsyncResult";
-    private const string IProgress = "IProgress";
+    private const string CancellationToken = nameof(global::System.Threading.CancellationToken);
+    private const string Enumerator = nameof(Span<>.Enumerator);
+    private const string Memory = nameof(Memory<>);
+    private const string ReadOnlyMemory = nameof(ReadOnlyMemory<>);
+    private const string IAsyncEnumerable = nameof(IAsyncEnumerable<>);
+    private const string IAsyncEnumerator = nameof(IAsyncEnumerator<>);
+    private const string IAsyncResult = nameof(global::System.IAsyncResult);
+    private const string IProgress = nameof(IProgress<>);
     private const string Object = "object";
-    private const string Task = "Task";
-    private const string ValueTask = "ValueTask";
+    private const string Task = nameof(Task<>);
+    private const string ValueTask = nameof(ValueTask<>);
 
     // Members
-    private const string AsTask = "AsTask";
-    private const string CompletedTask = "CompletedTask";
-    private const string Delay = "Delay";
-    private const string FromResult = "FromResult";
-    private const string IsCancellationRequested = "IsCancellationRequested";
-    private const string MoveNextAsync = "MoveNextAsync";
-    private const string Span = "Span";
+    private const string AsTask = nameof(ValueTask<>.AsTask);
+    private const string CompletedTask = nameof(global::System.Threading.Tasks.Task.CompletedTask);
+    private const string Delay = nameof(Task<>.Delay);
+    private const string FromResult = nameof(Task<>.FromResult);
+    private const string WaitAsync = "WaitAsync";
+    private const string IsCancellationRequested = nameof(global::System.Threading.CancellationToken.IsCancellationRequested);
+    private const string MoveNextAsync = nameof(IAsyncEnumerator<>.MoveNextAsync);
+    private const string Span = nameof(Memory<>.Span);
 
     private const string SystemFunc = $"{System}.{Func}";
-    private const string IEnumerable = $"{System}.{Collections}.{Generic}.IEnumerable";
-    private const string IEnumerator = $"{System}.{Collections}.{Generic}.IEnumerator";
+    private const string IEnumerable = $"{System}.{Collections}.{Generic}.{nameof(IEnumerable<>)}";
+    private const string IEnumerator = $"{System}.{Collections}.{Generic}.{nameof(IEnumerator<>)}";
 
     private static readonly SymbolDisplayFormat GlobalDisplayFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
@@ -640,7 +641,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
             else if (specialMethod == SpecialMethod.Drop)
             {
-                return memberAccess.Expression;
+                var expression = memberAccess.Expression;
+                return expression.WithTrailingTrivia(TriviaList([.. expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
             }
         }
 
@@ -1438,6 +1440,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         => SpecialMethod.Drop,
+        {
+            Name: WaitAsync,
+            ReceiverType.Name: ValueTask or Task,
+            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        }
+
+        => SpecialMethod.Drop,
         _ => SpecialMethod.None,
     };
 
@@ -1663,7 +1672,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         => !isNegated,
         IMethodSymbol ms =>
-            IsSpecialMethod(ms) == SpecialMethod.None
+            IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
                     || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver))),
         _ => ShouldRemoveType(GetReturnType(symbol)),
@@ -1685,7 +1694,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static bool IsTaskExtension(IMethodSymbol methodSymbol) => methodSymbol.ReturnType is
     {
-        Name: "ConfiguredTaskAwaitable" or "ConfiguredValueTaskAwaitable" or "ConfiguredCancelableAsyncEnumerable" or "ConfiguredAsyncDisposable",
+        Name: nameof(ConfiguredTaskAwaitable) or nameof(ConfiguredValueTaskAwaitable) or nameof(ConfiguredCancelableAsyncEnumerable<>) or nameof(ConfiguredAsyncDisposable),
         ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
     };
 
@@ -1699,10 +1708,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static bool EndsWithAsync(ExpressionSyntax expression) => expression switch
     {
-        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync(),
+        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync() && id.Identifier.ValueText is not WaitAsync,
         MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
         InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
-        GenericNameSyntax gn => gn.Identifier.Text.EndsWithAsync(),
+        GenericNameSyntax gn => gn.Identifier.Text.EndsWithAsync() && gn.Identifier.Text is not WaitAsync,
         _ => false,
     };
 
@@ -2174,7 +2183,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IParameterSymbol? GetParameter(ISymbol symbol, InvocationExpressionSyntax node) => symbol switch
         {
             IParameterSymbol ps => ps,
-            IMethodSymbol { MethodKind: MethodKind.DelegateInvoke }
+            IMethodSymbol { MethodKind: MethodKind.DelegateInvoke or MethodKind.Ordinary }
                 => node.Expression switch
                 {
                     MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax mae }

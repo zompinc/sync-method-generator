@@ -38,4 +38,19 @@ async Task MethodAsync(StreamReader reader, CancellationToken ct = default)
     );
 }
 """.Verify(true);
+
+    [Fact]
+    public Task MethodWrappedByDirective() => """
+[CreateSyncVersion]
+async Task MethodAsync(XmlReader reader, CancellationToken ct = default)
+{
+    if (await reader.ReadAsync()
+#if NET8_0_OR_GREATER
+                    .WaitAsync(ct)
+#endif
+                    )
+    {
+    }
+}
+""".Verify(true);
 }

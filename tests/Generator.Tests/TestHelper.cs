@@ -1,6 +1,7 @@
 ﻿using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Xml;
 using Zomp.SyncMethodGenerator;
 using static Generator.Tests.ModuleInitializer;
 
@@ -28,6 +29,7 @@ global using global::System.Reflection;
 global using global::System.Runtime.CompilerServices;
 global using global::System.Threading;
 global using global::System.Threading.Tasks;
+global using global::System.Xml;
 global using global::Zomp.SyncMethodGenerator;
 """;
 
@@ -99,6 +101,7 @@ partial class Class
             typeof(System.Buffers.MemoryPool<>).Assembly.Location,
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
+            typeof(XmlReader).Assembly.Location,
 #if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
 #endif

@@ -58,6 +58,7 @@ A list of changes applied to the new synchronized method:
   - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1)
 - Invocation changes
   - Remove `ConfigureAwait` from [Tasks](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.configureawait) and [Asynchronous Enumerations](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskasyncenumerableextensions.configureawait)
+  - Remove `WaitAsync` from [Tasks](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync)
   - Remove [WithCancellation](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskasyncenumerableextensions.withcancellation)
   - Rewrite asynchronous invocations with `Async` suffix to call synchronous version (e.g. [MoveNextAsync()](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1.movenextasync) becomes [MoveNext()](https://learn.microsoft.com/en-us/dotnet/api/system.collections.ienumerator.movenext))
   - Remove asynchronous invocations without the `Async` suffix
