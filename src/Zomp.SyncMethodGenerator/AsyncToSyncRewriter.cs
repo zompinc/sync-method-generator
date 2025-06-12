@@ -605,7 +605,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // Handle .ConfigureAwait(), .WithCancellationToken() and return the part in front of it
         if (IsTaskExtension(methodSymbol) && methodSymbol.Name is not MoveNextAsync)
         {
-            return memberAccess.Expression;
+            return memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
         }
 
         // Handle all other extension methods eg. arr.First()

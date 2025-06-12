@@ -39,8 +39,10 @@ async Task MethodAsync(StreamReader reader, CancellationToken ct = default)
 }
 """.Verify(true);
 
-    [Fact]
-    public Task MethodWrappedByDirective() => """
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task MethodWrappedByDirective(bool withConfigureAwait) => $$"""
 [CreateSyncVersion]
 async Task MethodAsync(XmlReader reader, CancellationToken ct = default)
 {
@@ -48,9 +50,9 @@ async Task MethodAsync(XmlReader reader, CancellationToken ct = default)
 #if NET8_0_OR_GREATER
                     .WaitAsync(ct)
 #endif
-                    )
+                    {{(withConfigureAwait ? ".ConfigureAwait(false)" : string.Empty)}})
     {
     }
 }
-""".Verify(true);
+""".Verify(true, true);
 }
