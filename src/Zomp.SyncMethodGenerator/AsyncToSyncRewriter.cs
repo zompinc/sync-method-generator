@@ -1981,7 +1981,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
             if (trivia.IsKind(SyntaxKind.ElseDirectiveTrivia))
             {
-                if (!ifDirectives.Peek())
+                if (ifDirectives.Count > 0 && !ifDirectives.Peek())
                 {
                     triviaList.Add(trivia);
                     continue;

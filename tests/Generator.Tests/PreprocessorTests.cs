@@ -55,4 +55,18 @@ async Task MethodAsync(XmlReader reader, CancellationToken ct = default)
     }
 }
 """.Verify(true, true);
+
+    [Fact]
+    public Task PreprocessorBeforeMethod() => """
+#if !THIS_IS_FALSE
+private static readonly bool b = false;
+#else
+private static readonly bool b = false;
+#endif
+
+[CreateSyncVersion]
+async Task MethodAsync(StreamWriter writer, CancellationToken ct = default)
+{
+}
+""".Verify();
 }
