@@ -1,4 +1,6 @@
-﻿namespace Generator.Tests;
+﻿using System.Globalization;
+
+namespace Generator.Tests;
 
 public class UnitTests
 {
@@ -747,21 +749,21 @@ public static async Task CallWithIProgressAsync()
 """.Verify(false, true);
 
     [Theory]
-    [InlineData("progress")]
-    [InlineData("progress as IProgress<float>")]
-    [InlineData("ProgressFunc(progress)")]
-    [InlineData("(Progress<float>)progress")]
-    [InlineData("(progress)")]
-    [InlineData("someBool ? progress : null")]
-    [InlineData("someBool ? null : progress")]
-    [InlineData("classWithProgress.Property")]
-    [InlineData("array[0]")]
-    [InlineData("customProgress++")]
-    [InlineData("customProgress + customProgress")]
-    [InlineData("(Progress<float>)classWithProgress")]
-    [InlineData("new CustomProgress()")]
-    [InlineData("SomeMethod(progress)")]
-    public Task PreserveIProgressExpressionArgument(string callArgument) => $$"""
+    [InlineData(1, "progress")]
+    [InlineData(2, "progress as IProgress<float>")]
+    [InlineData(3, "ProgressFunc(progress)")]
+    [InlineData(5, "(Progress<float>)progress")]
+    [InlineData(6, "(progress)")]
+    [InlineData(7, "someBool ? progress : null")]
+    [InlineData(8, "someBool ? null : progress")]
+    [InlineData(9, "classWithProgress.Property")]
+    [InlineData(10, "array[0]")]
+    [InlineData(11, "customProgress++")]
+    [InlineData(12, "customProgress + customProgress")]
+    [InlineData(13, "(Progress<float>)classWithProgress")]
+    [InlineData(14, "new CustomProgress()")]
+    [InlineData(15, "SomeMethod(progress)")]
+    public Task PreserveIProgressExpressionArgument(int n, string callArgument) => $$"""
 public static void WithIProgress(IProgress<float>? progress = null)
 {
 }
@@ -802,7 +804,7 @@ public static async Task CallWithIProgressAsync()
     var progress = new Progress<float>();
     await WithIProgressAsync({{callArgument}});
 }
-""".Verify(parameters: callArgument);
+""".Verify(parameters: n.ToString("D2", NumberFormatInfo.InvariantInfo));
 
     [Theory]
     [InlineData("progress++;")]
@@ -855,13 +857,13 @@ private sealed class CustomProgress : IProgress<float>
 """.Verify(false, true);
 
     [Theory]
-    [InlineData("progress++;")]
-    [InlineData("if (true) { progress++; }")]
-    [InlineData("if (true) progress++;")]
-    [InlineData("if (true) { } else progress++;")]
-    [InlineData("if (false) { } else if (true) progress++;")]
-    [InlineData("if (false) { } else if (true) progress++; else { }")]
-    [InlineData("""
+    [InlineData(1, "progress++;")]
+    [InlineData(2, "if (true) { progress++; }")]
+    [InlineData(3, "if (true) progress++;")]
+    [InlineData(4, "if (true) { } else progress++;")]
+    [InlineData(5, "if (false) { } else if (true) progress++;")]
+    [InlineData(6, "if (false) { } else if (true) progress++; else { }")]
+    [InlineData(7, """
         switch (k)
         {
             case 1:
@@ -873,7 +875,7 @@ private sealed class CustomProgress : IProgress<float>
                 break;
         }
         """)]
-    public Task PreserveIProgressStatement(string statement) => $$"""
+    public Task PreserveIProgressStatement(int n, string statement) => $$"""
 public static async Task WithIProgressAsync(IProgress<float>? progress = null)
 {
     await Task.CompletedTask;
@@ -901,7 +903,7 @@ private sealed class CustomProgress : IProgress<float>
 
     public void Report(float value) => throw new NotImplementedException();
 }
-""".Verify(parameters: statement);
+""".Verify(parameters: n.ToString("D2", NumberFormatInfo.InvariantInfo));
 
     [Fact]
     public Task WhenDroppingStatementLeaveTrivia() => $$"""
