@@ -747,6 +747,64 @@ public static async Task CallWithIProgressAsync()
 """.Verify(false, true);
 
     [Theory]
+    [InlineData("progress")]
+    [InlineData("progress as IProgress<float>")]
+    [InlineData("ProgressFunc(progress)")]
+    [InlineData("(Progress<float>)progress")]
+    [InlineData("(progress)")]
+    [InlineData("someBool ? progress : null")]
+    [InlineData("someBool ? null : progress")]
+    [InlineData("classWithProgress.Property")]
+    [InlineData("array[0]")]
+    [InlineData("customProgress++")]
+    [InlineData("customProgress + customProgress")]
+    [InlineData("(Progress<float>)classWithProgress")]
+    [InlineData("new CustomProgress()")]
+    [InlineData("SomeMethod(progress)")]
+    public Task PreserveIProgressExpressionArgument(string callArgument) => $$"""
+public static void WithIProgress(IProgress<float>? progress = null)
+{
+}
+
+public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+{
+}
+
+static Func<IProgress<float>?, IProgress<float>?> ProgressFunc = (p) => p;
+
+bool someBool = true;
+
+class ClassWithProgress
+{
+    Progress<float> pg = new();
+    public Progress<float> Property => pg;
+    public static implicit operator Progress<float>(ClassWithProgress a) => a.pg;
+}
+
+class CustomProgress : IProgress<float>
+{
+    public static CustomProgress operator ++(CustomProgress a) => a;
+    public static CustomProgress operator +(CustomProgress a, CustomProgress b) => a;
+    public void Report(float value) => throw new NotImplementedException();
+}
+
+static CustomProgress customProgress = new();
+
+static Progress<float>[] array = Array.Empty<Progress<float>>();
+
+static ClassWithProgress classWithProgress = new();
+
+static IProgress<T> SomeMethod<T>(IProgress<T> p) => p;
+
+[CreateSyncVersion(PreserveProgress = true)]
+public static async Task CallWithIProgressAsync()
+{
+    var progress = new Progress<float>();
+    await WithIProgressAsync({{callArgument}});
+}
+""".Verify(parameters: callArgument);
+
+    [Theory]
     [InlineData("progress++;")]
     [InlineData("if (true) { progress++; }")]
     [InlineData("if (true) progress++;")]
@@ -795,6 +853,55 @@ private sealed class CustomProgress : IProgress<float>
     public void Report(float value) => throw new NotImplementedException();
 }
 """.Verify(false, true);
+
+    [Theory]
+    [InlineData("progress++;")]
+    [InlineData("if (true) { progress++; }")]
+    [InlineData("if (true) progress++;")]
+    [InlineData("if (true) { } else progress++;")]
+    [InlineData("if (false) { } else if (true) progress++;")]
+    [InlineData("if (false) { } else if (true) progress++; else { }")]
+    [InlineData("""
+        switch (k)
+        {
+            case 1:
+                progress++;
+                break;
+            default:
+                progress++;
+                progress++;
+                break;
+        }
+        """)]
+    public Task PreserveIProgressStatement(string statement) => $$"""
+public static async Task WithIProgressAsync(IProgress<float>? progress = null)
+{
+    await Task.CompletedTask;
+}
+
+public static void WithIProgress()
+{
+}
+
+static int k = 2;
+
+[CreateSyncVersion(PreserveProgress = true)]
+public static async Task CallWithIProgressAsync()
+{
+    CustomProgress progress = new();
+
+    {{statement}}
+
+    await WithIProgressAsync(progress);
+}
+
+private sealed class CustomProgress : IProgress<float>
+{
+    public static CustomProgress operator ++(CustomProgress a) => a;
+
+    public void Report(float value) => throw new NotImplementedException();
+}
+""".Verify(parameters: statement);
 
     [Fact]
     public Task WhenDroppingStatementLeaveTrivia() => $$"""

@@ -10,7 +10,8 @@ namespace Zomp.SyncMethodGenerator;
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable) : CSharpSyntaxRewriter
+/// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress"/> parameters.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -69,6 +70,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
+    private readonly bool preserveProgress = preserveProgress;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
@@ -1635,7 +1637,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             Token(SyntaxKind.CloseBraceToken)
             .PrependSpace());
 
-    private static bool ShouldRemoveType(ITypeSymbol symbol)
+    private bool ShouldRemoveType(ITypeSymbol symbol)
     {
         if (symbol is IArrayTypeSymbol at)
         {
@@ -1655,11 +1657,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                     ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
                 })
             {
-                return true;
+                return !preserveProgress;
             }
         }
 
-        return IsIProgress(namedSymbol) || IsCancellationToken(namedSymbol);
+        return (IsIProgress(namedSymbol) && !preserveProgress) || IsCancellationToken(namedSymbol);
     }
 
     private static ITypeSymbol GetReturnType(ISymbol symbol) => symbol switch
@@ -1675,7 +1677,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => throw new NotSupportedException($"Can't process {symbol}"),
     };
 
-    private static bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
+    private bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
     {
         IPropertySymbol
         {
