@@ -254,4 +254,16 @@ await Task.CompletedTask;
         _ = a + b + await Task.FromResult(30);
 #endif
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact(Skip = "Need to fix")]
+    public Task SyncOnlyAroundConstructor() => """
+        _ = new
+#if SYNC_ONLY
+            global::System.Text.UTF8Encoding
+#else
+            UTF32Encoding
+#endif
+            ();
+
+""".Verify(sourceType: SourceType.MethodBody);
 }
