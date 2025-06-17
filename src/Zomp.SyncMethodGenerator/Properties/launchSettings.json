@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Zomp.SyncMethodGenerator": {
+      "commandName": "DebugRoslynComponent",
+      "targetProject": "..\\..\\tests\\GenerationSandbox.Tests\\GenerationSandbox.Tests.csproj"
+    }
+  }
+}
