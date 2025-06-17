@@ -1,11 +1,15 @@
 # Sync Method Generator
 
+![Type less, sync more, star!](https://img.shields.io/badge/Type_less-Sync_more-purple)
 [![Build](https://github.com/zompinc/sync-method-generator/actions/workflows/build.yml/badge.svg)](https://github.com/zompinc/sync-method-generator/actions/workflows/build.yml)
 ![Support .NET Standard 2.0](https://img.shields.io/badge/dotnet%20version-.NET%20Standard%202.0-blue)
 [![Nuget](https://img.shields.io/nuget/v/Zomp.SyncMethodGenerator)](https://www.nuget.org/packages/Zomp.SyncMethodGenerator)
 [![codecov](https://codecov.io/gh/zompinc/sync-method-generator/branch/master/graph/badge.svg)](https://codecov.io/gh/zompinc/sync-method-generator)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/zompinc/sync-method-generator)
 
 This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview) produces a sync method from an async one.
+
+If you hate code duplication or calling async methods from sync please [⭐ star this project](https://github.com/zompinc/sync-method-generator/stargazers)
 
 ## Use cases
 
@@ -130,6 +134,11 @@ public void WithSyncOnlyDirective()
 If you only want to execute in the original async version, flip the flag like this: `#if !SYNC_ONLY`.
 
 Note: `SYNC_ONLY` cannot be mixed with other symbols in a conditional expression and cannot have `#elif` directive.
+
+> [!WARNING]  
+> `SYNC_ONLY` flag currently works in parameter lists, argument lists and statements.  
+> Please always double check your code when using this flag.  
+> If your use case is not supported, please log an issue.
 
 ## Installation
 
