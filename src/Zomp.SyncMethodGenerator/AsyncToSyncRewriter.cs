@@ -1,4 +1,4 @@
-﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -10,7 +10,8 @@ namespace Zomp.SyncMethodGenerator;
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable) : CSharpSyntaxRewriter
+/// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress"/> parameters.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -69,6 +70,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
+    private readonly bool preserveProgress = preserveProgress;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
@@ -1635,33 +1637,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             Token(SyntaxKind.CloseBraceToken)
             .PrependSpace());
 
-    private static bool ShouldRemoveType(ITypeSymbol symbol)
-    {
-        if (symbol is IArrayTypeSymbol at)
-        {
-            return ShouldRemoveType(at.ElementType);
-        }
-
-        if (symbol is not INamedTypeSymbol namedSymbol)
-        {
-            return false;
-        }
-
-        foreach (var @interface in GetInterfaces(namedSymbol))
-        {
-            if (IsIProgress(@interface) || @interface is
-                {
-                    Name: IAsyncResult, IsGenericType: false,
-                    ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-                })
-            {
-                return true;
-            }
-        }
-
-        return IsIProgress(namedSymbol) || IsCancellationToken(namedSymbol);
-    }
-
     private static ITypeSymbol GetReturnType(ISymbol symbol) => symbol switch
     {
         IFieldSymbol fs => fs.Type,
@@ -1673,35 +1648,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IDiscardSymbol ds => ds.Type,
         IEventSymbol es => es.Type,
         _ => throw new NotSupportedException($"Can't process {symbol}"),
-    };
-
-    private static bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
-    {
-        IPropertySymbol
-        {
-            Name: CompletedTask, Type: INamedTypeSymbol
-            {
-                Name: Task or ValueTask, IsGenericType: false,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => true,
-        IPropertySymbol
-        {
-            Name: IsCancellationRequested, ContainingType:
-            {
-                Name: CancellationToken, IsGenericType: false,
-                ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
-            }
-        }
-
-        => !isNegated,
-        IMethodSymbol ms =>
-            IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
-                && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
-                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver))),
-        _ => ShouldRemoveType(GetReturnType(symbol)),
     };
 
     private static MemberAccessExpressionSyntax AppendSpan(ExpressionSyntax @base)
@@ -1923,6 +1869,62 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return newLeadingTrivia;
     }
+
+    private bool ShouldRemoveType(ITypeSymbol symbol)
+    {
+        if (symbol is IArrayTypeSymbol at)
+        {
+            return ShouldRemoveType(at.ElementType);
+        }
+
+        if (symbol is not INamedTypeSymbol namedSymbol)
+        {
+            return false;
+        }
+
+        foreach (var @interface in GetInterfaces(namedSymbol))
+        {
+            if (IsIProgress(@interface) || @interface is
+                {
+                    Name: IAsyncResult, IsGenericType: false,
+                    ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+                })
+            {
+                return !preserveProgress;
+            }
+        }
+
+        return (IsIProgress(namedSymbol) && !preserveProgress) || IsCancellationToken(namedSymbol);
+    }
+
+    private bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
+    {
+        IPropertySymbol
+        {
+            Name: CompletedTask, Type: INamedTypeSymbol
+            {
+                Name: Task or ValueTask, IsGenericType: false,
+                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+            }
+        }
+
+        => true,
+        IPropertySymbol
+        {
+            Name: IsCancellationRequested, ContainingType:
+            {
+                Name: CancellationToken, IsGenericType: false,
+                ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
+            }
+        }
+
+        => !isNegated,
+        IMethodSymbol ms =>
+            IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
+                && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
+                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver))),
+        _ => ShouldRemoveType(GetReturnType(symbol)),
+    };
 
     private bool PreProcess(
         SyntaxList<StatementSyntax> statements,

@@ -13,6 +13,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
+    internal const string PreserveProgress = "PreserveProgress";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -137,9 +138,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             break;
         }
 
-        var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
-        disableNullable |= explicitDisableNullable;
-
         var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;
         while (node.Parent is not null)
@@ -167,7 +165,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable);
+        var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
+        disableNullable |= explicitDisableNullable;
+
+        var preserveProgress = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveProgress) is { Value.Value: true };
+
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress);
         var sn = rewriter.Visit(methodDeclarationSyntax);
         var content = sn.ToFullString();
 

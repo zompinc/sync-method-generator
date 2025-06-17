@@ -38,6 +38,7 @@
     <Using Include="Microsoft.CodeAnalysis" />
     <Using Include="Microsoft.CodeAnalysis.CSharp" />
     <Using Include="System.Collections.Immutable" />
+    <Using Include="System.Globalization" />
     <Using Include="System.Numerics" />
   </ItemGroup>
 </Project>

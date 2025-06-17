@@ -20,6 +20,11 @@ namespace Zomp.SyncMethodGenerator
         /// Gets or sets a value indicating whether "#nullable enable" directive will be omitted from generated code. False by default.
         /// </summary>
         public bool {{SyncMethodSourceGenerator.OmitNullableDirective}} { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether <see cref="System.IProgress{T}"/> parameters will be preserved in the generated code. False by default.
+        /// </summary>
+        public bool {{SyncMethodSourceGenerator.PreserveProgress}} { get; set; }
     }
     #endif
 }

@@ -55,7 +55,7 @@ A list of changes applied to the new synchronized method:
 - \* [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask)s are handled exactly like [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)s
 - Remove parameters
   - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
-  - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1)
+  - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1), unless the `PreserveProgress` property is set to `true`.
 - Invocation changes
   - Remove `ConfigureAwait` from [Tasks](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.configureawait) and [Asynchronous Enumerations](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskasyncenumerableextensions.configureawait)
   - Remove `WaitAsync` from [Tasks](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync)
@@ -82,6 +82,18 @@ This source generator detects language version during the compilation. By defaul
 public async Task MethodAsync()
 {
     string f = null;
+}
+```
+
+#### PreserveProgress
+
+By default, this source generator removes `IProgress<T>` parameters from async methods. To preserve them, use the `PreserveProgress` option.
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion(PreserveProgress = true)]
+public async Task MethodAsync(IProgress<double> progress)
+{
+  progress.Report(0.0);
 }
 ```
 
