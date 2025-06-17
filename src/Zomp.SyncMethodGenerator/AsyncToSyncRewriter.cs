@@ -381,43 +381,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var removeTrailingEndIf = false;
 
-        foreach (var extraParameterGroup in entries)
+        ProcessSyncOnlyEntries(entries, ref newParams, ref removeTrailingEndIf, extraParameter =>
         {
-            var index = extraParameterGroup.Key;
-
-            if (extraParameterGroup.Value.IsNewStatements)
+            if (extraParameter is not LocalDeclarationStatementSyntax declaration)
             {
-                newParams = newParams.RemoveAt(index);
-                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
-                {
-                    if (extraParameter is not LocalDeclarationStatementSyntax declaration)
-                    {
-                        continue;
-                    }
-
-                    var id = Identifier(declaration.Declaration.Variables.Single(v => !string.IsNullOrWhiteSpace(v.Identifier.ValueText)).Identifier.ValueText);
-                    var p = Parameter(default, default, declaration.Declaration.Type, id, default);
-                    newParams = newParams.Insert(index, p);
-                }
+                return null;
             }
-            else
-            {
-                if (index >= newParams.Count)
-                {
-                    removeTrailingEndIf = true;
-                    continue;
-                }
 
-                var pRemoveEndIf = newParams[index];
-                newParams = newParams.RemoveAt(index);
-                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
-
-                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
-
-                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
-                newParams = newParams.Insert(index, pRemoveEndIf);
-            }
-        }
+            var id = Identifier(declaration.Declaration.Variables.Single(v => !string.IsNullOrWhiteSpace(v.Identifier.ValueText)).Identifier.ValueText);
+            return Parameter(default, default, declaration.Declaration.Type, id, default);
+        });
 
         newNode = newNode.WithParameters(newParams);
 
@@ -1057,42 +1030,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var removeTrailingEndIf = false;
 
-        foreach (var extraParameterGroup in entries)
+        ProcessSyncOnlyEntries(entries, ref newParams, ref removeTrailingEndIf, extraParameter =>
         {
-            var index = extraParameterGroup.Key;
-
-            if (extraParameterGroup.Value.IsNewStatements)
+            if (extraParameter is not ExpressionStatementSyntax ess)
             {
-                newParams = newParams.RemoveAt(index);
-                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
-                {
-                    if (extraParameter is not ExpressionStatementSyntax ess)
-                    {
-                        continue;
-                    }
-
-                    var arg = Argument(ess.Expression);
-                    newParams = newParams.Insert(index, arg);
-                }
+                return null;
             }
-            else
-            {
-                if (index >= newParams.Count)
-                {
-                    removeTrailingEndIf = true;
-                    continue;
-                }
 
-                var pRemoveEndIf = newParams[index];
-                newParams = newParams.RemoveAt(index);
-                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
-
-                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
-
-                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
-                newParams = newParams.Insert(index, pRemoveEndIf);
-            }
-        }
+            return Argument(ess.Expression);
+        });
 
         var retval = @base.WithArguments(newParams);
 
@@ -1450,6 +1396,46 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IFieldSymbol fs => IdentifierName(MakeType(fs.Type) + '.' + fs.Name),
         _ => IdentifierName(typeSymbol.Name),
     };
+
+    private static void ProcessSyncOnlyEntries<TNode>(KeyValuePair<int, Operation>[] entries, ref SeparatedSyntaxList<TNode> separatedItems, ref bool removeTrailingEndIf, Func<StatementSyntax, TNode?> createNewListItem)
+        where TNode : SyntaxNode
+    {
+        foreach (var extraParameterGroup in entries)
+        {
+            var index = extraParameterGroup.Key;
+
+            if (extraParameterGroup.Value.IsNewStatements)
+            {
+                separatedItems = separatedItems.RemoveAt(index);
+                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
+                {
+                    if (createNewListItem(extraParameter) is not { } newItem)
+                    {
+                        continue;
+                    }
+
+                    separatedItems = separatedItems.Insert(index, newItem);
+                }
+            }
+            else
+            {
+                if (index >= separatedItems.Count)
+                {
+                    removeTrailingEndIf = true;
+                    continue;
+                }
+
+                var pRemoveEndIf = separatedItems[index];
+                separatedItems = separatedItems.RemoveAt(index);
+                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
+
+                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
+
+                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
+                separatedItems = separatedItems.Insert(index, pRemoveEndIf);
+            }
+        }
+    }
 
     private static SpecialMethod IsSpecialMethod(IMethodSymbol methodSymbol) => methodSymbol switch
     {
