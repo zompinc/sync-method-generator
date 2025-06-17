@@ -264,6 +264,30 @@ await Task.CompletedTask;
             UTF32Encoding
 #endif
             ();
+""".Verify(sourceType: SourceType.MethodBody);
 
+    [Fact(Skip = "Need to fix")]
+    public Task SyncOnlyInitializer() => """
+        _ = new XmlReaderSettings
+        {
+            Async =
+#if SYNC_ONLY
+            false
+#else
+            true
+#endif
+            ,
+        };
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task SyncOnlyArgument() => """
+        _ = new UTF8Encoding(
+#if SYNC_ONLY
+            false
+#else
+            true
+#endif
+            );
 """.Verify(sourceType: SourceType.MethodBody);
 }

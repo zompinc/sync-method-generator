@@ -377,29 +377,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newParams = RemoveAtRange(newNode.Parameters, invalid);
 
         var entries
-            = modifications.OrderByDescending(z => z.Key);
+            = modifications.OrderByDescending(z => z.Key).ToArray();
 
         var removeTrailingEndIf = false;
-
-        List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
-        {
-            var newLeadingTrivia = new List<SyntaxTrivia>();
-
-            var removed = false;
-            foreach (var st in list)
-            {
-                if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
-                {
-                    removed = true;
-                    newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
-                    continue;
-                }
-
-                newLeadingTrivia.Add(st);
-            }
-
-            return newLeadingTrivia;
-        }
 
         foreach (var extraParameterGroup in entries)
         {
@@ -1030,6 +1010,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
     {
         ImmutableArray<IParameterSymbol>? nullableParameters = null;
+        var modifications = new Dictionary<int, Operation>();
+
+        var ds = new DirectiveStack();
 
         if (node.Parent is { } parent
             && GetSymbol(parent) is IMethodSymbol { Parameters: { Length: > 0 } @params })
@@ -1040,6 +1023,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         bool ShouldRemoveArgumentLocal(ArgumentSyntax arg, int index)
         {
             var byExpression = ShouldRemoveArgument(arg.Expression);
+
+            var leading = arg.GetLeadingTrivia();
+            var extra = ProcessTrivia(leading, ds);
+
+            if (extra is { AdditionalStatements.Count: > 0 })
+            {
+                modifications.Add(index, new List<StatementSyntax>(extra.AdditionalStatements));
+                modifications.Add(index + 1, true);
+            }
+
             if (byExpression || nullableParameters is not { } parameters)
             {
                 return byExpression;
@@ -1058,9 +1051,56 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = (ArgumentListSyntax)base.VisitArgumentList(node)!;
         var invalid = node.Arguments.GetIndices(ShouldRemoveArgumentLocal);
 
-        var newList = RemoveAtRange(@base.Arguments, invalid);
+        var entries = modifications.OrderByDescending(z => z.Key).ToArray();
 
-        var retval = @base.WithArguments(newList);
+        var newParams = RemoveAtRange(@base.Arguments, invalid);
+
+        var removeTrailingEndIf = false;
+
+        foreach (var extraParameterGroup in entries)
+        {
+            var index = extraParameterGroup.Key;
+
+            if (extraParameterGroup.Value.IsNewStatements)
+            {
+                newParams = newParams.RemoveAt(index);
+                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
+                {
+                    if (extraParameter is not ExpressionStatementSyntax ess)
+                    {
+                        continue;
+                    }
+
+                    var arg = Argument(ess.Expression);
+                    newParams = newParams.Insert(index, arg);
+                }
+            }
+            else
+            {
+                if (index >= newParams.Count)
+                {
+                    removeTrailingEndIf = true;
+                    continue;
+                }
+
+                var pRemoveEndIf = newParams[index];
+                newParams = newParams.RemoveAt(index);
+                var leadingTrivia = pRemoveEndIf.GetLeadingTrivia();
+
+                var newLeadingTrivia = RemoveFirstEndIf(leadingTrivia);
+
+                pRemoveEndIf = pRemoveEndIf.WithLeadingTrivia(newLeadingTrivia);
+                newParams = newParams.Insert(index, pRemoveEndIf);
+            }
+        }
+
+        var retval = @base.WithArguments(newParams);
+
+        if (removeTrailingEndIf)
+        {
+            retval = retval.WithCloseParenToken(retval.CloseParenToken.WithLeadingTrivia(RemoveFirstEndIf(retval.CloseParenToken.LeadingTrivia)));
+        }
+
         if (invalid.Contains(node.Arguments.Count - 1))
         {
             retval = retval
@@ -1876,6 +1916,26 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         return newTypeSyntax;
+    }
+
+    private static List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
+    {
+        var newLeadingTrivia = new List<SyntaxTrivia>();
+
+        var removed = false;
+        foreach (var st in list)
+        {
+            if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+            {
+                removed = true;
+                newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
+                continue;
+            }
+
+            newLeadingTrivia.Add(st);
+        }
+
+        return newLeadingTrivia;
     }
 
     private bool PreProcess(

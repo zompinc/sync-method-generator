@@ -27,6 +27,7 @@ global using global::System.Numerics;
 #endif
 global using global::System.Reflection;
 global using global::System.Runtime.CompilerServices;
+global using global::System.Text;
 global using global::System.Threading;
 global using global::System.Threading.Tasks;
 global using global::System.Xml;
