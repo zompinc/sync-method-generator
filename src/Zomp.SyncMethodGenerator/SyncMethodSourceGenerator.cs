@@ -29,8 +29,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
         var disableNullable =
-            context.CompilationProvider.Select((c, _)
-                => c is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 });
+            context.CompilationProvider.Select((c, _) =>
+            {
+                var isNullableDisabledInProject = c.Options.NullableContextOptions == NullableContextOptions.Disable;
+                var isLanguageVersionBelowCSharp8 = c is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp8 };
+                return isNullableDisabledInProject || isLanguageVersionBelowCSharp8;
+            });
 
         var methodDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
