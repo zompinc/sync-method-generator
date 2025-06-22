@@ -752,4 +752,17 @@ async Task<string> MethodAsync(System.Net.HttpStatusCode? bar)
     return string.Empty;
 }
 """.Verify();
+
+    [Fact]
+    public Task PreserveNullabilityInReturnType() => """
+[CreateSyncVersion]
+public Task<string?> MethodAsync() => Task.FromResult<string?>(null);
+""".Verify();
+
+    [Fact]
+    public Task PreserveNullabilityInReturnTypeGenerics() => """
+[CreateSyncVersion]
+public async Task<Tuple<Tuple<string, StringBuilder?>?, object?>?> MethodAsync()
+=> new(new(null, null), null);
+""".Verify();
 }

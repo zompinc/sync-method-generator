@@ -9,7 +9,7 @@
 
 This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview) produces a sync method from an async one.
 
-If you hate code duplication or calling async methods from sync please [⭐ star this project](https://github.com/zompinc/sync-method-generator/stargazers)
+[⭐ Star this project](https://github.com/zompinc/sync-method-generator/stargazers) if you hate code duplication or calling async methods from sync.
 
 ## Use cases
 

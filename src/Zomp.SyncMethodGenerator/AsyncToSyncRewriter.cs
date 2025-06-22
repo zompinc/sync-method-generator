@@ -1687,9 +1687,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => false,
     };
 
-    private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (symbol switch
+    private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
     {
-        _ when returnType is GenericNameSyntax => returnType,
+        NullableTypeSyntax => returnType,
+        GenericNameSyntax => returnType,
         _ => ProcessSymbol(symbol),
     }).WithTriviaFrom(returnType);
 

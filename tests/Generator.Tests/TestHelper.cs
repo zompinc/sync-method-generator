@@ -123,7 +123,7 @@ partial class Class
 
         var compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
-            options: new(OutputKind.DynamicallyLinkedLibrary),
+            options: new(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable),
             syntaxTrees: [syntaxTree, globalUsings],
             references: references);
 
