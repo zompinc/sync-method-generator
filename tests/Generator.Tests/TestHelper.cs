@@ -1,4 +1,5 @@
-﻿using System.Data.Common;
+﻿using Microsoft.CodeAnalysis;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Xml;
