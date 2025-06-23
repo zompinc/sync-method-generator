@@ -1,4 +1,5 @@
-﻿using System.Data.Common;
+﻿using Microsoft.CodeAnalysis;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -123,7 +124,7 @@ partial class Class
 
         var compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
-            options: new(OutputKind.DynamicallyLinkedLibrary),
+            options: new(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable),
             syntaxTrees: [syntaxTree, globalUsings],
             references: references);
 
