@@ -109,7 +109,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var isTargetTypeSymbol = context.TargetSymbol is ITypeSymbol;
 
-        var methodSymbol = context.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax, ct);
+        var methodSymbol = isTargetTypeSymbol ? context.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax, ct) : context.TargetSymbol as IMethodSymbol;
         if (methodSymbol == null)
         {
             return null;
