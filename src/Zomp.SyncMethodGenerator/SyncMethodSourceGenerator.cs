@@ -10,7 +10,14 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// Create sync version attribute string.
     /// </summary>
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
+
+    /// <summary>
+    /// Ignore create sync version attribute string.
+    /// </summary>
+    public const string IgnoreCreateSyncVersionAttribute = "IgnoreCreateSyncVersionAttribute";
+
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
+    internal const string QualifiedIgnoreCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{IgnoreCreateSyncVersionAttribute}";
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
@@ -28,6 +35,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
+        context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+            $"{IgnoreCreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.IgnoreCreateSyncVersionAttributeSource, Encoding.UTF8)));
+
         var disableNullable =
             context.CompilationProvider.Select((c, _) =>
             {
@@ -40,9 +50,10 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             .ForAttributeWithMetadataName(
                 QualifiedCreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, ct) => ctx)
+                transform: static (ctx, ct) => TransformForGeneration(ctx, ct))
+            .SelectMany((list, ct) => list)
             .Combine(disableNullable)
-            .Select((data, ct) => GetMethodToGenerate(data.Left, (MethodDeclarationSyntax)data.Left.TargetNode, data.Right, ct)!)
+            .Select((data, ct) => GetMethodToGenerate(data.Left.Context, data.Left.Syntax, data.Right, ct)!)
             .WithTrackingName("GetMethodToGenerate")
             .Where(static s => s is not null);
 
@@ -66,23 +77,29 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             });
     }
 
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-        => node is MethodDeclarationSyntax { AttributeLists.Count: > 0 };
-
-    private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
+    private static bool IsSyntaxTargetForGeneration(SyntaxNode node) => node switch
     {
-        static string BuildClassName(MethodParentDeclaration c)
-            => c.TypeParameterListSyntax.IsEmpty
-                ? c.ParentName
-                : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
+        MethodDeclarationSyntax m when m.AttributeLists.Count > 0 => true,
+        ClassDeclarationSyntax c when c.AttributeLists.Count > 0 => true,
+        StructDeclarationSyntax s when s.AttributeLists.Count > 0 => true,
+        InterfaceDeclarationSyntax i when i.AttributeLists.Count > 0 => true,
+        _ => false,
+    };
 
-        var sourcePath = $"{string.Join(".", m.Namespaces)}" +
-            $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
-            $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
+    private static ImmutableArray<TransformResult> TransformForGeneration(GeneratorAttributeSyntaxContext ctx, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
 
-        var source = SourceGenerationHelper.GenerateExtensionClass(m);
+        if (ctx.TargetNode is TypeDeclarationSyntax typeDecl)
+        {
+            return [.. typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s))];
+        }
+        else if (ctx.TargetNode is MethodDeclarationSyntax methodDecl)
+        {
+            return [new TransformResult(ctx, methodDecl)];
+        }
 
-        return (m, sourcePath, source);
+        return [];
     }
 
     private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
@@ -90,17 +107,55 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         // stop if we're asked to
         ct.ThrowIfCancellationRequested();
 
-        if (context.TargetSymbol is not IMethodSymbol methodSymbol)
+        var isTargetTypeSymbol = context.TargetSymbol is ITypeSymbol;
+
+        var methodSymbol = context.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax, ct);
+        if (methodSymbol == null)
         {
-            // the attribute isn't on a method
             return null;
         }
 
-        var attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
-        if (attribute == null)
+        if (!methodSymbol.IsAsync
+            && (methodSymbol.ReturnType is not INamedTypeSymbol named
+                || !AsyncToSyncRewriter.IsTypeOfInterest(named)))
+        {
+            return null;
+        }
+
+        var createSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
+        if (createSyncVersionAttribute == null)
         {
             // nothing to do if this type isn't available
             return null;
+        }
+
+        var ignoreCreateSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedIgnoreCreateSyncVersionAttribute);
+
+        foreach (var attributeData in methodSymbol.GetAttributes())
+        {
+            if (ignoreCreateSyncVersionAttribute != null && ignoreCreateSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                // Skip processing if the method has the ignored attribute applied
+                return null;
+            }
+
+            if (isTargetTypeSymbol && createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                // Skip processing if the attribute is defined on the type to prioritize method-level attribute
+                return null;
+            }
+        }
+
+        AttributeData syncMethodGeneratorAttributeData = null!;
+        foreach (var attributeData in context.TargetSymbol.GetAttributes())
+        {
+            if (!createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                continue;
+            }
+
+            syncMethodGeneratorAttributeData = attributeData;
+            break;
         }
 
         // find the index of the method in the containing type
@@ -120,26 +175,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     ++index;
                 }
             }
-        }
-
-        if (!methodSymbol.IsAsync
-            && (methodSymbol.ReturnType is not INamedTypeSymbol named
-                || !AsyncToSyncRewriter.IsTypeOfInterest(named)))
-        {
-            return null;
-        }
-
-        AttributeData syncMethodGeneratorAttributeData = null!;
-
-        foreach (var attributeData in methodSymbol.GetAttributes())
-        {
-            if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
-            {
-                continue;
-            }
-
-            syncMethodGeneratorAttributeData = attributeData;
-            break;
         }
 
         var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
@@ -213,5 +248,21 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
 
         return result;
+    }
+
+    private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
+    {
+        static string BuildClassName(MethodParentDeclaration c)
+            => c.TypeParameterListSyntax.IsEmpty
+                ? c.ParentName
+                : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
+
+        var sourcePath = $"{string.Join(".", m.Namespaces)}" +
+            $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
+            $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
+
+        var source = SourceGenerationHelper.GenerateExtensionClass(m);
+
+        return (m, sourcePath, source);
     }
 }

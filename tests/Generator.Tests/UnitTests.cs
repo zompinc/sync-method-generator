@@ -765,4 +765,63 @@ public Task<string?> MethodAsync() => Task.FromResult<string?>(null);
 public async Task<Tuple<Tuple<string, StringBuilder?>?, object?>?> MethodAsync()
 => new(new(null, null), null);
 """.Verify();
+
+    [Fact]
+    public Task AttributeTargetInterface() => """
+namespace Test;
+
+[CreateSyncVersion]
+public partial interface IAttributeTargetInterface
+{
+    Task MethodAsync();
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task AttributeTargetClass() => """
+namespace Test;
+
+[CreateSyncVersion]
+public partial class AttributeTargetClass
+{
+    Task MethodAsync()
+    {
+        return Task.CompletedTask;
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task AttributeTargetStruct() => """
+namespace Test;
+
+[CreateSyncVersion]
+public partial struct AttributeTargetStruct
+{
+    Task MethodAsync()
+    {
+        return Task.CompletedTask;
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task IgnoreCreateSyncVersion() => """
+namespace Test;
+
+[CreateSyncVersion]
+public partial class AttributeTargetClass
+{
+    Task Method1Async()
+    {
+        return Task.CompletedTask;
+    }
+
+    [IgnoreCreateSyncVersion]
+    Task Method1Async()
+    {
+        return Task.CompletedTask;
+    }
+}
+""".Verify(sourceType: SourceType.Full);
 }
