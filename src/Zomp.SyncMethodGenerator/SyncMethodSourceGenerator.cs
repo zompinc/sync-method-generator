@@ -265,4 +265,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         return (m, sourcePath, source);
     }
+
+    internal record TransformResult(GeneratorAttributeSyntaxContext Context, MethodDeclarationSyntax Syntax);
 }
