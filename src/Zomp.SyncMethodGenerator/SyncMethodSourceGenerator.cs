@@ -12,12 +12,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
 
     /// <summary>
-    /// Ignore create sync version attribute string.
+    /// Skip sync version attribute string.
     /// </summary>
-    public const string IgnoreCreateSyncVersionAttribute = "IgnoreCreateSyncVersionAttribute";
+    public const string SkipSyncVersionAttribute = "SkipSyncVersionAttribute";
 
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
-    internal const string QualifiedIgnoreCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{IgnoreCreateSyncVersionAttribute}";
+    internal const string QualifiedSkipSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{SkipSyncVersionAttribute}";
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
@@ -36,7 +36,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-            $"{IgnoreCreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.IgnoreCreateSyncVersionAttributeSource, Encoding.UTF8)));
+            $"{SkipSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.SkipSyncVersionAttributeSource, Encoding.UTF8)));
 
         var disableNullable =
             context.CompilationProvider.Select((c, _) =>
@@ -129,13 +129,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var ignoreCreateSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedIgnoreCreateSyncVersionAttribute);
+        var skipSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedSkipSyncVersionAttribute);
 
         foreach (var attributeData in methodSymbol.GetAttributes())
         {
-            if (ignoreCreateSyncVersionAttribute != null && ignoreCreateSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            if (skipSyncVersionAttribute != null && skipSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
             {
-                // Skip processing if the method has the ignored attribute applied
+                // Skip processing if the method has the skip attribute applied
                 return null;
             }
 
