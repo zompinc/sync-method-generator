@@ -40,7 +40,7 @@ public partial {{type}} Target
 namespace Test;
 
 [CreateSyncVersion]
-public partial class SkipSyncVersion
+public partial class SkipSyncVersionClass
 {
     Task Method1Async()
     {
@@ -48,7 +48,7 @@ public partial class SkipSyncVersion
     }
 
     [SkipSyncVersion]
-    Task Method1Async()
+    Task Method2Async()
     {
         return Task.CompletedTask;
     }
