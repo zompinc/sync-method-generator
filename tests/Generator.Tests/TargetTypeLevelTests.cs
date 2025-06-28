@@ -13,33 +13,27 @@ public partial interface ITargetInterface
 }
 """.Verify(sourceType: SourceType.Full);
 
-    [Fact]
-    public Task TargetClass() => """
+    [Theory]
+    [InlineData("class")]
+    [InlineData("struct")]
+    [InlineData("record")]
+    [InlineData("record struct")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison for clarity", Justification = "Too many styling issues otherwise")]
+    public Task TargetType(string type) => $$"""
 namespace Test;
 
 [CreateSyncVersion]
-public partial class TargetClass
+public partial {{type}} Target
 {
     Task MethodAsync()
     {
         return Task.CompletedTask;
     }
 }
-""".Verify(sourceType: SourceType.Full);
-
-    [Fact]
-    public Task TargetStruct() => """
-namespace Test;
-
-[CreateSyncVersion]
-public partial struct TargetStruct
-{
-    Task MethodAsync()
-    {
-        return Task.CompletedTask;
-    }
-}
-""".Verify(sourceType: SourceType.Full);
+""".Verify(
+        disableUnique: true,
+        sourceType: SourceType.Full,
+        parameters: type.Replace(" ", string.Empty));
 
     [Fact]
     public Task SkipSyncVersion() => """
