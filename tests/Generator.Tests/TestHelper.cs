@@ -136,7 +136,7 @@ partial class Class
 
         // Ensure that at least two sources are generated
         var results = driver.GetRunResult();
-        if (results.Diagnostics.Length == 0 && results.GeneratedTrees.Length < 2)
+        if (results.Diagnostics.Length == 0 && results.GeneratedTrees.Length < 3)
         {
             throw new InvalidOperationException("Nothing generated");
         }
@@ -144,7 +144,7 @@ partial class Class
         var target = new RunResultWithIgnoreList
         {
             Result = driver.GetRunResult(),
-            IgnoredFiles = { $"{SyncMethodSourceGenerator.CreateSyncVersionAttribute}.g.cs" },
+            IgnoredFiles = { $"{SyncMethodSourceGenerator.CreateSyncVersionAttribute}.g.cs", $"{SyncMethodSourceGenerator.SkipSyncVersionAttribute}.g.cs" },
         };
 
         var verifier = Verifier

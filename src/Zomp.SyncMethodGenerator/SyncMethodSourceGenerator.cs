@@ -10,7 +10,14 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     /// Create sync version attribute string.
     /// </summary>
     public const string CreateSyncVersionAttribute = "CreateSyncVersionAttribute";
+
+    /// <summary>
+    /// Skip sync version attribute string.
+    /// </summary>
+    public const string SkipSyncVersionAttribute = "SkipSyncVersionAttribute";
+
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
+    internal const string QualifiedSkipSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{SkipSyncVersionAttribute}";
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
@@ -28,6 +35,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             $"{CreateSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.CreateSyncVersionAttributeSource, Encoding.UTF8)));
 
+        context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+            $"{SkipSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.SkipSyncVersionAttributeSource, Encoding.UTF8)));
+
         var disableNullable =
             context.CompilationProvider.Select((c, _) =>
             {
@@ -40,9 +50,10 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             .ForAttributeWithMetadataName(
                 QualifiedCreateSyncVersionAttribute,
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, ct) => ctx)
+                transform: static (ctx, ct) => TransformForGeneration(ctx, ct))
+            .SelectMany((list, ct) => list)
             .Combine(disableNullable)
-            .Select((data, ct) => GetMethodToGenerate(data.Left, (MethodDeclarationSyntax)data.Left.TargetNode, data.Right, ct)!)
+            .Select((data, ct) => GetMethodToGenerate(data.Left.Context, data.Left.Syntax, data.Right, ct)!)
             .WithTrackingName("GetMethodToGenerate")
             .Where(static s => s is not null);
 
@@ -66,8 +77,31 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             });
     }
 
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-        => node is MethodDeclarationSyntax { AttributeLists.Count: > 0 };
+    private static bool IsSyntaxTargetForGeneration(SyntaxNode node) => node switch
+    {
+        MethodDeclarationSyntax { AttributeLists.Count: > 0 } => true,
+        ClassDeclarationSyntax { AttributeLists.Count: > 0 } => true,
+        StructDeclarationSyntax { AttributeLists.Count: > 0 } => true,
+        InterfaceDeclarationSyntax { AttributeLists.Count: > 0 } => true,
+        RecordDeclarationSyntax { AttributeLists.Count: > 0 } => true,
+        _ => false,
+    };
+
+    private static ImmutableArray<TransformResult> TransformForGeneration(GeneratorAttributeSyntaxContext ctx, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (ctx.TargetNode is TypeDeclarationSyntax typeDecl)
+        {
+            return [.. typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s))];
+        }
+        else if (ctx.TargetNode is MethodDeclarationSyntax methodDecl)
+        {
+            return [new TransformResult(ctx, methodDecl)];
+        }
+
+        return [];
+    }
 
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
@@ -90,14 +124,26 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         // stop if we're asked to
         ct.ThrowIfCancellationRequested();
 
-        if (context.TargetSymbol is not IMethodSymbol methodSymbol)
+        var isTargetTypeSymbol = context.TargetSymbol is ITypeSymbol;
+
+        var methodSymbol = isTargetTypeSymbol
+            ? context.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax, ct)
+            : context.TargetSymbol as IMethodSymbol;
+
+        if (methodSymbol == null)
         {
-            // the attribute isn't on a method
             return null;
         }
 
-        var attribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
-        if (attribute == null)
+        if (!methodSymbol.IsAsync
+            && (methodSymbol.ReturnType is not INamedTypeSymbol named
+                || !AsyncToSyncRewriter.IsTypeOfInterest(named)))
+        {
+            return null;
+        }
+
+        var createSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
+        if (createSyncVersionAttribute == null)
         {
             // nothing to do if this type isn't available
             return null;
@@ -122,18 +168,27 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        if (!methodSymbol.IsAsync
-            && (methodSymbol.ReturnType is not INamedTypeSymbol named
-                || !AsyncToSyncRewriter.IsTypeOfInterest(named)))
-        {
-            return null;
-        }
-
-        AttributeData syncMethodGeneratorAttributeData = null!;
+        var skipSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedSkipSyncVersionAttribute);
 
         foreach (var attributeData in methodSymbol.GetAttributes())
         {
-            if (!attribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            if (skipSyncVersionAttribute != null && skipSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                // Skip processing if the method has the skip attribute applied
+                return null;
+            }
+
+            if (isTargetTypeSymbol && createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            {
+                // Skip processing if the attribute is defined on the type to prioritize method-level attribute
+                return null;
+            }
+        }
+
+        AttributeData syncMethodGeneratorAttributeData = null!;
+        foreach (var attributeData in context.TargetSymbol.GetAttributes())
+        {
+            if (!createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
             {
                 continue;
             }
@@ -214,4 +269,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         return result;
     }
+
+    internal sealed record TransformResult(GeneratorAttributeSyntaxContext Context, MethodDeclarationSyntax Syntax);
 }

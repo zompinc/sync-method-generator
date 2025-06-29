@@ -20,9 +20,9 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
 
 ## How it works
 
-### CreateSyncVersionAttribute
+### CreateSyncVersionAttribute on a method
 
-Decorate your async method with `CreateSyncVersionAttribute` in your `partial` class, struct or record
+Decorate your async method with `CreateSyncVersionAttribute` in your `partial` class, struct, record, or interface:
 
 ```cs
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
@@ -31,7 +31,7 @@ CancellationToken ct)
     => await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
 ```
 
-And it will generate a sync version of the method:
+and it will generate a sync version of the method:
 
 ```cs
 static void Write(ReadOnlySpan<byte> buffer, Stream stream)
@@ -40,8 +40,8 @@ static void Write(ReadOnlySpan<byte> buffer, Stream stream)
 
 A list of changes applied to the new synchronized method:
 
-- Remove async modifier
-- Remove await from methods as well as `foreach` statement
+- Remove `async` modifier
+- Remove `await` from methods as well as `foreach` statement
 - Change types
 
   | From                                                                                                                                                                                                | To                                                                                                                                   |
@@ -56,6 +56,7 @@ A list of changes applied to the new synchronized method:
   | [ConfiguredCancelableAsyncEnumerable\<T>.GetAsyncEnumerator](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.configuredcancelableasyncenumerable-1.getasyncenumerator) | [IEnumerable\<T>.GetEnumerator](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1.getenumerator) |
   | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)                                                                                                                          | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                                               |
   | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)                                                                                                          | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                                               |
+
 - \* [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask)s are handled exactly like [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)s
 - Remove parameters
   - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
@@ -97,9 +98,45 @@ By default, this source generator removes `IProgress<T>` parameters from async m
 [Zomp.SyncMethodGenerator.CreateSyncVersion(PreserveProgress = true)]
 public async Task MethodAsync(IProgress<double> progress)
 {
-  progress.Report(0.0);
+    progress.Report(0.0);
 }
 ```
+
+### CreateSyncVersionAttribute on a type
+
+You can also decorate your type (class, struct, record, or interface) to generate a sync version for every asynchronous method.
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+partial class MyClass {
+    async Task Method1Async(...) { ... }
+    async IAsyncEnumerable<...> Method2Async(...) { ... }
+    [Zomp.SyncMethodGenerator.SkipSyncVersion]
+    async Task WillNotGenerateAsync(...) { ... }
+}
+```
+
+This will generate their sync counterparts:
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+partial class MyClass {
+    void Method1(...) { ... }
+}
+```
+
+and
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+partial class MyClass {
+    IEnumerable<...> Method2(...) { ... }
+}
+```
+
+#### SkipSyncVersionAttribute
+
+To exclude a method from generating a sync version use `SkipSyncVersionAttribute` on a method. See `WillNotGenerateAsync` method in the example above.
 
 ### SYNC_ONLY symbol
 
