@@ -839,13 +839,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     }
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitGlobalStatement(GlobalStatementSyntax node)
-    {
-        var @base = (GlobalStatementSyntax)base.VisitGlobalStatement(node)!;
-        return @base;
-    }
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
         var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
@@ -1478,7 +1471,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => SpecialMethod.None,
     };
 
-    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, Dictionary<int, ExtraNodeInfo> extraNodeInfoList)
+    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, List<ExtraNodeInfo> extraNodeInfoList)
     {
         var newStatements = new List<StatementSyntax>();
 
@@ -1486,23 +1479,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             var statement = list[i];
 
-            if (!extraNodeInfoList.TryGetValue(i, out var extra))
-            {
-                newStatements.Add(statement);
-                continue;
-            }
-
-            var (statementGetsDropped, statements, trivia) = extra;
+            var (statementGetsDropped, statements, leadingTrivia) = extraNodeInfoList[i];
 
             for (var j = 0; j < statements.Count; ++j)
             {
                 var syncOnlyStatement = statements[j];
                 var syncOnlyStatementWithTrivia = syncOnlyStatement;
 
-                if (j == statements.Count - 1 && trivia.Count > 0)
+                if (j == statements.Count - 1 && leadingTrivia.Count > 0)
                 {
                     var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
-                    trailingTrivia.AddRange(trivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
+                    trailingTrivia.AddRange(leadingTrivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
                     syncOnlyStatementWithTrivia = syncOnlyStatementWithTrivia.WithTrailingTrivia(trailingTrivia);
                 }
 
@@ -1512,18 +1499,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             if (!statementGetsDropped)
             {
                 var newStatement = statement;
-                if (extra is not null)
-                {
-                    newStatement = newStatement.WithLeadingTrivia(trivia);
-                }
+                newStatement = newStatement.WithLeadingTrivia(leadingTrivia);
 
                 newStatements.Add(newStatement);
             }
-            else if (extra is { LeadingTrivia: { } lt })
+            else if (leadingTrivia is not null)
             {
-                if (lt.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia)))
+                if (leadingTrivia.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia)))
                 {
-                    newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(lt));
+                    newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(leadingTrivia));
                 }
             }
         }
@@ -1929,7 +1913,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private bool PreProcess(
         SyntaxList<StatementSyntax> statements,
-        Dictionary<int, ExtraNodeInfo> extraNodeInfoList,
+        List<ExtraNodeInfo> extraNodeInfoList,
         DirectiveStack directiveStack)
     {
         var removeRemaining = false;
@@ -1960,7 +1944,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 eni = eni with { DropOriginal = true };
             }
 
-            extraNodeInfoList.Add(i, eni);
+            extraNodeInfoList.Add(eni);
         }
 
         return true;
@@ -2342,19 +2326,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private sealed record SyncOnlyAttributeContext(SyntaxList<AttributeListSyntax> Attributes, IList<SyntaxTrivia> LeadingTrivia);
 
-    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia)
-    {
-        public ExtraNodeInfo(bool dropOriginal)
-            : this(dropOriginal, List(Array.Empty<StatementSyntax>()), Array.Empty<SyntaxTrivia>())
-        {
-        }
-
-        public static implicit operator ExtraNodeInfo(bool b) => new(b);
-    }
+    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia);
 
     private sealed class StatementProcessor
     {
-        private readonly Dictionary<int, ExtraNodeInfo> extraNodeInfoList = [];
+        private readonly List<ExtraNodeInfo> extraNodeInfoList = [];
 
         public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
         {
@@ -2372,14 +2348,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 var statement = statements[i];
                 if (CanDropEmptyStatement(statement))
                 {
-                    if (extraNodeInfoList.TryGetValue(i, out var zz))
-                    {
-                        extraNodeInfoList[i] = zz with { DropOriginal = true };
-                    }
-                    else
-                    {
-                        extraNodeInfoList.Add(i, true);
-                    }
+                    var zz = extraNodeInfoList[i];
+                    extraNodeInfoList[i] = zz with { DropOriginal = true };
                 }
             }
 
