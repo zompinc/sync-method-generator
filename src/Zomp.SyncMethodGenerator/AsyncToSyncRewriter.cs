@@ -1673,9 +1673,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
     {
-        NullableTypeSyntax => returnType,
-        GenericNameSyntax => returnType,
-        _ => ProcessSymbol(symbol),
+        IdentifierNameSyntax => ProcessSymbol(symbol),
+        _ => returnType,
     }).WithTriviaFrom(returnType);
 
     private static string Global(string type) => $"global::{type}";

@@ -765,4 +765,10 @@ public Task<string?> MethodAsync() => Task.FromResult<string?>(null);
 public async Task<Tuple<Tuple<string, StringBuilder?>?, object?>?> MethodAsync()
 => new(new(null, null), null);
 """.Verify();
+
+    [Fact]
+    public Task PreserveNullabilityInReturnTypeTuple() => """
+[CreateSyncVersion]
+public Task<(bool, string?)> MethodAsync() => Task.FromResult<(bool, string?)>((true, null));
+""".Verify();
 }
