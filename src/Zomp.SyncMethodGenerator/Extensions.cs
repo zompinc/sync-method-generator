@@ -12,10 +12,9 @@ internal static class Extensions
     /// <param name="predicate">The predicate.</param>
     /// <returns>Array of indices that match a predicate.</returns>
     internal static int[] GetIndices<T>(this IEnumerable<T> elements, Func<T, int, bool> predicate)
-    => elements.Select((ps, i) => (ps, i))
+    => [.. elements.Select((ps, i) => (ps, i))
         .Where((elem, i) => predicate(elem.ps, i))
-        .Select(t => t.i)
-        .ToArray();
+        .Select(t => t.i)];
 
     internal static int[] GetIndices<T>(this IEnumerable<T> elements, Func<T, bool> predicate)
         => elements.GetIndices((e, _) => predicate(e));
