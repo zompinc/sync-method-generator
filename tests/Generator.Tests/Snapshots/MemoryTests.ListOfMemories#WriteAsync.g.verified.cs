@@ -3,7 +3,7 @@ public static void Write(global::System.Collections.Generic.IEnumerable<global::
 {
     foreach (var buffer in buffers)
     {
-        var length = buffer.Length;
+        var length = buffer.Span.Length;
         stream.Write(buffer.Span);
     }
 }

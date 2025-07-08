@@ -29,7 +29,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string CancellationToken = nameof(global::System.Threading.CancellationToken);
     private const string Enumerator = nameof(Span<>.Enumerator);
     private const string Memory = nameof(Memory<>);
-    private const string ReadOnlyMemory = nameof(ReadOnlyMemory<>);
     private const string IAsyncEnumerable = nameof(IAsyncEnumerable<>);
     private const string IAsyncEnumerator = nameof(IAsyncEnumerator<>);
     private const string IAsyncResult = nameof(global::System.IAsyncResult);
@@ -417,7 +416,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (namedTypeSymbol is not null)
         {
-            RegisterMemoriesToPreserve(namedTypeSymbol);
+            if (RegisterMemoriesToPreserve(namedTypeSymbol) && semanticModel.GetDeclaredSymbol(node) is IParameterSymbol ps)
+            {
+                preserveMemory.Add(ps);
+            }
         }
 
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
@@ -462,11 +464,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         if (@base.Name.Identifier.ValueText == Span
-            && GetReturnType(exprSymbol) is INamedTypeSymbol
-            {
-                Name: Memory or ReadOnlyMemory, IsGenericType: true,
-                ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-            })
+            && GetReturnType(exprSymbol) is INamedTypeSymbol { IsMemory: true }
+            && !preserveMemory.Contains(exprSymbol))
         {
             return @base.Expression;
         }
@@ -476,12 +475,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         return GetSymbol(node) is IPropertySymbol property
-            && property.Type is INamedTypeSymbol
-            {
-                Name: Memory or ReadOnlyMemory, IsGenericType: true,
-                ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-            }
-
+            && property.Type is INamedTypeSymbol { IsMemory: true }
             ? AppendSpan(@base)
             : @base;
     }
@@ -536,11 +530,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return @base.WithExpression(gn.WithIdentifier(Identifier(newName)));
         }
 
-        var changeMemoryToSpan = methodSymbol.ReturnType is INamedTypeSymbol
-        {
-            Name: Memory or ReadOnlyMemory, IsGenericType: true,
-            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-        }
+        var changeMemoryToSpan = methodSymbol.ReturnType is INamedTypeSymbol { IsMemory: true }
 
         && (node.Parent is not { } parent || GetSymbol(parent) is not IMethodSymbol { ReturnType: IArrayTypeSymbol });
 
@@ -992,7 +982,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             // Handles nameof(Type)
             ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol)
                 => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
-            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && IsMemory(named) => Argument(AppendSpan(node.Expression)),
+            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && named.IsMemory => Argument(AppendSpan(node.Expression)),
             _ => @base,
         };
     }
@@ -1077,6 +1067,25 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
     {
+        static IdentifierNameSyntax? GetIdentifier(ExpressionSyntax es)
+        {
+            return es switch
+            {
+                InvocationExpressionSyntax ies => GetIdentifier(ies.Expression),
+                MemberAccessExpressionSyntax mes => GetIdentifier(mes.Expression),
+                IdentifierNameSyntax ins => ins,
+                _ => null,
+            };
+        }
+
+        if (GetIdentifier(node.Expression) is { } identifier
+            && GetSymbol(identifier) is { } symbol
+            && preserveMemory.Contains(symbol)
+            && semanticModel.GetDeclaredSymbol(node) is { } s)
+        {
+            preserveMemory.Add(s);
+        }
+
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
         return TypeAlreadyQualified(node.Type)
             ? @base.WithAwaitKeyword(default)
@@ -1366,12 +1375,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         => true,
-        {
-            Name: Memory or ReadOnlyMemory, IsGenericType: true,
-            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-        }
-
-        => true,
+        { IsMemory: true } => true,
         {
             Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
             ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
@@ -1742,7 +1746,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 continue;
             }
 
-            if (IsMemory(named))
+            if (named.IsMemory)
             {
                 memories.Add(named);
             }
@@ -1754,12 +1758,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return memories;
     }
-
-    private static bool IsMemory(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: Memory or ReadOnlyMemory, IsGenericType: true, TypeArguments: [{ }],
-        ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-    };
 
     private static bool IsCancellationToken(INamedTypeSymbol symbol) => symbol is
     {
@@ -1892,12 +1890,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
     {
-        {
-            Name: Memory or ReadOnlyMemory, IsGenericType: true,
-            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-        }
-
-        => $"{System}.{ReplaceWithSpan(symbol)}",
+        { IsMemory: true } => $"{System}.{ReplaceWithSpan(symbol)}",
         {
             Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
             ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
@@ -1907,7 +1900,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => null,
     };
 
-    private void RegisterMemoriesToPreserve(INamedTypeSymbol symbol)
+    private bool RegisterMemoriesToPreserve(INamedTypeSymbol symbol)
     {
         var memoriesInCollection = HasMemory(symbol);
 
@@ -1915,6 +1908,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             preserveMemory.Add(memory);
         }
+
+        return memoriesInCollection.Count > 0;
     }
 
     private string ReplaceWithSpan(ISymbol symbol)

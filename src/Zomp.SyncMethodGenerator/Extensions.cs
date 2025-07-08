@@ -4,6 +4,15 @@ namespace Zomp.SyncMethodGenerator;
 
 internal static class Extensions
 {
+    extension(INamedTypeSymbol symbol)
+    {
+        public bool IsMemory => symbol is
+        {
+            Name: nameof(Memory<>) or nameof(ReadOnlyMemory<>), IsGenericType: true, TypeArguments: [{ }],
+            ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true }
+        };
+    }
+
     /// <summary>
     /// Gets array of indices that match a predicate.
     /// </summary>

@@ -161,4 +161,17 @@ public static async IAsyncEnumerable<Point> GetPoints<T>(IAsyncEnumerable<T[]> i
     }
 }
 """.Verify();
+
+    [Fact]
+    public Task AccessIndexer() => """
+[CreateSyncVersion]
+public static async IAsyncEnumerable<Memory<bool>> MethodAsync<T>(IAsyncEnumerable<Memory<bool>> input, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    await foreach (var elem in input.ConfigureAwait(false))
+    {
+        _ = elem.Span[0];
+        yield return elem;
+    }
+}
+""".Verify();
 }
