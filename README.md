@@ -54,10 +54,13 @@ A list of changes applied to the new synchronized method:
   | [IAsyncEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.iasyncenumerator-1)                                                                                  | [IEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1)                             |
   | [ConfiguredCancelableAsyncEnumerable\<T>.Enumerator](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.configuredcancelableasyncenumerable-1.enumerator)                 | [IEnumerator\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerator-1)                             |
   | [ConfiguredCancelableAsyncEnumerable\<T>.GetAsyncEnumerator](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.configuredcancelableasyncenumerable-1.getasyncenumerator) | [IEnumerable\<T>.GetEnumerator](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.ienumerable-1.getenumerator) |
-  | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)                                                                                                                          | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                                               |
-  | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)                                                                                                          | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                                               |
+  | [Memory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.memory-1)**                                                                                                                        | [Span\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.span-1)                                                               |
+  | [ReadOnlyMemory\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlymemory-1)**                                                                                                        | [ReadOnlySpan\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.readonlyspan-1)                                               |
 
-- \* [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask)s are handled exactly like [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)s
+  \* [ValueTask](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.valuetask)s are handled exactly like [Task](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task)s
+
+  \*\* `Memory` and `ReadOnlyMemory` is preserved in sync methods if it is a type argument of a collection. This is due to a compiler limitation which states that a `ref struct` can't be the element type of an array.
+
 - Remove parameters
   - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
   - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1), unless the `PreserveProgress` property is set to `true`.
@@ -214,7 +217,7 @@ refreshenv
 In the project directory run:
 
 ```pwsh
-act -P windows-latest=-self-hosted --artifact-server-path /tmp/artifacts
+act -P windows-latest=-self-hosted --artifact-server-path c:/tmp/artifacts
 ```
 
 #### Linux

@@ -117,4 +117,48 @@ async Task MethodAsync()
     public Task ConvertMemoryToSpanAfterPropertyAccess() => """
 var m = MemoryPool<byte>.Shared.Rent().Memory;
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task ListOfMemories() => """
+[CreateSyncVersion]
+public static async Task WriteAsync(IAsyncEnumerable<ReadOnlyMemory<byte>> buffers, Stream stream, CancellationToken ct)
+{
+    await foreach (var buffer in buffers)
+    {
+        var length = buffer.Span.Length;
+        await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
+    }
+}
+""".Verify();
+
+    [Fact]
+    public Task ChangeType() => """
+
+public static async IEnumerable<System.Drawing.Point> GetPointsFromMemory(IEnumerable<ReadOnlyMemory<bool>> input)
+{
+    yield return default;
+}
+
+public static async IAsyncEnumerable<System.Drawing.Point> GetPointsFromMemoryAsync(IAsyncEnumerable<ReadOnlyMemory<bool>> input, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    yield return default;
+}
+
+[CreateSyncVersion]
+public static async IAsyncEnumerable<Point> GetPoints<T>(IAsyncEnumerable<T[]> input, int start, int end, Func<T, bool> convertToBool, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    static async IAsyncEnumerable<ReadOnlyMemory<bool>> Convert(IAsyncEnumerable<T[]> input, int start, int end, Func<T, bool> convertToBool, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var element in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            yield return new ReadOnlyMemory<bool>([.. element.AsMemory(start, end).ToArray().Select(convertToBool)]);
+        }
+    }
+
+    await foreach (var contour in GetPointsFromMemoryAsync(Convert(input, start, end, convertToBool, cancellationToken), cancellationToken).ConfigureAwait(false))
+    {
+        yield return contour;
+    }
+}
+""".Verify();
 }

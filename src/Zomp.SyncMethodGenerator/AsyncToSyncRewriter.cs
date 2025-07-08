@@ -72,6 +72,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly bool disableNullable = disableNullable;
     private readonly bool preserveProgress = preserveProgress;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
+    private readonly HashSet<ISymbol> preserveMemory = [];
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
@@ -255,14 +256,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
     {
-        var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
-
         if (GetSymbol(node) is not INamedTypeSymbol symbol)
         {
-            return @base;
+            return (GenericNameSyntax)base.VisitGenericName(node)!;
         }
 
-        static string GetIdentifier(INamedTypeSymbol symbol)
+        RegisterMemoriesToPreserve(symbol);
+
+        var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
+
+        string GetIdentifier(INamedTypeSymbol symbol)
             => GetReplacement(symbol) is { } replacement
                 ? Global(replacement)
                 : symbol switch
@@ -407,21 +410,35 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
+        if (node.Type is null || GetSymbol(node.Type) is not INamedTypeSymbol namedTypeSymbol)
+        {
+            return (ParameterSyntax)base.VisitParameter(node)!;
+        }
+
+        if (namedTypeSymbol is not null)
+        {
+            RegisterMemoriesToPreserve(namedTypeSymbol);
+        }
+
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
 
-        return node.Type is { } originalType && @base.Type is not null
+        if (@base.Type is not null
 
             // If type is generic
-            && GetSymbol(originalType) is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
-
+            && namedTypeSymbol is { IsGenericType: true })
+        {
             // And it is System.Func
-            && IsSystemFunc(namedTypeSymbol)
+            if (IsSystemFunc(namedTypeSymbol)
 
             // And can be converter to Action
-            && ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax
-            ? @base.WithType(newTypeSyntax.WithTriviaFrom(originalType))
-            : (node.Type is null || TypeAlreadyQualified(node.Type) ? @base
-            : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base));
+            && ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax)
+            {
+                return @base.WithType(newTypeSyntax.WithTriviaFrom(node.Type));
+            }
+        }
+
+        return node.Type is null || TypeAlreadyQualified(node.Type) ? @base
+            : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -519,13 +536,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return @base.WithExpression(gn.WithIdentifier(Identifier(newName)));
         }
 
-        var isMemory = methodSymbol.ReturnType is INamedTypeSymbol
+        var changeMemoryToSpan = methodSymbol.ReturnType is INamedTypeSymbol
         {
             Name: Memory or ReadOnlyMemory, IsGenericType: true,
             ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-        };
+        }
 
-        if (isMemory)
+        && (node.Parent is not { } parent || GetSymbol(parent) is not IMethodSymbol { ReturnType: IArrayTypeSymbol });
+
+        if (changeMemoryToSpan)
         {
             newName = GetNewName(methodSymbol);
         }
@@ -537,12 +556,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             && reducedFromExtensionMethod is not null
             && replaceInInvocation.Count > 0)
         {
-            return UnwrapExtension(@base, isMemory, reducedFromExtensionMethod, replaceInInvocation.Pop());
+            return UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, replaceInInvocation.Pop());
         }
 
         if (@base.Expression is not MemberAccessExpressionSyntax { } memberAccess)
         {
-            return isMemory ? AppendSpan(@base) : @base;
+            return changeMemoryToSpan ? AppendSpan(@base) : @base;
         }
 
         if (methodSymbol.ReturnType is INamedTypeSymbol
@@ -566,7 +585,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // Handle all other extension methods eg. arr.First()
         if (reducedFromExtensionMethod is not null)
         {
-            return UnwrapExtension(@base, isMemory, reducedFromExtensionMethod, memberAccess.Expression);
+            return UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, memberAccess.Expression);
         }
 
         if (memberAccess.Name is not SimpleNameSyntax { Identifier.ValueText: { } name })
@@ -967,12 +986,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     public override SyntaxNode? VisitArgument(ArgumentSyntax node)
     {
-        // Handles nameof(Type)
         var @base = (ArgumentSyntax)base.VisitArgument(node)!;
-        return GetSymbol(node.Expression) is ITypeSymbol { } typeSymbol
-            && !TypeAlreadyQualified(typeSymbol)
-            ? @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base)
-            : @base;
+        return GetSymbol(node.Expression) switch
+        {
+            // Handles nameof(Type)
+            ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol)
+                => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
+            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && IsMemory(named) => Argument(AppendSpan(node.Expression)),
+            _ => @base,
+        };
     }
 
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
@@ -1521,9 +1543,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static string RemoveAsync(string original)
         => Regex.Replace(original, "Async", string.Empty);
 
-    private static string ReplaceWithSpan(string original)
-        => Regex.Replace(original, "Memory", Span);
-
     private static bool CanDropIf(IfStatementSyntax ifStatement)
         => ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
         && (ifStatement.Else is null || CanDropElse(ifStatement.Else))
@@ -1598,23 +1617,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return list;
     }
-
-    private static string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
-    {
-        {
-            Name: Memory or ReadOnlyMemory, IsGenericType: true,
-            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-        }
-
-        => $"{System}.{ReplaceWithSpan(symbol.Name)}",
-        {
-            Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
-            ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-        }
-
-        => $"{System}.{Collections}.{Generic}.{RemoveAsync(symbol.Name)}",
-        _ => null,
-    };
 
     private static BlockSyntax CreateEmptyBody()
         => Block().WithCloseBraceToken(
@@ -1707,43 +1709,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return false;
     }
 
-    private static InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool isMemory, IMethodSymbol reducedFrom, ExpressionSyntax expression)
-    {
-        var arguments = ies.ArgumentList.Arguments;
-        var separators = arguments.GetSeparators();
-
-        SyntaxToken[] newSeparators = arguments.Count < 1 ? []
-            : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
-
-        var @as = Argument(expression.WithoutLeadingTrivia());
-        var newList = SeparatedList([@as, .. arguments], newSeparators);
-
-        var newName = reducedFrom.Name;
-        newName = isMemory ? GetNewName(reducedFrom) : RemoveAsync(newName);
-
-        var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
-
-        var es = (ies.Expression switch
-        {
-            MemberAccessExpressionSyntax mae => mae.ChangeIdentifier(fullyQualifiedName),
-            MemberBindingExpressionSyntax mbae => mbae.ChangeIdentifier(fullyQualifiedName),
-            _ => IdentifierName(Identifier(fullyQualifiedName)),
-        })
-            .WithLeadingTrivia(expression.GetLeadingTrivia());
-
-        return ies
-            .WithExpression(es)
-            .WithArgumentList(ArgumentList(newList));
-    }
-
-    private static string GetNewName(IMethodSymbol methodSymbol)
-    {
-        var containingType = methodSymbol.ContainingType;
-        var replacement = ReplaceWithSpan(methodSymbol.Name);
-        var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
-        return replacement;
-    }
-
     private static bool IsTaskOrValueTask(INamedTypeSymbol symbol) => symbol is
     {
         Name: Task or ValueTask, IsGenericType: false,
@@ -1759,6 +1724,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static bool IsSystemFunc(INamedTypeSymbol symbol) => symbol is
     {
         Name: Func, IsGenericType: true, TypeArguments: [{ }, ..],
+        ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+    };
+
+    private static List<ISymbol> HasMemory(INamedTypeSymbol symbol)
+    {
+        if (!symbol.IsGenericType)
+        {
+            return [];
+        }
+
+        var memories = new List<ISymbol>();
+        foreach (var typeArgument in symbol.TypeArguments)
+        {
+            if (typeArgument is not INamedTypeSymbol named)
+            {
+                continue;
+            }
+
+            if (IsMemory(named))
+            {
+                memories.Add(named);
+            }
+            else
+            {
+                memories.AddRange(HasMemory(named));
+            }
+        }
+
+        return memories;
+    }
+
+    private static bool IsMemory(INamedTypeSymbol symbol) => symbol is
+    {
+        Name: Memory or ReadOnlyMemory, IsGenericType: true, TypeArguments: [{ }],
         ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
     };
 
@@ -1853,6 +1852,73 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return newLeadingTrivia;
     }
+
+    private InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool changeMemoryToSpan, IMethodSymbol reducedFrom, ExpressionSyntax expression)
+    {
+        var arguments = ies.ArgumentList.Arguments;
+        var separators = arguments.GetSeparators();
+
+        SyntaxToken[] newSeparators = arguments.Count < 1 ? []
+            : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
+
+        var @as = Argument(expression.WithoutLeadingTrivia());
+        var newList = SeparatedList([@as, .. arguments], newSeparators);
+
+        var newName = reducedFrom.Name;
+        newName = changeMemoryToSpan ? GetNewName(reducedFrom) : RemoveAsync(newName);
+
+        var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
+
+        var es = (ies.Expression switch
+        {
+            MemberAccessExpressionSyntax mae => mae.ChangeIdentifier(fullyQualifiedName),
+            MemberBindingExpressionSyntax mbae => mbae.ChangeIdentifier(fullyQualifiedName),
+            _ => IdentifierName(Identifier(fullyQualifiedName)),
+        })
+            .WithLeadingTrivia(expression.GetLeadingTrivia());
+
+        return ies
+            .WithExpression(es)
+            .WithArgumentList(ArgumentList(newList));
+    }
+
+    private string GetNewName(IMethodSymbol methodSymbol)
+    {
+        var containingType = methodSymbol.ContainingType;
+        var replacement = ReplaceWithSpan(methodSymbol);
+        var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
+        return replacement;
+    }
+
+    private string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
+    {
+        {
+            Name: Memory or ReadOnlyMemory, IsGenericType: true,
+            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+        }
+
+        => $"{System}.{ReplaceWithSpan(symbol)}",
+        {
+            Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
+            ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        }
+
+        => $"{System}.{Collections}.{Generic}.{RemoveAsync(symbol.Name)}",
+        _ => null,
+    };
+
+    private void RegisterMemoriesToPreserve(INamedTypeSymbol symbol)
+    {
+        var memoriesInCollection = HasMemory(symbol);
+
+        foreach (var memory in memoriesInCollection)
+        {
+            preserveMemory.Add(memory);
+        }
+    }
+
+    private string ReplaceWithSpan(ISymbol symbol)
+        => preserveMemory.Contains(symbol) ? symbol.Name : Regex.Replace(symbol.Name, Memory, Span);
 
     private bool ShouldRemoveType(ITypeSymbol symbol)
     {
