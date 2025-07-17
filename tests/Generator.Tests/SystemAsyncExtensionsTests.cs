@@ -2,6 +2,14 @@
 
 public class SystemAsyncExtensionsTests
 {
+    private const string ConfiguredCancelableAsyncEnumerableDefinition = """
+    // From https://github.com/dotnet/reactive/blob/5f831de0bc70bc660d21c3b9e04e581269691a2a/Ix.NET/Source/System.Linq.Async/System/Threading/Tasks/AsyncEnumerableExt.cs#L15
+    internal static ConfiguredCancelableAsyncEnumerable<T>.Enumerator GetConfiguredAsyncEnumerator<T>(this IAsyncEnumerable<T> enumerable, CancellationToken ct)
+    {
+        return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
+    }
+""";
+
     [Fact]
     public Task DropConfiguredCancelableAsyncEnumerable() => """
 [CreateSyncVersion]
@@ -138,21 +146,33 @@ internal static partial class Extensions
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
-    public Task DropConfiguredCancelableAsyncEnumerableExtensionInvocation() => """
+    public Task DropConfiguredCancelableAsyncEnumerableExtensionInvocation() => $$"""
 namespace Test;
 
 internal static partial class Extensions
 {
-    // From https://github.com/dotnet/reactive/blob/5f831de0bc70bc660d21c3b9e04e581269691a2a/Ix.NET/Source/System.Linq.Async/System/Threading/Tasks/AsyncEnumerableExt.cs#L15
-    internal static ConfiguredCancelableAsyncEnumerable<T>.Enumerator GetConfiguredAsyncEnumerator<T>(this IAsyncEnumerable<T> enumerable, CancellationToken ct)
-    {
-        return enumerable.ConfigureAwait(false).WithCancellation(ct).GetAsyncEnumerator();
-    }
-
+{{ConfiguredCancelableAsyncEnumerableDefinition}}
     [CreateSyncVersion]
     internal static async Task MethodAsync(IAsyncEnumerable<int> enumerable, CancellationToken ct)
     {
         await using ConfiguredCancelableAsyncEnumerable<int>.Enumerator enumerator = enumerable.GetConfiguredAsyncEnumerator(ct);
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task DisposeConfiguredCancelableAsyncEnumerator() => $$"""
+namespace Test;
+
+internal static partial class Extensions
+{
+{{ConfiguredCancelableAsyncEnumerableDefinition}}
+
+    [CreateSyncVersion]
+    internal static async Task MethodAsync(IAsyncEnumerable<int> enumerable, CancellationToken ct)
+    {
+        var enumerator = enumerable.GetConfiguredAsyncEnumerator(ct);
+        await enumerator.DisposeAsync();
     }
 }
 """.Verify(sourceType: SourceType.Full);

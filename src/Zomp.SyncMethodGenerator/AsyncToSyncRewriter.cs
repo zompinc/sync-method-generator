@@ -45,6 +45,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string WaitAsync = "WaitAsync";
     private const string IsCancellationRequested = nameof(global::System.Threading.CancellationToken.IsCancellationRequested);
     private const string MoveNextAsync = nameof(IAsyncEnumerator<>.MoveNextAsync);
+    private const string DisposeAsync = nameof(IAsyncEnumerator<>.DisposeAsync);
     private const string Span = nameof(Memory<>.Span);
 
     private const string SystemFunc = $"{System}.{Func}";
@@ -567,7 +568,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         // Handle .ConfigureAwait(), .WithCancellationToken() and return the part in front of it
-        if (IsTaskExtension(methodSymbol) && methodSymbol.Name is not MoveNextAsync)
+        if (IsTaskExtension(methodSymbol) && methodSymbol.Name is not (MoveNextAsync or DisposeAsync))
         {
             return memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
         }
