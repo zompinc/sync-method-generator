@@ -147,7 +147,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            10.0.x
+            8.0.x
 
       - name: Install node
         if: ${{ steps.prerequisite.outputs.need_node == '1' }}
@@ -164,6 +164,12 @@ jobs:
       - name: Download Package artifact
         uses: actions/download-artifact@v4
 
+      - name: Install sign tool
+        env:
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
+        run: dotnet tool install sign --tool-path . --version 0.9.1-beta.25157.1
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+
       - name: Sign
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -171,13 +177,13 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
         if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
         run: |
-          dnx --prerelease sign code trusted-signing \
+          ./sign code trusted-signing \
           --base-directory "${{ github.workspace }}/packages" \
           "*.nupkg" \
           --trusted-signing-endpoint "${{ secrets.TRUSTED_SIGNING_ENDPOINT }}" \
           --trusted-signing-account "${{ secrets.TRUSTED_SIGNING_ACCOUNT }}" \
           --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}" \
-          -v normal
+          -v trace
 
       - name: Upload artifacts (.nupkg)
         uses: actions/upload-artifact@v4
