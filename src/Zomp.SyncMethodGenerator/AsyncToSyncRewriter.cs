@@ -477,7 +477,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         return GetSymbol(node) is IPropertySymbol property
-            && property.Type is INamedTypeSymbol { IsMemory: true }
+            && property.Type is INamedTypeSymbol { IsMemory: true } && !disableSpanAppending
             ? AppendSpan(@base)
             : @base;
     }
