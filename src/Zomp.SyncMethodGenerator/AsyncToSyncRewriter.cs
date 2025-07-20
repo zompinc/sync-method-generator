@@ -76,6 +76,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly Dictionary<string, string> renamedLocalFunctions = [];
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
+    private bool disableSpanAppending;
 
     private enum SyncOnlyDirectiveType
     {
@@ -975,6 +976,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return retVal;
     }
 
+    public override SyntaxNode? VisitYieldStatement(YieldStatementSyntax node)
+    {
+        // Since you cannot have Span returning anywhere, disable the appending.
+        disableSpanAppending = true;
+        var @base = base.VisitYieldStatement(node);
+        disableSpanAppending = true;
+        return @base;
+    }
+
     public override SyntaxNode? VisitArgument(ArgumentSyntax node)
     {
         var @base = (ArgumentSyntax)base.VisitArgument(node)!;
@@ -983,7 +993,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             // Handles nameof(Type)
             ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol)
                 => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
-            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && named.IsMemory => Argument(AppendSpan(node.Expression)),
+            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && named.IsMemory && !disableSpanAppending => Argument(AppendSpan(node.Expression)),
             _ => @base,
         };
     }

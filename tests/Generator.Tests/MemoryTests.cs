@@ -174,4 +174,16 @@ public static async IAsyncEnumerable<Memory<bool>> MethodAsync<T>(IAsyncEnumerab
     }
 }
 """.Verify();
+
+    [Fact]
+    public Task ReturnCollectionOfMemoriesInATuple() => """
+[CreateSyncVersion]
+public static async IAsyncEnumerable<(Memory<bool> Mem, int Num)> MethodAsync<T>(IAsyncEnumerable<Memory<bool>> input, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    await foreach (var elem in input.ConfigureAwait(false))
+    {
+        yield return (elem, 1);
+    }
+}
+""".Verify();
 }
