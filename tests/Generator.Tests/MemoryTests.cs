@@ -198,4 +198,15 @@ public static async IAsyncEnumerable<(Memory<bool> Mem, int Num)> MethodAsync<T>
     }
 }
 """.Verify();
+
+    [Fact]
+    public Task NullableMemoryVariable() => """
+[CreateSyncVersion]
+public static async Task MethodAsync<T>()
+{
+    IAsyncEnumerator<ReadOnlyMemory<bool>> z = null!;
+    ReadOnlyMemory<bool>? value = null;
+    value = z.Current;
+}
+""".Verify();
 }

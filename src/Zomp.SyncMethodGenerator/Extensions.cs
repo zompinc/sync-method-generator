@@ -11,6 +11,12 @@ internal static class Extensions
             Name: nameof(Memory<>) or nameof(ReadOnlyMemory<>), IsGenericType: true, TypeArguments: [{ }],
             ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true }
         };
+
+        public bool IsMemoryOrNullableMemory => symbol.IsMemory || symbol is
+        {
+            Name: nameof(Nullable<>), IsGenericType: true, TypeArguments: [INamedTypeSymbol { IsMemory: true }],
+            ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true }
+        };
     }
 
     /// <summary>

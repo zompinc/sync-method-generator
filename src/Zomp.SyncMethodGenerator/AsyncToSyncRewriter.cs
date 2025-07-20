@@ -482,6 +482,27 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             : @base;
     }
 
+    public override SyntaxNode? VisitAssignmentExpression(AssignmentExpressionSyntax node)
+    {
+        var symbol = GetSymbol(node.Left);
+        var preserved = symbol is not null && preserveMemory.Contains(symbol);
+
+        var prevValue = disableSpanAppending;
+        if (preserved)
+        {
+            disableSpanAppending = true;
+        }
+
+        var @base = (AssignmentExpressionSyntax)base.VisitAssignmentExpression(node)!;
+
+        if (preserved)
+        {
+            disableSpanAppending = prevValue;
+        }
+
+        return @base;
+    }
+
     public override SyntaxNode? VisitUsingStatement(UsingStatementSyntax node)
     {
         var @base = (UsingStatementSyntax)base.VisitUsingStatement(node)!;
@@ -1218,6 +1239,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     public override SyntaxNode? VisitVariableDeclarator(VariableDeclaratorSyntax node)
     {
+        // Cannot initialize Span to null, so preserving memory.
+        if (semanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
+            && node.Initializer?.Value is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.NullLiteralExpression })
+        {
+            preserveMemory.Add(symbol);
+        }
+
         var @base = (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;
         return @base;
     }
