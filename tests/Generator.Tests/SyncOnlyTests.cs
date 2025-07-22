@@ -290,4 +290,36 @@ await Task.CompletedTask;
 #endif
             );
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task SyncOnlyFullNamespace() => """
+using System;
+namespace Test;
+public partial class DisposeTest
+{
+    [CreateSyncVersion]
+    public async Task DisposeAsync(object? obj)
+    {
+#if !SYNC_ONLY
+            if (obj is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+                return;
+            }
+#endif
+
+            if (obj is IDisposable disposable)
+            {
+                disposable.Dispose();
+                return;
+            }
+
+#if SYNC_ONLY
+            if (obj is IAsyncDisposable)
+            {
+                throw new InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
+            }
+#endif
+}
+""".Verify(sourceType: SourceType.Full);
 }
