@@ -1612,6 +1612,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static string RemoveAsync(string original)
         => Regex.Replace(original, "Async", string.Empty);
 
+    private static bool HasSyncMethod(IMethodSymbol ms)
+        => ms.Name.EndsWith("Async", StringComparison.Ordinal)
+        && ms.ContainingType is { } type
+        && type.GetMembers(RemoveAsync(ms.Name))
+            .OfType<IMethodSymbol>()
+            .Any(m => m.Parameters.Length == ms.Parameters.Length
+                      && m.Parameters.Zip(ms.Parameters, (p1, p2) => SymbolEqualityComparer.Default.Equals(p1, p2))
+                          .All(z => z));
+
     private static bool CanDropIf(IfStatementSyntax ifStatement)
         => ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
         && (ifStatement.Else is null || CanDropElse(ifStatement.Else))
@@ -2022,7 +2031,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IMethodSymbol ms =>
             IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
-                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver))),
+                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)))
+                && !HasSyncMethod(ms),
         _ => ShouldRemoveType(GetReturnType(symbol)),
     };
 
