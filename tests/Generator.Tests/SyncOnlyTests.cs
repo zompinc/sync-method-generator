@@ -301,24 +301,24 @@ public partial class DisposeTest
     public async Task DisposeAsync(object? obj)
     {
 #if !SYNC_ONLY
-            if (obj is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync();
-                return;
-            }
+        if (obj is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync();
+            return;
+        }
 #endif
 
-            if (obj is IDisposable disposable)
-            {
-                disposable.Dispose();
-                return;
-            }
+        if (obj is IDisposable disposable)
+        {
+            disposable.Dispose();
+            return;
+        }
 
 #if SYNC_ONLY
-            if (obj is IAsyncDisposable)
-            {
-                throw new InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
-            }
+        if (obj is IAsyncDisposable)
+        {
+            throw new InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
+        }
 #endif
     }
 }

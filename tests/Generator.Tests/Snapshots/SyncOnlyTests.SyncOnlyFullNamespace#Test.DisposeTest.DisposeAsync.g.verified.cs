@@ -7,15 +7,15 @@ public partial class DisposeTest
     public void Dispose(object? obj)
     {
 
-            if (obj is global::System.IDisposable disposable)
-            {
-                disposable.Dispose();
-                return;
-            }
+        if (obj is global::System.IDisposable disposable)
+        {
+            disposable.Dispose();
+            return;
+        }
 
-            if (obj is global::System.IAsyncDisposable)
-            {
-                throw new global::System.InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
-            }
+        if (obj is global::System.IAsyncDisposable)
+        {
+            throw new global::System.InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
+        }
     }
 }
