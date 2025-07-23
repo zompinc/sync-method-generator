@@ -17,5 +17,5 @@ public partial class DisposeTest
             {
                 throw new global::System.InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
             }
-}
+    }
 }

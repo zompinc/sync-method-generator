@@ -320,6 +320,7 @@ public partial class DisposeTest
                 throw new InvalidOperationException("Cannot dispose an async disposable in sync-only mode.");
             }
 #endif
+    }
 }
 """.Verify(sourceType: SourceType.Full);
 }
