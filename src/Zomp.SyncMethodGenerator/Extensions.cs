@@ -103,4 +103,8 @@ internal static class Extensions
         return Block(List(list))
             .WithLeadingTrivia(CarriageReturnLineFeed, Whitespace(new string(' ', 4 * indentationLevel)));
     }
+
+    internal static bool InitializedToNull(this VariableDeclaratorSyntax node)
+        => node.Initializer?.Value is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.NullLiteralExpression }
+            or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression };
 }

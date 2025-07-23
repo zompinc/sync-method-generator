@@ -77,6 +77,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
     private bool disableSpanAppending;
+    private bool disableMemoryToSpanConversion;
 
     private enum SyncOnlyDirectiveType
     {
@@ -262,9 +263,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return (GenericNameSyntax)base.VisitGenericName(node)!;
         }
 
-        RegisterMemoriesToPreserve(symbol);
+        var prevDisableMemoryToSpanConversion = disableMemoryToSpanConversion;
+        if (((node.Parent is MethodDeclarationSyntax md && md.ReturnType == node)
+            || (node.Parent is LocalFunctionStatementSyntax lf && lf.ReturnType == node))
+            && IsGenericMethodThatHasMemory(symbol))
+        {
+            disableMemoryToSpanConversion = true;
+        }
 
         var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
+
+        disableMemoryToSpanConversion = prevDisableMemoryToSpanConversion;
 
         string GetIdentifier(INamedTypeSymbol symbol)
             => GetReplacement(symbol) is { } replacement
@@ -416,15 +425,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return (ParameterSyntax)base.VisitParameter(node)!;
         }
 
-        if (namedTypeSymbol is not null)
+        var prevDisableMemoryToSpanConversion = disableMemoryToSpanConversion;
+        if (IsGenericMethodThatHasMemory(namedTypeSymbol) && semanticModel.GetDeclaredSymbol(node) is IParameterSymbol ps)
         {
-            if (RegisterMemoriesToPreserve(namedTypeSymbol) && semanticModel.GetDeclaredSymbol(node) is IParameterSymbol ps)
-            {
-                preserveMemory.Add(ps);
-            }
+            preserveMemory.Add(ps);
+            disableMemoryToSpanConversion = true;
         }
 
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
+        disableMemoryToSpanConversion = prevDisableMemoryToSpanConversion;
 
         if (@base.Type is not null
 
@@ -1000,9 +1009,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitYieldStatement(YieldStatementSyntax node)
     {
         // Since you cannot have Span returning anywhere, disable the appending.
+        var prevDisableMemoryToSpanConversion = disableMemoryToSpanConversion;
+        disableMemoryToSpanConversion = true;
+        var prevDisableSpanAppending = disableSpanAppending;
         disableSpanAppending = true;
         var @base = base.VisitYieldStatement(node);
-        disableSpanAppending = true;
+        disableMemoryToSpanConversion = prevDisableMemoryToSpanConversion;
+        disableSpanAppending = prevDisableSpanAppending;
         return @base;
     }
 
@@ -1110,15 +1123,20 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             };
         }
 
+        var prevDisableMemoryToSpanConversion = disableMemoryToSpanConversion;
+
         if (GetIdentifier(node.Expression) is { } identifier
             && GetSymbol(identifier) is { } symbol
             && preserveMemory.Contains(symbol)
             && semanticModel.GetDeclaredSymbol(node) is { } s)
         {
             preserveMemory.Add(s);
+            disableMemoryToSpanConversion = true;
         }
 
         var @base = (ForEachStatementSyntax)base.VisitForEachStatement(node)!;
+
+        disableMemoryToSpanConversion = prevDisableMemoryToSpanConversion;
         return TypeAlreadyQualified(node.Type)
             ? @base.WithAwaitKeyword(default)
             : @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
@@ -1241,7 +1259,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Cannot initialize Span to null, so preserving memory.
         if (semanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
-            && node.Initializer?.Value is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.NullLiteralExpression })
+            && node.InitializedToNull())
         {
             preserveMemory.Add(symbol);
         }
@@ -1260,7 +1278,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         ////var isEqual = node.Type == GetInitializerType(node);
 
+        var prevDisableMemoryToSpanConversion = disableMemoryToSpanConversion;
+        if (node.Variables.All(n => n.InitializedToNull()))
+        {
+            disableMemoryToSpanConversion = true;
+        }
+
         var @base = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node)!;
+        disableMemoryToSpanConversion = prevDisableMemoryToSpanConversion;
+
         var type = node.Type;
         var newType = @base.Type;
 
@@ -1770,14 +1796,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
     };
 
-    private static List<ISymbol> HasMemory(INamedTypeSymbol symbol)
+    private static bool IsGenericMethodThatHasMemory(INamedTypeSymbol symbol)
     {
         if (!symbol.IsGenericType)
         {
-            return [];
+            return false;
         }
 
-        var memories = new List<ISymbol>();
         foreach (var typeArgument in symbol.TypeArguments)
         {
             if (typeArgument is not INamedTypeSymbol named)
@@ -1787,15 +1812,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
             if (named.IsMemory)
             {
-                memories.Add(named);
+                return true;
             }
             else
             {
-                memories.AddRange(HasMemory(named));
+                return IsGenericMethodThatHasMemory(named);
             }
         }
 
-        return memories;
+        return false;
     }
 
     private static bool IsCancellationToken(INamedTypeSymbol symbol) => symbol is
@@ -1909,7 +1934,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var es = (ies.Expression switch
         {
             MemberAccessExpressionSyntax mae => mae.ChangeIdentifier(fullyQualifiedName),
-            MemberBindingExpressionSyntax mbae => mbae.ChangeIdentifier(fullyQualifiedName),
+            MemberBindingExpressionSyntax mbe => mbe.ChangeIdentifier(fullyQualifiedName),
             _ => IdentifierName(Identifier(fullyQualifiedName)),
         })
             .WithLeadingTrivia(expression.GetLeadingTrivia());
@@ -1927,9 +1952,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return replacement;
     }
 
+    private string? MemoryReplacement(INamedTypeSymbol symbol)
+        => preserveMemory.Contains(symbol) || disableMemoryToSpanConversion ? null : $"{System}.{ReplaceWithSpan(symbol)}";
+
     private string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
     {
-        { IsMemory: true } => $"{System}.{ReplaceWithSpan(symbol)}",
+        { IsMemory: true } => MemoryReplacement(symbol),
         {
             Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
             ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
@@ -1938,18 +1966,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         => $"{System}.{Collections}.{Generic}.{RemoveAsync(symbol.Name)}",
         _ => null,
     };
-
-    private bool RegisterMemoriesToPreserve(INamedTypeSymbol symbol)
-    {
-        var memoriesInCollection = HasMemory(symbol);
-
-        foreach (var memory in memoriesInCollection)
-        {
-            preserveMemory.Add(memory);
-        }
-
-        return memoriesInCollection.Count > 0;
-    }
 
     private string ReplaceWithSpan(ISymbol symbol)
         => preserveMemory.Contains(symbol) ? symbol.Name : Regex.Replace(symbol.Name, Memory, Span);

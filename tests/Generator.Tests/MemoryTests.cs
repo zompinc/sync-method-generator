@@ -209,4 +209,13 @@ public static async Task MethodAsync<T>()
     value = z.Current;
 }
 """.Verify();
+
+    [Fact]
+    public Task MemoryAssignedNullRemainsMemory() => """
+[CreateSyncVersion]
+public static async Task MethodAsync<T>()
+{
+    ReadOnlyMemory<bool>? value = null;
+}
+""".Verify();
 }
