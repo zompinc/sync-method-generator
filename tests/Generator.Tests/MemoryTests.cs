@@ -218,4 +218,15 @@ public static async Task MethodAsync<T>()
     ReadOnlyMemory<bool>? value = null;
 }
 """.Verify();
+
+    [Fact]
+    public Task PreserveClassMemory() => """
+private readonly ReadOnlyMemory<byte> memory = null!;
+
+[CreateSyncVersion]
+public async Task MethodAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+{
+    memory.Span.Slice(1, 2).CopyTo(buffer.Span);
+}
+""".Verify();
 }
