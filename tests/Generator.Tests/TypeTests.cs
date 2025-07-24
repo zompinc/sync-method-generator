@@ -270,4 +270,20 @@ internal partial class Class<T>
     public Task CreateNullableType()
         => "new Dictionary<int, (int I, Stream? S)?>().TryGetValue(0, out (int I, Stream? S)? a);"
         .Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task SemaphoreSlimWaitAndRelease()
+        => """
+var semaphore = new SemaphoreSlim(1, 1);
+
+await semaphore.WaitAsync();
+
+try
+{ 
+}
+finally
+{
+    semaphore.Release();
+}
+""".Verify(sourceType: SourceType.MethodBody);
 }
