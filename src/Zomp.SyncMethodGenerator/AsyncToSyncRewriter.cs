@@ -499,7 +499,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool InitializedToMemory(SyntaxNode node)
             => node.Parent is EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax { } z }
-            && semanticModel.GetDeclaredSymbol(z) is { } zz && changeMemoryToSpan.Contains(zz);
+            && semanticModel.GetDeclaredSymbol(z) is ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } };
 
         return GetSymbol(node) is IPropertySymbol property
             && property.Type is INamedTypeSymbol { IsMemory: true }
@@ -1255,10 +1255,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             && !node.InitializedToNull())
         {
             changedMemoryToSpan.Add(symbol);
-            if (node.Initializer is { Value: { } })
-            {
-                changeMemoryToSpan.Add(symbol);
-            }
         }
 
         var @base = (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;

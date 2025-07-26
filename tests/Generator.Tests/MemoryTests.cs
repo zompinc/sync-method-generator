@@ -33,6 +33,16 @@ private async Task MakeArray(byte[] sampleBytes, CancellationToken ct = default)
 static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, CancellationToken ct)
     => await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
 """.Verify();
+
+    [Fact]
+    public Task LocalMemoryVariableConvertsToSpanAndDoesNotAppendSpan() => """
+[CreateSyncVersion]
+static async Task WriteAsync(Stream stream, CancellationToken cancellationToken = default)
+{
+    Memory<byte> buffer = new byte[1];
+    await stream.WriteAsync(buffer, cancellationToken);
+}       
+""".Verify();
 #endif
 
     [Fact]
