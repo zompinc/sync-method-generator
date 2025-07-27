@@ -62,6 +62,7 @@
     <Using Include="Microsoft.CodeAnalysis.Text" />
     <Using Include="System.Collections.Immutable" />
     <Using Include="System.Diagnostics" />
+    <Using Include="System.Diagnostics.CodeAnalysis" />
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />

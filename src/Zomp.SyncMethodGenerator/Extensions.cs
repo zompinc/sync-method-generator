@@ -19,6 +19,19 @@ internal static class Extensions
         };
     }
 
+    extension(IMethodSymbol symbol)
+    {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "False positive")]
+        public bool IsAsTask => symbol is
+        {
+            Name: "AsTask", ContainingType:
+            {
+                Name: "ValueTask",
+                ContainingNamespace: { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } }
+            }
+        };
+    }
+
     /// <summary>
     /// Gets array of indices that match a predicate.
     /// </summary>

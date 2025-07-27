@@ -43,6 +43,29 @@ static async Task WriteAsync(Stream stream, CancellationToken cancellationToken 
     await stream.WriteAsync(buffer, cancellationToken);
 }       
 """.Verify();
+
+    [Fact]
+    public Task AppendSpanForMemoryField() => """
+private readonly ReadOnlyMemory<byte> memory = null!;
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task MethodAsync(Stream stream)
+{
+    await stream.WriteAsync(memory);
+}
+""".Verify();
+
+    [Fact]
+    public Task AppendSpanForMemoryProperty() => """
+private readonly ReadOnlyMemory<byte> memory = null!;
+ReadOnlyMemory<byte> Mem => memory;
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task MethodAsync(Stream stream)
+{
+    await stream.WriteAsync(Mem);
+}
+""".Verify();
 #endif
 
     [Fact]

@@ -38,7 +38,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string ValueTask = nameof(ValueTask<>);
 
     // Members
-    private const string AsTask = nameof(ValueTask<>.AsTask);
     private const string CompletedTask = nameof(global::System.Threading.Tasks.Task.CompletedTask);
     private const string Delay = nameof(Task<>.Delay);
     private const string FromResult = nameof(Task<>.FromResult);
@@ -87,6 +86,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly ImmutableArray<ReportedDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
     private bool yielding;
+    private bool droppingAsync;
 
     private enum SyncOnlyDirectiveType
     {
@@ -517,7 +517,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
     {
-        string? newName = null;
+        var newName = ReplaceAsync(node.Expression);
         var symbol = GetSymbol(node);
 
         if (symbol is null)
@@ -533,37 +533,34 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var changeMemoryToSpan = methodSymbol.ReturnType is INamedTypeSymbol { IsMemory: true }
             && (node.Parent is not { } parent || GetSymbol(parent) is not IMethodSymbol { ReturnType: IArrayTypeSymbol });
 
+        var prevDroppingAsync = droppingAsync;
+        droppingAsync = newName is not null;
+
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
+
+        droppingAsync = prevDroppingAsync;
 
         if (changeMemoryToSpan && symbol.Name.EndsWith(Memory, StringComparison.Ordinal))
         {
             changedMemoryToSpan.Add(symbol);
         }
 
-        if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWithAsync())
+        if (newName is not null)
         {
-            newName = RemoveAsync(ins.Identifier.ValueText);
-
-            /*
-            var siblings = methodSymbol.ContainingType.GetMembers().Where(z => z is IMethodSymbol).ToList();
-            var hasSync = siblings.Any(z => z.Name == newName);
-            var hasAsyncWithAttr = siblings.Any(z => z.Name == ins.Identifier.ValueText
-                && z.GetAttributes().Any(z
-                    => z.AttributeClass is not null && IsCreateSyncVersionAttribute(z.AttributeClass)));
-            */
-
-            if (string.IsNullOrWhiteSpace(newName))
+            if (@base.Expression is IdentifierNameSyntax ins)
             {
-                // Should Return diagnostics message
-                return @base;
-            }
+                if (string.IsNullOrWhiteSpace(newName))
+                {
+                    // Should Return diagnostics message
+                    return @base;
+                }
 
-            return @base.WithExpression(IdentifierName(newName));
-        }
-        else if (@base.Expression is GenericNameSyntax gn && gn.Identifier.Text.EndsWithAsync())
-        {
-            newName = RemoveAsync(gn.Identifier.Text);
-            return @base.WithExpression(gn.WithIdentifier(Identifier(newName)));
+                return @base.WithExpression(IdentifierName(newName));
+            }
+            else if (@base.Expression is GenericNameSyntax gn)
+            {
+                return @base.WithExpression(gn.WithIdentifier(Identifier(newName)));
+            }
         }
 
         if (changeMemoryToSpan)
@@ -615,31 +612,39 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return @base;
         }
 
-        if (name.EndsWithAsync()
-            || methodSymbol.ReturnType is INamedTypeSymbol
-            {
-                Name: IAsyncEnumerator, IsGenericType: true,
-                ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            })
+        if (newName is null)
         {
-            newName = RemoveAsync(name);
+            if (name.EndsWithAsync()
+                || methodSymbol.ReturnType is INamedTypeSymbol
+                {
+                    Name: IAsyncEnumerator, IsGenericType: true,
+                    ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+                })
+            {
+                newName = RemoveAsync(name);
+            }
+            else
+            {
+                var specialMethod = IsSpecialMethod(methodSymbol);
+                if (specialMethod == SpecialMethod.FromResult && @base.ArgumentList.Arguments is [var singleArg])
+                {
+                    return singleArg.Expression;
+                }
+                else if (specialMethod == SpecialMethod.Delay)
+                {
+                    return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), @base.ArgumentList).WithTriviaFrom(@base);
+                }
+                else if (specialMethod == SpecialMethod.Drop)
+                {
+                    var expression = memberAccess.Expression;
+                    return expression.WithTrailingTrivia(TriviaList([.. expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
+                }
+            }
         }
-        else
+
+        if (memberAccess.Name is GenericNameSyntax)
         {
-            var specialMethod = IsSpecialMethod(methodSymbol);
-            if (specialMethod == SpecialMethod.FromResult && @base.ArgumentList.Arguments is [var singleArg])
-            {
-                return singleArg.Expression;
-            }
-            else if (specialMethod == SpecialMethod.Delay)
-            {
-                return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global("System.Threading.Thread")), IdentifierName("Sleep")), @base.ArgumentList).WithTriviaFrom(@base);
-            }
-            else if (specialMethod == SpecialMethod.Drop)
-            {
-                var expression = memberAccess.Expression;
-                return expression.WithTrailingTrivia(TriviaList([.. expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
-            }
+            return @base;
         }
 
         return newName is null ? @base : @base.WithExpression(memberAccess.WithName(IdentifierName(newName)));
@@ -1020,9 +1025,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return GetSymbol(node.Expression) switch
         {
             // Handles nameof(Type)
-            ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol)
-                => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
-            ILocalSymbol ls when ls.Type is INamedTypeSymbol named && named.IsMemory && changeMemoryToSpan.Contains(ls) => Argument(AppendSpan(node.Expression)),
+            ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol) => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
+            ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } } ls when changeMemoryToSpan.Contains(ls) => Argument(AppendSpan(node.Expression)),
+            IFieldSymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
+            IPropertySymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
             _ => @base,
         };
     }
@@ -1529,15 +1535,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         => SpecialMethod.FromResult,
-        {
-            Name: AsTask, ContainingType:
-            {
-                Name: ValueTask,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => SpecialMethod.Drop,
+        { IsAsTask: true } => SpecialMethod.Drop,
         {
             Name: WaitAsync,
             ReceiverType.Name: ValueTask or Task,
@@ -1725,13 +1723,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => false,
         };
 
-    private static bool EndsWithAsync(ExpressionSyntax expression) => expression switch
+    private static bool EndsWithAsync(ExpressionSyntax expression) => ReplaceAsync(expression) is not null;
+
+    private static string? ReplaceAsync(ExpressionSyntax expression) => expression switch
     {
-        IdentifierNameSyntax id => id.Identifier.ValueText.EndsWithAsync() && id.Identifier.ValueText is not WaitAsync,
-        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
-        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
-        GenericNameSyntax gn => gn.Identifier.Text.EndsWithAsync() && gn.Identifier.Text is not WaitAsync,
-        _ => false,
+        IdentifierNameSyntax { Identifier: { ValueText: not WaitAsync } z } when TryStripAsync(z.ValueText, out var newName) => newName,
+        MemberAccessExpressionSyntax m when ReplaceAsync(m.Name) is { } newName => newName,
+        InvocationExpressionSyntax ie => ReplaceAsync(ie.Expression),
+        GenericNameSyntax gn when TryStripAsync(gn.Identifier.Text, out var newName) => newName,
+        _ => null,
     };
 
     private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
@@ -1812,6 +1812,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
+        return false;
+    }
+
+    private static bool TryStripAsync(string str, [NotNullWhen(true)] out string? stripped)
+    {
+        if (str.EndsWithAsync())
+        {
+            stripped = str[..^5];
+            return true;
+        }
+
+        stripped = null;
         return false;
     }
 
@@ -2295,6 +2307,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private bool DropInvocation(InvocationExpressionSyntax invocation)
     {
         var expression = invocation.Expression;
+
         if (EndsWithAsync(expression))
         {
             return false;
@@ -2305,11 +2318,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return false;
         }
 
-        if (symbol is IMethodSymbol methodSymbol
-            && expression is MemberAccessExpressionSyntax memberAccessExpression
-            && IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
+        if (symbol is IMethodSymbol methodSymbol)
         {
-            return DropInvocation(childInvocation);
+            if (expression is MemberAccessExpressionSyntax memberAccessExpression
+            && IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
+            {
+                return DropInvocation(childInvocation);
+            }
+
+            if (methodSymbol is { IsAsTask: true })
+            {
+                return false;
+            }
         }
 
         IParameterSymbol? GetParameter(ISymbol symbol, InvocationExpressionSyntax node) => symbol switch
