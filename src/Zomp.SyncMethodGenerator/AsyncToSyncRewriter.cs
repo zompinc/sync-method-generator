@@ -535,9 +535,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
-        if (changeMemoryToSpan)
+        if (changeMemoryToSpan && symbol.Name.EndsWith(Memory, StringComparison.Ordinal))
         {
-            this.changedMemoryToSpan.Add(symbol);
+            changedMemoryToSpan.Add(symbol);
         }
 
         if (@base.Expression is IdentifierNameSyntax ins && ins.Identifier.ValueText.EndsWithAsync())

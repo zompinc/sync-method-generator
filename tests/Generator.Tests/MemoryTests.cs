@@ -239,4 +239,27 @@ public async Task MethodAsync(Memory<byte> buffer, CancellationToken cancellatio
     memory.Span.Slice(1, 2).CopyTo(buffer.Span);
 }
 """.Verify();
+
+    [Fact]
+    public Task PreserveSpanWithExtensionMethods() => """
+namespace Tests;
+
+internal static class MemoryExtensions
+{
+    public static ReadOnlyMemory<byte> GetStuff(this int z) => new byte[1];
+}
+
+internal partial class Class
+{
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task MethodAsync(CancellationToken cancellationToken = default)
+    {
+        UseSpan(6.GetStuff().Span);
+    }
+
+    public void UseSpan(ReadOnlySpan<byte> span)
+    {
+    }
+}
+""".Verify(sourceType: SourceType.Full);
 }
