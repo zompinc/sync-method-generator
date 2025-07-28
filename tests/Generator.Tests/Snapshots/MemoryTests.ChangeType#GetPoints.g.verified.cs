@@ -9,7 +9,7 @@ public static global::System.Collections.Generic.IEnumerable<global::System.Draw
         }
     }
 
-    foreach (var contour in GetPointsFromMemory(global::Test.Class.Convert(input, start, end, convertToBool)))
+    foreach (var contour in GetPointsFromMemory(Convert(input, start, end, convertToBool)))
     {
         yield return contour;
     }

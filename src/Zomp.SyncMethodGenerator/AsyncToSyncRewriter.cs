@@ -326,8 +326,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var symbol = GetSymbol(node);
             if (symbol is { IsStatic: true, ContainingType: { } containingType } fieldSymbol)
             {
-                var typeString = containingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
-                return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
+                if (symbol is IFieldSymbol or IMethodSymbol { MethodKind: not MethodKind.LocalFunction })
+                {
+                    var typeString = containingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
+                    return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
+                }
             }
         }
 
