@@ -87,6 +87,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly Stack<ExpressionSyntax> replaceInInvocation = new();
     private bool yielding;
     private bool droppingAsync;
+    private bool callingSpanProperty;
 
     private enum SyncOnlyDirectiveType
     {
@@ -481,7 +482,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return base.VisitMemberAccessExpression(node);
         }
 
+        var prevCallingSpanProperty = callingSpanProperty;
+        var isSpan = callingSpanProperty = GetSymbol(node) is IPropertySymbol { Name: Span, ContainingType: INamedTypeSymbol { IsMemory: true } };
+
         var @base = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(node)!;
+
+        callingSpanProperty = prevCallingSpanProperty;
 
         if (exprSymbol is ITypeSymbol && node.Expression is TypeSyntax type)
         {
@@ -493,9 +499,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        if (@base.Name.Identifier.ValueText == Span
-            && GetReturnType(exprSymbol) is INamedTypeSymbol { IsMemory: true }
-            && changedMemoryToSpan.Contains(exprSymbol))
+        if (isSpan && changedMemoryToSpan.Contains(exprSymbol))
         {
             return @base.Expression;
         }
@@ -620,7 +624,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // Handle all other extension methods eg. arr.First()
         if (reducedFromExtensionMethod is not null)
         {
-            return UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, memberAccess.Expression);
+            var unwrapped = UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, memberAccess.Expression);
+
+            if (changeMemoryToSpan && !endsWithMemory && !callingSpanProperty)
+            {
+                return AppendSpan(unwrapped);
+            }
+
+            return unwrapped;
         }
 
         if (memberAccess.Name is not SimpleNameSyntax { Identifier.ValueText: { } name })

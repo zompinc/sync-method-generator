@@ -299,4 +299,31 @@ internal partial class Class
     }
 }
 """.Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task AppendSpanToExtensionMethodReturningMemory() => """
+namespace Tests;
+
+internal static class MemoryExtensions
+{
+    public static ReadOnlyMemory<byte> GetStuff(this int z) => new byte[1];
+}
+
+internal partial class Class
+{
+    [CreateSyncVersion]
+    public async Task MethodAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        await DoAsync(6.GetStuff());
+    }
+
+    public void UseSpan(ReadOnlySpan<byte> span)
+    {
+    }
+
+    public async Task DoAsync(ReadOnlyMemory<byte> memory)
+    {
+    }
+}
+""".Verify(sourceType: SourceType.Full);
 }
