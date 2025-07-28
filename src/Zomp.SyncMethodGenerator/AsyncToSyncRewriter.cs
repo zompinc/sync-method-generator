@@ -320,13 +320,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             return @base.WithIdentifier(Identifier(newName));
         }
-        else if (node.Parent is not MemberAccessExpressionSyntax
-            && GetSymbol(node) is IFieldSymbol { IsStatic: true } fieldSymbol)
+
+        if (node.Parent is not MemberAccessExpressionSyntax)
         {
-            var typeString = fieldSymbol.ContainingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
-            return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
+            var symbol = GetSymbol(node);
+            if (symbol is { IsStatic: true, ContainingType: { } containingType } fieldSymbol)
+            {
+                var typeString = containingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
+                return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
+            }
         }
-        else if (node.Parent is TypeArgumentListSyntax)
+
+        if (node.Parent is TypeArgumentListSyntax)
         {
             return ProcessType(node);
         }
@@ -540,7 +545,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         droppingAsync = prevDroppingAsync;
 
-        if (changeMemoryToSpan && symbol.Name.EndsWith(Memory, StringComparison.Ordinal))
+        // Assumption here is that if there's a method like GetMemory(), there is also method called GetSpan(). Revisit if this isn't the case.
+        var endsWithMemory = symbol.Name.EndsWith(Memory, StringComparison.Ordinal);
+
+        if (changeMemoryToSpan && endsWithMemory)
         {
             changedMemoryToSpan.Add(symbol);
         }
@@ -576,6 +584,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             && replaceInInvocation.Count > 0)
         {
             return UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, replaceInInvocation.Pop());
+        }
+
+        if (changeMemoryToSpan && reducedFromExtensionMethod is null && !endsWithMemory)
+        {
+            return AppendSpan(@base);
         }
 
         if (@base.Expression is not MemberAccessExpressionSyntax { } memberAccess)

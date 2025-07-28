@@ -2,5 +2,5 @@
 public static void CallWithIProgress()
 {
     var progress = new global::System.Progress<float>();
-    WithIProgress(SomeMethod(progress));
+    WithIProgress(global::Test.Class.SomeMethod(progress));
 }

@@ -66,6 +66,20 @@ public async Task MethodAsync(Stream stream)
     await stream.WriteAsync(Mem);
 }
 """.Verify();
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task CallStaticMemoryMethod(bool useClassName) => $$"""
+static ReadOnlyMemory<byte> GiveStaticMem() => null!;
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task MethodAsync(Stream stream)
+{
+    var buffer = {{(useClassName ? "Class." : string.Empty)}}GiveStaticMem();
+    await stream.WriteAsync(buffer);
+}
+""".Verify(disableUnique: true);
 #endif
 
     [Fact]
