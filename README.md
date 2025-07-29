@@ -147,8 +147,6 @@ In case there is logic which should only be executed in the synchronized version
 
 `SYNC_ONLY` must not be defined anywhere. The source generator will scan #if directives for this symbol.
 
-Code inside `SYNC_ONLY` block will be copied as is. Unless global namespaces are used in the project, this code should contain fully qualified namespaces.
-
 The following syntax:
 
 ```cs
@@ -156,7 +154,7 @@ The following syntax:
 public async Task WithSyncOnlyDirectiveAsync(CancellationToken ct)
 {
 #if SYNC_ONLY
-    System.Console.Write("Sync");
+    Console.Write("Sync");
 #endif
     await Task.CompletedTask;
 }
@@ -167,7 +165,7 @@ will output:
 ```cs
 public void WithSyncOnlyDirective()
 {
-    System.Console.Write("Sync");
+    global::System.Console.Write("Sync");
 }
 ```
 
