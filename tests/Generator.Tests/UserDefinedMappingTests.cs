@@ -1,6 +1,4 @@
-﻿using Generator.Tests.Utils;
-
-namespace Generator.Tests;
+﻿namespace Generator.Tests;
 
 public class UserDefinedMappingTests
 {

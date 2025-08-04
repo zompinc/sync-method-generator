@@ -1,5 +1,4 @@
-﻿using Generator.Tests.Utils;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;

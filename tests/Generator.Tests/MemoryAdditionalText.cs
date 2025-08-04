@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis.Text;
 
-namespace Generator.Tests.Utils;
+namespace Generator.Tests;
 
 public class MemoryAdditionalText(string path, string text) : AdditionalText
 {
