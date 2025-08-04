@@ -40,7 +40,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             $"{SkipSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.SkipSyncVersionAttributeSource, Encoding.UTF8)));
 
         var userMappings = context.AdditionalTextsProvider
-            .Where(a => a.Path.EndsWith("SyncMethods.txt", StringComparison.OrdinalIgnoreCase))
+            .Where(a => a.Path.Equals("SyncMethods.txt", StringComparison.OrdinalIgnoreCase) ||
+                        a.Path.EndsWith("/SyncMethods.txt", StringComparison.OrdinalIgnoreCase) ||
+                        a.Path.EndsWith(@"\SyncMethods.txt", StringComparison.OrdinalIgnoreCase))
             .Select((text, cancellationToken) => (text.Path, text.GetText(cancellationToken)?.ToString() ?? string.Empty))
             .Collect()
             .Select(GetUserMappings)
