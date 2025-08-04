@@ -33,5 +33,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Zomp.SyncMethodGenerator\Zomp.SyncMethodGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <None Remove="SyncMethods.txt" />
+    <AdditionalFiles Include="SyncMethods.txt" />
+  </ItemGroup>
 
 </Project>

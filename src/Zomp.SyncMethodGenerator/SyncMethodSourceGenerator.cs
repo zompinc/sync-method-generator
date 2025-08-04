@@ -21,6 +21,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
+    internal static readonly Regex LineRegex = new(@"([^\r\n]+)(\r\n|\r|\n)?", RegexOptions.Compiled);
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -38,6 +39,25 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             $"{SkipSyncVersionAttribute}.g.cs", SourceText.From(SourceGenerationHelper.SkipSyncVersionAttributeSource, Encoding.UTF8)));
 
+        var userMappings = context.AdditionalTextsProvider
+            .Where(a => a.Path.Equals("SyncMethods.txt", StringComparison.OrdinalIgnoreCase) ||
+                        a.Path.EndsWith("/SyncMethods.txt", StringComparison.OrdinalIgnoreCase) ||
+                        a.Path.EndsWith(@"\SyncMethods.txt", StringComparison.OrdinalIgnoreCase))
+            .Select((text, cancellationToken) => (text.Path, text.GetText(cancellationToken)?.ToString() ?? string.Empty))
+            .Collect()
+            .Select(GetUserMappings)
+            .WithTrackingName("GetUserMappings");
+
+        context.RegisterSourceOutput(
+            userMappings,
+            static (spc, source) =>
+            {
+                foreach (var diagnostic in source.Diagnostics)
+                {
+                    spc.ReportDiagnostic(diagnostic);
+                }
+            });
+
         var disableNullable =
             context.CompilationProvider.Select((c, _) =>
             {
@@ -52,8 +72,13 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
                 transform: static (ctx, ct) => TransformForGeneration(ctx, ct))
             .SelectMany((list, ct) => list)
+            .Combine(userMappings)
             .Combine(disableNullable)
-            .Select((data, ct) => GetMethodToGenerate(data.Left.Context, data.Left.Syntax, data.Right, ct)!)
+            .Select((data, ct) =>
+            {
+                var ((result, userMappingsValue), disableNullableValue) = data;
+                return GetMethodToGenerate(result.Context, result.Syntax, disableNullableValue, userMappingsValue, ct)!;
+            })
             .WithTrackingName("GetMethodToGenerate")
             .Where(static s => s is not null);
 
@@ -75,6 +100,71 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                     spc.AddSource(source.Path, SourceText.From(source.Content, Encoding.UTF8));
                 }
             });
+    }
+
+    private static UserMappings GetUserMappings(ImmutableArray<(string Path, string Content)> array, CancellationToken token)
+    {
+        var mappings = ImmutableArray.CreateBuilder<(string Key, string Namespace, string Method)>();
+        var diagnostics = ImmutableArray.CreateBuilder<ReportedDiagnostic>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var lineIndex = -1;
+        var index = 0;
+
+        foreach (var (path, content) in array)
+        {
+            foreach (Match lineMatch in LineRegex.Matches(content))
+            {
+                lineIndex++;
+
+                var line = lineMatch.Groups[1].Value;
+                var newLineLength = lineMatch.Groups[2] is { Success: true, Value: { } val } ? val.Length : 0;
+
+                var startIndex = index;
+                index += line.Length + newLineLength;
+
+                token.ThrowIfCancellationRequested();
+
+                var separatorIndex = line.IndexOf('=');
+
+                if (separatorIndex < 0)
+                {
+                    // Invalid line, skip it
+                    continue;
+                }
+
+                var key = line[..separatorIndex].Trim();
+                var value = line[(separatorIndex + 1)..].Trim();
+
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                {
+                    // Invalid key or value, skip it
+                    continue;
+                }
+
+                if (!keys.Add(key))
+                {
+                    diagnostics.Add(new ReportedDiagnostic(
+                        DuplicateUserMapping,
+                        path,
+                        new TextSpan(startIndex, line.Length),
+                        new LinePositionSpan(
+                            new LinePosition(lineIndex, 0),
+                            new LinePosition(lineIndex, line.Length)),
+                        key));
+
+                    continue;
+                }
+
+                var methodIndex = value.LastIndexOf('.');
+                var @namespace = methodIndex < 0 ? string.Empty : value[..methodIndex].Trim();
+                var methodName = methodIndex < 0 ? value.Trim() : value[(methodIndex + 1)..].Trim();
+
+                mappings.Add(("global::" + key, @namespace, methodName));
+            }
+        }
+
+        var result = new UserMappings(mappings.ToImmutable(), diagnostics.ToImmutable());
+        return result;
     }
 
     private static bool IsSyntaxTargetForGeneration(SyntaxNode node) => node switch
@@ -119,7 +209,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         return (m, sourcePath, source);
     }
 
-    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
+    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, UserMappings userMappings, CancellationToken ct)
     {
         // stop if we're asked to
         ct.ThrowIfCancellationRequested();
@@ -229,11 +319,25 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var preserveProgress = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveProgress) is { Value.Value: true };
 
-        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress);
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress, userMappings);
         var sn = rewriter.Visit(methodDeclarationSyntax);
         var content = sn.ToFullString();
 
         var diagnostics = rewriter.Diagnostics;
+
+        if (userMappings.TryGetValue(methodSymbol, out _))
+        {
+            var fullName = methodSymbol.ContainingType is not null
+                ? $"{methodSymbol.ContainingType.ToDisplayString()}.{methodSymbol.Name}"
+                : methodSymbol.Name;
+
+            diagnostics = [
+                ..diagnostics,
+                ReportedDiagnostic.Create(
+                    AttributeAndUserMappingConflict,
+                    methodDeclarationSyntax.Identifier.GetLocation(),
+                    fullName)];
+        }
 
         var hasErrors = false;
         foreach (var diagnostic in diagnostics)
@@ -265,7 +369,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, diagnostics, hasErrors);
 
         return result;
     }

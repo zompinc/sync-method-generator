@@ -106,10 +106,17 @@ public class IncrementalGeneratorTests
         driver = driver.RunGenerators(compilation);
 
         var result = driver.GetRunResult().Results.Single();
-        var sourceOutputs =
-            result.TrackedOutputSteps.SelectMany(outputStep => outputStep.Value).SelectMany(output => output.Outputs);
-        var (value, reason) = Assert.Single(sourceOutputs);
-        Assert.Equal(sourceStepReason, reason);
+        var trackedOutput = Assert.Single(result.TrackedOutputSteps);
+
+        Assert.Equal(2, trackedOutput.Value.Length);
+
+        // User mappings are not changed in this test case, so they should always return 'Cached'
+        var userMappingsOutput = trackedOutput.Value[0].Outputs;
+        Assert.Equal(IncrementalStepRunReason.Cached, Assert.Single(userMappingsOutput).Reason);
+        Assert.Equal(IncrementalStepRunReason.Cached, result.TrackedSteps["GetUserMappings"].Single().Outputs[0].Reason);
+
+        var sourceOutputs = trackedOutput.Value[1].Outputs;
+        Assert.Equal(sourceStepReason, Assert.Single(sourceOutputs).Reason);
         Assert.Equal(executeStepReason, result.TrackedSteps["GetMethodToGenerate"].Single().Outputs[0].Reason);
         Assert.Equal(combineStepReason, result.TrackedSteps["GenerateSource"].Single().Outputs[0].Reason);
     }

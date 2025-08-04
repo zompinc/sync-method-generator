@@ -11,7 +11,12 @@ namespace Zomp.SyncMethodGenerator;
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
 /// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress"/> parameters.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress) : CSharpSyntaxRewriter
+/// <param name="userMappings">User defined mappings for custom sync methods.</param>
+internal sealed class AsyncToSyncRewriter(
+    SemanticModel semanticModel,
+    bool disableNullable,
+    bool preserveProgress,
+    UserMappings userMappings) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -70,6 +75,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
     private readonly bool preserveProgress = preserveProgress;
+    private readonly UserMappings userMappings = userMappings;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
 
     /// <summary>
@@ -551,6 +557,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
 
         droppingAsync = prevDroppingAsync;
+
+        if (userMappings.TryGetValue(methodSymbol, out var result))
+        {
+            var args = methodSymbol is { IsExtensionMethod: true, ReducedFrom: not null } && @base.Expression is MemberAccessExpressionSyntax member
+                ? ArgumentList(SeparatedList([Argument(member.Expression.WithoutTrivia()), .. @base.ArgumentList.Arguments]))
+                : @base.ArgumentList;
+
+            return InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(Global(result.Namespace)), IdentifierName(result.Method)), args).WithTriviaFrom(@base);
+        }
 
         // Assumption here is that if there's a method like GetMemory(), there is also method called GetSpan(). Revisit if this isn't the case.
         var endsWithMemory = symbol.Name.EndsWith(Memory, StringComparison.Ordinal);
@@ -1623,15 +1638,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private static string RemoveAsync(string original)
         => Regex.Replace(original, "Async", string.Empty);
 
-    private static bool HasSyncMethod(IMethodSymbol ms)
-        => ms.Name.EndsWith("Async", StringComparison.Ordinal)
-        && ms.ContainingType is { } type
-        && type.GetMembers(RemoveAsync(ms.Name))
-            .OfType<IMethodSymbol>()
-            .Any(m => m.Parameters.Length == ms.Parameters.Length
-                      && m.Parameters.Zip(ms.Parameters, (p1, p2) => SymbolEqualityComparer.Default.Equals(p1, p2))
-                          .All(z => z));
-
     private static bool CanDropIf(IfStatementSyntax ifStatement)
         => ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
         && (ifStatement.Else is null || CanDropElse(ifStatement.Else))
@@ -2018,6 +2024,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return (IsIProgress(namedSymbol) && !preserveProgress) || IsCancellationToken(namedSymbol);
     }
+
+    private bool HasSyncMethod(IMethodSymbol ms)
+        => userMappings.TryGetValue(ms, out _)
+           || (
+               ms.Name.EndsWith("Async", StringComparison.Ordinal)
+               && ms.ContainingType is { } type
+               && type.GetMembers(RemoveAsync(ms.Name))
+                   .OfType<IMethodSymbol>()
+                   .Any(m => m.Parameters.Length == ms.Parameters.Length
+                             && m.Parameters.Zip(ms.Parameters, (p1, p2) => SymbolEqualityComparer.Default.Equals(p1, p2))
+                                 .All(z => z)));
 
     private bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
     {

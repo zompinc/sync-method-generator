@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: : (4,16)-(4,21),
+      Message: Method 'Test.Class.Delay' has both an attribute and a user mapping defined. The user mapping will be used.,
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN005,
+        Title: Attribute and user mapping conflict,
+        MessageFormat: Method '{0}' has both an attribute and a user mapping defined. The user mapping will be used.,
+        Category: Preprocessor,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}
