@@ -8,3 +8,5 @@ Rule ID | Category | Severity | Notes
 ZSMGEN001 | Preprocessor | Error | DiagnosticMessages
 ZSMGEN002 | Preprocessor | Error | DiagnosticMessages
 ZSMGEN003 | Preprocessor | Error | DiagnosticMessages
+ZSMGEN004 | Preprocessor | Error | DiagnosticMessages
+ZSMGEN005 | Preprocessor | Error | DiagnosticMessages

@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Generator.Tests.Utils;
+using Microsoft.CodeAnalysis;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -56,6 +57,7 @@ global using global::Zomp.SyncMethodGenerator;
         bool disableUnique = false,
         SourceType sourceType = SourceType.ClassBody,
         LanguageVersion languageVersion = LanguageVersion.Preview,
+        ImmutableArray<AdditionalText>? additionalTexts = null,
         params object?[] parameters)
     {
         var parseOptions = CSharpParseOptions.Default
@@ -104,6 +106,7 @@ partial class Class
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
             typeof(XmlReader).Assembly.Location,
+            typeof(IQueryable).Assembly.Location,
 #if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
 #endif
@@ -131,6 +134,11 @@ partial class Class
         var generator = new SyncMethodSourceGenerator();
 
         var driver = CSharpGeneratorDriver.Create(generator).WithUpdatedParseOptions(parseOptions);
+
+        if (additionalTexts is { Length: > 0 })
+        {
+            driver = driver.AddAdditionalTexts(additionalTexts.Value);
+        }
 
         driver = driver.RunGenerators(compilation);
 
