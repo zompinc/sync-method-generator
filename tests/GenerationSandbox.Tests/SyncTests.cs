@@ -20,6 +20,15 @@ public class SyncTests
     public void TestStaticAsyncWithIProgress()
         => AsyncWithIProgress.CallWithIProgress();
 
+    [Fact]
+    public void TestReturnListAsync()
+    {
+        var expected = new int[] { 1, 2, 3, 4, 5 };
+        var myNumbers = new int[] { 1, 2, 3, 4, 5 };
+        var result = EnumerableExtensions.ReturnList(myNumbers);
+        Assert.Equal(expected, result);
+    }
+
 #if NET8_0_OR_GREATER
     [Fact]
     public void TestIndexOfMaxSoFar()

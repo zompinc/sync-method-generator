@@ -26,5 +26,21 @@ internal static class DiagnosticMessages
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    internal static readonly DiagnosticDescriptor DuplicateUserMapping = new(
+        id: "ZSMGEN004",
+        title: "Duplicate user mapping",
+        messageFormat: "User mapping '{0}' is already defined",
+        category: Preprocessor,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor AttributeAndUserMappingConflict = new(
+        id: "ZSMGEN005",
+        title: "Attribute and user mapping conflict",
+        messageFormat: "Method '{0}' has both an attribute and a user mapping defined. The user mapping will be used.",
+        category: Preprocessor,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private const string Preprocessor = "Preprocessor";
 }

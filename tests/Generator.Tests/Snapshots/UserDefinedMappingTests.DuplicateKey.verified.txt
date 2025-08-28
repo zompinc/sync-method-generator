@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: SyncMethods.txt: (1,0)-(1,57),
+      Message: User mapping 'System.Threading.Tasks.Task.Delay' is already defined,
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN004,
+        Title: Duplicate user mapping,
+        MessageFormat: User mapping '{0}' is already defined,
+        Category: Preprocessor,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}
