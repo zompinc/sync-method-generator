@@ -165,6 +165,7 @@ async Task MethodAsync()
 var m = MemoryPool<byte>.Shared.Rent().Memory;
 """.Verify(sourceType: SourceType.MethodBody);
 
+#if NET8_0_OR_GREATER
     [Fact]
     public Task ListOfMemories() => """
 [CreateSyncVersion]
@@ -177,6 +178,7 @@ public static async Task WriteAsync(IAsyncEnumerable<ReadOnlyMemory<byte>> buffe
     }
 }
 """.Verify();
+#endif
 
     [Fact]
     public Task ChangeType() => """

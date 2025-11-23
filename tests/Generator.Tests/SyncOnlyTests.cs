@@ -44,16 +44,22 @@ if (true)
 Console.Write("Done");
 """.Verify(false, true, sourceType: SourceType.MethodBody);
 
+#if NET8_0_OR_GREATER
     [Fact]
     public Task DoNotRemove() => """
+[CreateSyncVersion]
+public async Task MethodAsync(string source, CancellationToken ct)
+{
 #if SYMBOL1
-ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #elif SYMBOL2
-ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #else
-ArgumentNullException.ThrowIfNull(source);
+    ArgumentNullException.ThrowIfNull(source);
 #endif
-""".Verify(sourceType: SourceType.MethodBody);
+}
+""".Verify();
+#endif
 
     [Fact]
     public Task DoNotRemoveInsideSyncOnly() => """
@@ -145,7 +151,7 @@ DbDataReader reader
 #endif
 )
 {
-    return await reader.IsDBNullAsync(i);
+    return await reader.IsDBNullAsync(0);
 }
 """.Verify(disableUnique: true);
 

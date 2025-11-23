@@ -3,5 +3,5 @@ public bool IsNull(
 global::System.Data.IDataReader reader
 )
 {
-    return reader.IsDBNull(i);
+    return reader.IsDBNull(0);
 }
