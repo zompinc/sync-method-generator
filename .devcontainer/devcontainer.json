@@ -3,7 +3,7 @@
 {
   "name": "Zomp Sync Method Generator",
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0-jammy",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
   // Features to add to the dev container. More info: https://containers.dev/features.
   // "features": {},
   // Configure tool-specific properties.
@@ -11,14 +11,25 @@
     // Configure properties specific to VS Code.
     "vscode": {
       "settings": {},
-      "extensions": []
+      "extensions": [
+        // cspell:disable-next-line
+        "ban.spellright",
+        // cspell:disable-next-line
+        "DavidAnson.vscode-markdownlint",
+        "streetsidesoftware.code-spell-checker",
+        // cspell:disable-next-line
+        "foxundermoon.shell-format",
+        "GitHub.vscode-github-actions",
+        // cspell:disable-next-line
+        "ms-dotnettools.csdevkit"
+      ]
     }
   },
   "features": {
-    "ghcr.io/devcontainers/features/dotnet:2": {
-      "version": "6.0",
-      "additionalVersions": "8.0, 9.0"
-    },
+    // "ghcr.io/devcontainers/features/dotnet:2": {
+    //   "version": "10.0",
+    //   "additionalVersions": "11.0"
+    // },
     "ghcr.io/devcontainers/features/sshd:1": {
       "version": "latest"
     }
@@ -26,7 +37,7 @@
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
-  "postCreateCommand": "dotnet tool restore && dotnet restore"
+  "postCreateCommand": "dotnet restore"
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
   // "remoteUser": "root"
 }
