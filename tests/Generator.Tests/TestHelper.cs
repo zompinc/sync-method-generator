@@ -104,8 +104,10 @@ partial class Class
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
             typeof(XmlReader).Assembly.Location,
+            typeof(IQueryable).Assembly.Location,
 #if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
+            typeof(Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions).Assembly.Location,
 #endif
             linqAssembly,
         };

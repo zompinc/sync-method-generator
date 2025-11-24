@@ -118,5 +118,26 @@ static partial class Class
     }
 }
 """.Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task EntityFrameworkQueryableExtensions() => """
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests
+{
+    using Microsoft.EntityFrameworkCore;
+
+    public partial class EntityFrameworkQueryableExtensions
+    {
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async Task<bool> QueryableExtensionAsync(IQueryable<object> source, CancellationToken cancellationToken)
+        {
+            return await source.AnyAsync(cancellationToken);
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
 #endif
 }
