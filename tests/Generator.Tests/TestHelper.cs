@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using Microsoft.EntityFrameworkCore;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -104,6 +105,8 @@ partial class Class
             typeof(Queue<>).Assembly.Location,
             typeof(LinkedListNode<>).Assembly.Location,
             typeof(XmlReader).Assembly.Location,
+            typeof(IQueryable).Assembly.Location,
+            typeof(EntityFrameworkQueryableExtensions).Assembly.Location,
 #if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
 #endif
