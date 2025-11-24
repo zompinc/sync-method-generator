@@ -1482,6 +1482,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         => symbol switch
         {
             INamedTypeSymbol { Name: "AsyncEnumerable" } => Global("System.Linq.Enumerable"),
+            INamedTypeSymbol { Name: "EntityFrameworkQueryableExtensions" } => Global("System.Linq.Queryable"),
             INamedTypeSymbol => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             _ => symbol.Name,
         };
