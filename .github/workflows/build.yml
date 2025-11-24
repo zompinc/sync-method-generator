@@ -17,8 +17,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        # os: [ubuntu-latest]
+        # os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         # os: [windows-latest]
     defaults:
       run:
@@ -59,7 +59,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
 
       - uses: dotnet/nbgv@master
@@ -145,7 +144,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            8.0.x
+            10.0.x
 
       - name: Install node
         if: ${{ steps.prerequisite.outputs.need_node == '1' }}
@@ -167,7 +166,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
-        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+        if: ${{ env.AZURE_CLIENT_SECRET != '' }}
         run: |
           dotnet dnx --prerelease --yes sign code trusted-signing \
           --base-directory "${{ github.workspace }}/packages" \
@@ -198,7 +197,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            8.0.x
+            10.0.x
 
       - name: Download Package artifact
         uses: actions/download-artifact@v4
