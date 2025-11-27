@@ -771,4 +771,13 @@ public async Task<Tuple<Tuple<string, StringBuilder?>?, object?>?> MethodAsync()
 [CreateSyncVersion]
 public Task<(bool, string?)> MethodAsync() => Task.FromResult<(bool, string?)>((true, null));
 """.Verify();
+
+    [Fact]
+    public Task DropStandaloneConfigureAwait() => """
+[CreateSyncVersion]
+public static async Task MethodAsync(IAsyncEnumerator<byte> bufferIterator)
+{
+    bufferIterator.ConfigureAwait(false);
+}
+""".Verify();
 }

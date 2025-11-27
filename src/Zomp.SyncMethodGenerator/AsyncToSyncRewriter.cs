@@ -2327,6 +2327,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private bool CanDropStatement(StatementSyntax statement) => statement switch
     {
         IfStatementSyntax @if => ShouldRemoveArgument(@if.Condition),
+        ExpressionStatementSyntax { Expression: InvocationExpressionSyntax ies } when GetSymbol(ies) is IMethodSymbol s && IsTaskExtension(s) => true, // Standalone .ConfigureAwait() statement
         ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
         ReturnStatementSyntax { Parent.Parent: MethodDeclarationSyntax, Expression: { } re } => ShouldRemoveArgument(re),
