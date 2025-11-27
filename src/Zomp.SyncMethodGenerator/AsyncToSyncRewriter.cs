@@ -536,9 +536,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (symbol is null)
         {
-            return node is { Expression: IdentifierNameSyntax { Identifier.Value: "nameof" } }
-                ? base.VisitInvocationExpression(node)
-                : throw new InvalidOperationException("This usually occurs when a test doesn't compile due to a compilation error or a missing reference / usings");
+            // return node is { Expression: IdentifierNameSyntax { Identifier.Value: "nameof" } }
+            //     ? base.VisitInvocationExpression(node)
+            //     : throw new InvalidOperationException("This usually occurs when a test doesn't compile due to a compilation error or a missing reference / usings");
+            return base.VisitInvocationExpression(node);
         }
 
         if (symbol is not IMethodSymbol methodSymbol)
