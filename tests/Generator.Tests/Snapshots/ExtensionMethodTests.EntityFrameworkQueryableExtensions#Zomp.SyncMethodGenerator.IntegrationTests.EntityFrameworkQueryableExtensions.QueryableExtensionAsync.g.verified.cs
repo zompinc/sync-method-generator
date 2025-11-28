@@ -5,9 +5,15 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
 {
     public partial class EntityFrameworkQueryableExtensions
     {
-        public bool QueryableExtension(global::System.Linq.IQueryable<object> source)
+        public int QueryableExtension(global::Microsoft.EntityFrameworkCore.DbContext dbContext)
         {
-            return global::System.Linq.Queryable.Any(source);
+            var dbSet = dbContext.Set<object>();
+            if (global::System.Linq.Queryable.Any(dbSet))
+            {
+                return global::Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ExecuteDelete(dbSet);
+            }
+            
+            return 0;
         }
     }
 }
