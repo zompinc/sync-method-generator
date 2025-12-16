@@ -1971,7 +1971,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newName = reducedFrom.Name;
         newName = changeMemoryToSpan ? GetNewName(reducedFrom) : RemoveAsync(newName);
 
-        var fullyQualifiedName = $"{MakeType(reducedFrom.ContainingType)}.{newName}";
+        var newNameExistsInContainingType = semanticModel.Compilation.References
+            .Select(semanticModel.Compilation.GetAssemblyOrModuleSymbol)
+            .Append(semanticModel.Compilation.Assembly)
+            .OfType<IAssemblySymbol>()
+            .Select(assemblySymbol => assemblySymbol.GetTypeByMetadataName(reducedFrom.ContainingType.ToString()))
+            .OfType<INamedTypeSymbol>()
+            .SelectMany(symbol => symbol.GetMembers(newName))
+            .Any();
+
+        var fullyQualifiedName = newNameExistsInContainingType
+            ? $"{reducedFrom.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{newName}"
+            : $"{MakeType(reducedFrom.ContainingType)}.{newName}";
 
         var es = (ies.Expression switch
         {
