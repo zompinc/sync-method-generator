@@ -9,28 +9,124 @@ internal static class Extensions
         public bool IsMemory => symbol is
         {
             Name: nameof(Memory<>) or nameof(ReadOnlyMemory<>), IsGenericType: true, TypeArguments: [{ }],
-            ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true }
+            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
         };
 
         public bool IsMemoryOrNullableMemory => symbol.IsMemory || symbol is
         {
             Name: nameof(Nullable<>), IsGenericType: true, TypeArguments: [INamedTypeSymbol { IsMemory: true }],
-            ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true }
+            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+        };
+
+        public bool IsTaskOrValueTask => symbol is
+        {
+            Name: Task or ValueTask,
+            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        };
+
+        public bool IsNonGenericTaskOrValueTask => symbol is
+        {
+            IsTaskOrValueTask: true, IsGenericType: false,
+        };
+
+        public bool IsValueTask => symbol is
+        {
+            Name: ValueTask,
+            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        };
+
+        public bool IsNonGenericValueTask => symbol is
+        {
+            IsValueTask: true, IsGenericType: false,
+        };
+
+        public bool IsSystemFunc => symbol is
+        {
+            Name: Func, IsGenericType: true, TypeArguments: [{ }, ..],
+            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+        };
+
+        public bool IsCancellationToken => symbol is
+        {
+            Name: CancellationToken, IsGenericType: false,
+            ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
+        };
+
+        public bool IsIProgress => symbol is
+        {
+            Name: IProgress, IsGenericType: true,
+            ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
+        };
+
+        public bool IsIAsyncEnumerableOrIAsyncEnumerator => symbol is
+        {
+            Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
+            ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        };
+
+        public bool IsEnumerator => symbol is
+        {
+            Name: Enumerator, ContainingType:
+            {
+                IsGenericType: true, TypeArguments: [{ }],
+                ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+            }
         };
     }
 
     extension(IMethodSymbol symbol)
     {
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "False positive")]
         public bool IsAsTask => symbol is
         {
-            Name: "AsTask", ContainingType:
+            Name: AsTask, ContainingType:
             {
-                Name: "ValueTask",
-                ContainingNamespace: { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } }
+                Name: ValueTask,
+                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+            }
+        };
+
+        public bool IsTaskExtension => symbol.ReturnType is
+        {
+            Name: nameof(ConfiguredTaskAwaitable) or nameof(ConfiguredValueTaskAwaitable) or nameof(ConfiguredCancelableAsyncEnumerable<>) or nameof(ConfiguredAsyncDisposable),
+            ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        };
+    }
+
+    extension(IPropertySymbol symbol)
+    {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "False positive")]
+        public bool IsCancellationRequested => symbol is
+        {
+            Name: IsCancellationRequested, ContainingType:
+            {
+                Name: CancellationToken, IsGenericType: false,
+                ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
             }
         };
     }
+
+    // Namespace parts
+    private const string Func = "Func";
+    private const string System = "System";
+    private const string Threading = "Threading";
+    private const string Tasks = "Tasks";
+    private const string Generic = "Generic";
+    private const string Collections = "Collections";
+    private const string CompilerServices = "CompilerServices";
+    private const string Runtime = "Runtime";
+
+    // Type names
+    private const string Enumerator = nameof(Span<>.Enumerator);
+    private const string CancellationToken = nameof(global::System.Threading.CancellationToken);
+    private const string IAsyncEnumerable = nameof(IAsyncEnumerable<>);
+    private const string IAsyncEnumerator = nameof(IAsyncEnumerator<>);
+    private const string Task = nameof(Task<>);
+    private const string ValueTask = nameof(ValueTask<>);
+    private const string IProgress = nameof(IProgress<>);
+
+    // Members
+    private const string IsCancellationRequested = nameof(global::System.Threading.CancellationToken.IsCancellationRequested);
+    private const string AsTask = nameof(global::System.Threading.Tasks.ValueTask.AsTask);
 
     /// <summary>
     /// Gets array of indices that match a predicate.

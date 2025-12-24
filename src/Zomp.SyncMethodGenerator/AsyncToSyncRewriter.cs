@@ -10,7 +10,7 @@ namespace Zomp.SyncMethodGenerator;
 /// </remarks>
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
-/// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress"/> parameters.</param>
+/// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress{T}"/> parameters.</param>
 /// <param name="methodName">Method declaration syntax.</param>
 internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, MethodDeclarationSyntax methodName) : CSharpSyntaxRewriter
 {
@@ -18,32 +18,21 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     // Namespace parts
     private const string Collections = "Collections";
-    private const string CompilerServices = "CompilerServices";
     private const string Func = "Func";
     private const string Generic = "Generic";
     private const string System = "System";
-    private const string Runtime = "Runtime";
-    private const string Threading = "Threading";
-    private const string Tasks = "Tasks";
 
     // Type names
-    private const string CancellationToken = nameof(global::System.Threading.CancellationToken);
-    private const string Enumerator = nameof(Span<>.Enumerator);
     private const string Memory = nameof(Memory<>);
-    private const string IAsyncEnumerable = nameof(IAsyncEnumerable<>);
-    private const string IAsyncEnumerator = nameof(IAsyncEnumerator<>);
     private const string IAsyncResult = nameof(global::System.IAsyncResult);
-    private const string IProgress = nameof(IProgress<>);
     private const string Object = "object";
-    private const string Task = nameof(Task<>);
-    private const string ValueTask = nameof(ValueTask<>);
 
     // Members
-    private const string CompletedTask = nameof(global::System.Threading.Tasks.Task.CompletedTask);
+    private const string CompletedTask = nameof(Task.CompletedTask);
     private const string Delay = nameof(Task<>.Delay);
     private const string FromResult = nameof(Task<>.FromResult);
     private const string WaitAsync = "WaitAsync";
-    private const string IsCancellationRequested = nameof(global::System.Threading.CancellationToken.IsCancellationRequested);
+    private const string IsCancellationRequested = nameof(CancellationToken.IsCancellationRequested);
     private const string MoveNextAsync = nameof(IAsyncEnumerator<>.MoveNextAsync);
     private const string DisposeAsync = nameof(IAsyncEnumerator<>.DisposeAsync);
     private const string Span = nameof(Memory<>.Span);
@@ -283,8 +272,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             => (changeMemoryToSpan.Contains(symbol) || node.Parent is ParameterSyntax or VariableDeclarationSyntax)
                 ? $"{System}.{ReplaceWithSpan(symbol)}" : null,
             {
-                Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
-                ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+                IsIAsyncEnumerableOrIAsyncEnumerator: true
             }
 
             => $"{System}.{Collections}.{Generic}.{RemoveAsync(symbol.Name)}",
@@ -303,12 +291,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var replacement = symbol switch
         {
-            {
-                Name: Task or ValueTask, IsGenericType: true,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-
-            => @base.TypeArgumentList.Arguments[0],
+            { IsTaskOrValueTask: true, IsGenericType: true, } => @base.TypeArgumentList.Arguments[0],
             _ => @base.WithIdentifier(Identifier(GetIdentifier(symbol))),
         };
 
@@ -463,7 +446,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             && namedTypeSymbol is { IsGenericType: true })
         {
             // And it is System.Func
-            if (IsSystemFunc(namedTypeSymbol)
+            if (namedTypeSymbol.IsSystemFunc
 
             // And can be converter to Action
             && ConvertFuncToAction(@base.Type, namedTypeSymbol) is { } newTypeSyntax)
@@ -608,20 +591,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return changeMemoryToSpan ? AppendSpan(@base) : @base;
         }
 
-        if (methodSymbol.ReturnType is INamedTypeSymbol
-            {
-                Name: Enumerator, ContainingType:
-                {
-                    IsGenericType: true, TypeArguments: [{ }],
-                    ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-                }
-            })
+        if (methodSymbol.ReturnType is INamedTypeSymbol { IsEnumerator: true })
         {
             return @base.WithExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, memberAccess.Expression, IdentifierName(nameof(IEnumerable.GetEnumerator)))).WithArgumentList(ArgumentList([]));
         }
 
         // Handle .ConfigureAwait(), .WithCancellationToken() and return the part in front of it
-        if (IsTaskExtension(methodSymbol) && methodSymbol.Name is not (MoveNextAsync or DisposeAsync))
+        if (methodSymbol is { IsTaskExtension: true, Name: not (MoveNextAsync or DisposeAsync) })
         {
             return memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
         }
@@ -646,12 +622,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (newName is null)
         {
-            if (name.EndsWithAsync()
-                || methodSymbol.ReturnType is INamedTypeSymbol
-                {
-                    Name: IAsyncEnumerator, IsGenericType: true,
-                    ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-                })
+            if (name.EndsWithAsync() || methodSymbol.ReturnType is INamedTypeSymbol { IsIAsyncEnumerableOrIAsyncEnumerator: true })
             {
                 newName = RemoveAsync(name);
             }
@@ -741,7 +712,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Replace expressions that return the task directly.
         if (node is { Expression: { } returnExpression } &&
-            semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol named && IsTaskOrValueTask(named))
+            semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol named && named.IsNonGenericTaskOrValueTask)
         {
             var result = ExpressionToStatement(returnExpression);
 
@@ -881,8 +852,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Ensure that Func<Task<T>> is not removed
         var isFunc = node.Parent is { } parent
-            && semanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true } n
-            && IsSystemFunc(n);
+            && semanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true, IsSystemFunc: true } n;
 
         // Do not remove Task<T>, but remove Task inside a Func<>
         bool RemoveType(TypeSyntax z, int index) =>
@@ -934,7 +904,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var genericReturnType = returnType as GenericNameSyntax;
 
-        var isTask = genericReturnType is null && IsTaskOrValueTask(symbol);
+        var isTask = genericReturnType is null && symbol.IsNonGenericTaskOrValueTask;
 
         var hasAsync = @base.Modifiers.Any(z => z.IsKind(SyntaxKind.AsyncKeyword));
 
@@ -1162,7 +1132,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         if (GetIdentifier(node.Expression) is { } identifier
-            && GetSymbol(identifier) is { } symbol
+            && GetSymbol(identifier) is { }
                 && semanticModel.GetDeclaredSymbol(node) is { } s)
         {
             if (s.Type is INamedTypeSymbol { IsMemory: true })
@@ -1223,8 +1193,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         TypeSyntax? newTypeSyntax = null;
 
         SeparatedSyntaxList<VariableDeclaratorSyntax>? separatedVariableNames = null;
-        if (variableType is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol
-            && IsSystemFunc(namedTypeSymbol))
+        if (variableType is INamedTypeSymbol { IsGenericType: true, IsSystemFunc: true } namedTypeSymbol)
         {
             var newVariableNames = new List<VariableDeclaratorSyntax>();
             foreach (var variable in @base.Declaration.Variables)
@@ -1240,7 +1209,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 newTypeSyntax = newTypeSyntax2;
             }
 
-            if (typeArgs[^1] is INamedTypeSymbol named && IsTaskOrValueTask(named)
+            if (typeArgs[^1] is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true } named
                 && @base.Declaration.Type is GenericNameSyntax gns)
             {
                 var newType = Global("System.Action");
@@ -1454,28 +1423,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     internal static bool IsTypeOfInterest(INamedTypeSymbol symbol) => symbol switch
     {
-        {
-            Name: Task or ValueTask,
-            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-        }
-
-        => true,
-        {
-            Name: Enumerator, ContainingType:
-            {
-                IsGenericType: true, TypeArguments: [{ }],
-                ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => true,
+        { IsTaskOrValueTask: true } => true,
+        { IsEnumerator: true } => true,
         { IsMemory: true } => true,
-        {
-            Name: IAsyncEnumerable or IAsyncEnumerator, IsGenericType: true,
-            ContainingNamespace: { Name: Generic, ContainingNamespace: { Name: Collections, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-        }
-
-        => true,
+        { IsIAsyncEnumerableOrIAsyncEnumerator: true } => true,
         _ => false,
     };
 
@@ -1490,23 +1441,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static SimpleNameSyntax ProcessSymbol(ISymbol typeSymbol) => typeSymbol switch
     {
-        INamedTypeSymbol
-        {
-            Name: Enumerator, ContainingType:
-            {
-                IsGenericType: true, TypeArguments: [var type],
-                ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([ProcessSymbol(type)], []))),
-        INamedTypeSymbol
-        {
-            Name: nameof(Task) or nameof(ValueTask),
-            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-        }
-
-        symbol => symbol.IsGenericType ? ProcessSymbol(symbol.TypeArguments[0]) : IdentifierName("void"),
+        INamedTypeSymbol { IsEnumerator: true } s
+            => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([ProcessSymbol(s.ContainingType.TypeArguments[0])], []))),
+        INamedTypeSymbol { IsTaskOrValueTask: true } s => s.IsGenericType ? ProcessSymbol(s.TypeArguments[0]) : IdentifierName("void"),
         INamedTypeSymbol nts => IdentifierName(MakeType(nts)),
         IArrayTypeSymbol ats => IdentifierName(MakeType(ats.ElementType) + $"[{new string(',', ats.Rank - 1)}]"),
         IFieldSymbol fs => IdentifierName(MakeType(fs.Type) + '.' + fs.Name),
@@ -1555,32 +1492,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static SpecialMethod IsSpecialMethod(IMethodSymbol methodSymbol) => methodSymbol switch
     {
-        {
-            Name: Delay, ContainingType:
-            {
-                Name: Task or ValueTask, IsGenericType: false,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => SpecialMethod.Delay,
-        {
-            Name: FromResult, ContainingType:
-            {
-                Name: Task or ValueTask, IsGenericType: false,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => SpecialMethod.FromResult,
+        { Name: Delay, ContainingType.IsNonGenericTaskOrValueTask: true } => SpecialMethod.Delay,
+        { Name: FromResult, ContainingType.IsNonGenericTaskOrValueTask: true } => SpecialMethod.FromResult,
         { IsAsTask: true } => SpecialMethod.Drop,
-        {
-            Name: WaitAsync,
-            ReceiverType.Name: ValueTask or Task,
-            ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-        }
-
-        => SpecialMethod.Drop,
+        { Name: WaitAsync, ReceiverType: INamedTypeSymbol { IsTaskOrValueTask: true } } => SpecialMethod.Drop,
         _ => SpecialMethod.None,
     };
 
@@ -1747,12 +1662,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return node;
     }
 
-    private static bool IsTaskExtension(IMethodSymbol methodSymbol) => methodSymbol.ReturnType is
-    {
-        Name: nameof(ConfiguredTaskAwaitable) or nameof(ConfiguredValueTaskAwaitable) or nameof(ConfiguredCancelableAsyncEnumerable<>) or nameof(ConfiguredAsyncDisposable),
-        ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-    };
-
     private static bool CanDropEmptyStatement(StatementSyntax statement)
         => statement switch
         {
@@ -1789,15 +1698,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private static bool TryReplaceObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? replacement)
     {
-        if (symbol is IMethodSymbol
-            {
-                ReceiverType: INamedTypeSymbol
-                {
-                    Name: ValueTask, IsGenericType: true,
-                    ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-                }
-            }
-
+        if (symbol is IMethodSymbol { ReceiverType: INamedTypeSymbol { IsValueTask: true, IsGenericType: true } }
             && node.ArgumentList is { Arguments: [var singleArg] })
         {
             replacement = singleArg.Expression;
@@ -1807,24 +1708,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         replacement = default;
         return false;
     }
-
-    private static bool IsTaskOrValueTask(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: Task or ValueTask, IsGenericType: false,
-        ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-    };
-
-    private static bool IsValueTask(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: ValueTask, IsGenericType: false,
-        ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-    };
-
-    private static bool IsSystemFunc(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: Func, IsGenericType: true, TypeArguments: [{ }, ..],
-        ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-    };
 
     private static bool IsGenericMethodThatHasMemory(INamedTypeSymbol symbol)
     {
@@ -1865,18 +1748,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return false;
     }
 
-    private static bool IsCancellationToken(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: CancellationToken, IsGenericType: false,
-        ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
-    };
-
-    private static bool IsIProgress(INamedTypeSymbol symbol) => symbol is
-    {
-        Name: IProgress, IsGenericType: true,
-        ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
-    };
-
     private static TypeSyntax? ConvertFuncToAction(TypeSyntax originalType, INamedTypeSymbol namedTypeSymbol)
     {
         var typeArgs = namedTypeSymbol.TypeArguments;
@@ -1887,7 +1758,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return null;
         }
 
-        if (IsSystemFunc(lastTypeArgument))
+        if (lastTypeArgument.IsSystemFunc)
         {
             if (ConvertFuncToAction(gns.TypeArgumentList.Arguments[^1], lastTypeArgument) is not { } child)
             {
@@ -1901,7 +1772,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var res = gns.WithTypeArgumentList(TypeArgumentList(newSeparatedList));
             return res;
         }
-        else if (!IsTaskOrValueTask(lastTypeArgument))
+        else if (!lastTypeArgument.IsNonGenericTaskOrValueTask)
         {
             return null;
         }
@@ -2017,7 +1888,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         foreach (var @interface in GetInterfaces(namedSymbol))
         {
-            if (IsIProgress(@interface) || @interface is
+            if (@interface.IsIProgress || @interface is
                 {
                     Name: IAsyncResult, IsGenericType: false,
                     ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true }
@@ -2027,31 +1898,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        return (IsIProgress(namedSymbol) && !preserveProgress) || IsCancellationToken(namedSymbol);
+        return (namedSymbol.IsIProgress && !preserveProgress) || namedSymbol.IsCancellationToken;
     }
 
     private bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
     {
-        IPropertySymbol
-        {
-            Name: CompletedTask, Type: INamedTypeSymbol
-            {
-                Name: Task or ValueTask, IsGenericType: false,
-                ContainingNamespace: { Name: Tasks, ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
-            }
-        }
-
-        => true,
-        IPropertySymbol
-        {
-            Name: IsCancellationRequested, ContainingType:
-            {
-                Name: CancellationToken, IsGenericType: false,
-                ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
-            }
-        }
-
-        => !isNegated,
+        IPropertySymbol { Name: CompletedTask, Type: INamedTypeSymbol { IsNonGenericValueTask: true, } } => true,
+        IPropertySymbol { IsCancellationRequested: true } => !isNegated,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
                 && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
@@ -2327,7 +2180,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private bool CanDropStatement(StatementSyntax statement) => statement switch
     {
         IfStatementSyntax @if => ShouldRemoveArgument(@if.Condition),
-        ExpressionStatementSyntax { Expression: InvocationExpressionSyntax ies } when GetSymbol(ies) is IMethodSymbol s && IsTaskExtension(s) => true, // Standalone .ConfigureAwait() statement
+        ExpressionStatementSyntax { Expression: InvocationExpressionSyntax ies } when GetSymbol(ies) is IMethodSymbol { IsTaskExtension: true } => true, // Standalone .ConfigureAwait() statement
         ExpressionStatementSyntax e => ShouldRemoveArgument(e.Expression),
         LocalDeclarationStatementSyntax l => CanDropDeclaration(l),
         ReturnStatementSyntax { Parent.Parent: MethodDeclarationSyntax, Expression: { } re } => ShouldRemoveArgument(re),
@@ -2337,8 +2190,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private bool ChecksIfNegatedIsCancellationRequested(ExpressionSyntax condition)
         => RemoveParentheses(condition) is PrefixUnaryExpressionSyntax { OperatorToken.RawKind: (int)SyntaxKind.ExclamationToken } pe
         && RemoveParentheses(pe.Operand) is MemberAccessExpressionSyntax { Name.Identifier.ValueText: IsCancellationRequested } mae
-        && GetSymbol(mae) is { } t
-        && IsCancellationToken(t.ContainingType);
+        && GetSymbol(mae) is { ContainingType.IsCancellationToken: true };
 
     private bool HasSymbolAndShouldBeRemoved(ExpressionSyntax expr, bool isNegated = false)
         => GetSymbol(expr) is ISymbol symbol && ShouldRemoveArgument(symbol, isNegated);
@@ -2360,7 +2212,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         if (symbol is IMethodSymbol methodSymbol)
         {
             if (expression is MemberAccessExpressionSyntax memberAccessExpression
-            && IsTaskExtension(methodSymbol) && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
+            && methodSymbol.IsTaskExtension && memberAccessExpression.Expression is InvocationExpressionSyntax childInvocation)
             {
                 return DropInvocation(childInvocation);
             }
@@ -2460,10 +2312,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
-           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol named && IsValueTask(named);
+           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { IsNonGenericValueTask: true };
 
     private bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax oe)
-        => GetSymbol(oe) is IMethodSymbol { ReceiverType: INamedTypeSymbol named } && IsValueTask(named);
+        => GetSymbol(oe) is IMethodSymbol { ReceiverType: INamedTypeSymbol { IsNonGenericValueTask: true } };
 
     /// <summary>
     /// Keeps track of nested directives.
