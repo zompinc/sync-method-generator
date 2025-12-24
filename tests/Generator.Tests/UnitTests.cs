@@ -780,4 +780,17 @@ public static async Task MethodAsync(IAsyncEnumerator<byte> bufferIterator)
     bufferIterator.ConfigureAwait(false);
 }
 """.Verify();
+
+    [Fact]
+    public Task DropReturnStatementWhenNonGenericTaskIsReturned() => """
+[CreateSyncVersion]
+public Task MethodAsync()
+{
+    return OtherAsync();
+}
+
+private Task<int> OtherAsync() => Task.FromResult(1);
+
+private int Other() => 1;
+""".Verify();
 }

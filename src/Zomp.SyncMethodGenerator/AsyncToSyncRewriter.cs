@@ -837,7 +837,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia, _))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange([.. newStatements2]);
@@ -1507,7 +1507,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             var statement = list[i];
 
-            var (statementGetsDropped, statements, leadingTrivia) = extraNodeInfoList[i];
+            var (statementGetsDropped, statements, leadingTrivia, dropReturn) = extraNodeInfoList[i];
 
             for (var j = 0; j < statements.Count; ++j)
             {
@@ -1524,7 +1524,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 newStatements.Add(syncOnlyStatementWithTrivia);
             }
 
-            if (!statementGetsDropped)
+            if (dropReturn && statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax ies })
+            {
+                var newStatement = ExpressionStatement(ies).WithTriviaFrom(statement);
+                newStatements.Add(newStatement);
+            }
+            else if (!statementGetsDropped)
             {
                 var newStatement = statement;
                 newStatement = newStatement.WithLeadingTrivia(leadingTrivia);
@@ -1945,6 +1950,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             {
                 eni = eni with { DropOriginal = true };
             }
+            else
+            {
+                if (statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax } r)
+                {
+                    if (r.Parent is BlockSyntax { Parent: MethodDeclarationSyntax mds } && semanticModel.GetTypeInfo(mds.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true })
+                    {
+                        eni = eni with { DropReturn = true };
+                    }
+                }
+            }
 
             extraNodeInfoList.Add(eni);
         }
@@ -2336,7 +2351,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private sealed record SyncOnlyAttributeContext(SyntaxList<AttributeListSyntax> Attributes, IList<SyntaxTrivia> LeadingTrivia);
 
-    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia);
+    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia, bool DropReturn = false);
 
     private sealed class StatementProcessor
     {
