@@ -2079,11 +2079,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             if (trivia.IsKind(SyntaxKind.DisabledTextTrivia) && directiveStack.IsSyncOnly == true)
             {
                 var statementsText = trivia.ToString();
-                var compilation = ParseCompilationUnit(statementsText);
+                var syntaxTree = CSharpSyntaxTree.ParseText(statementsText, options: (CSharpParseOptions)semanticModel.SyntaxTree.Options);
+                var compilation = semanticModel.Compilation.AddSyntaxTrees(syntaxTree);
+                var model = compilation.GetSemanticModel(syntaxTree);
+                var asyncToSyncRewriter = new AsyncToSyncRewriter(model, disableNullable, preserveProgress);
 
-                foreach (var m in compilation.Members)
+                foreach (var m in syntaxTree.GetCompilationUnitRoot().Members)
                 {
-                    process(m);
+                    process((MemberDeclarationSyntax)asyncToSyncRewriter.Visit(m));
                 }
 
                 continue;
@@ -2113,8 +2116,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 triviaList.Clear();
             }
 
-            //Cannot to the following because syntax node is not within syntax tree
-            //var statement = (StatementSyntax)Visit(gs.Statement)!;
             statements.Add(statement);
         });
 
