@@ -21,6 +21,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
+    internal const string PreserveCancellationToken = "PreserveCancellationToken";
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -237,9 +238,10 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         disableNullable |= explicitDisableNullable;
 
         var preserveProgress = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveProgress) is { Value.Value: true };
+        var preserveCancellationToken = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveCancellationToken) is { Value.Value: true };
 
         var toVisit = extensionParent ?? (SyntaxNode)methodDeclarationSyntax;
-        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress, methodDeclarationSyntax);
+        var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress, preserveCancellationToken, methodDeclarationSyntax);
         var sn = rewriter.Visit(toVisit);
         var content = sn.ToFullString();
 
