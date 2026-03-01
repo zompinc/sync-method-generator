@@ -62,7 +62,7 @@ A list of changes applied to the new synchronized method:
   \*\* `Memory` and `ReadOnlyMemory` is preserved in sync methods if it is a type argument of a collection. This is due to a compiler limitation which states that a `ref struct` can't be the element type of an array.
 
 - Remove parameters
-  - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken)
+  - [CancellationToken](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken), unless the `PreserveCancellationToken` property is set to `true`.
   - [IProgress\<T>](https://learn.microsoft.com/en-us/dotnet/api/system.iprogress-1), unless the `PreserveProgress` property is set to `true`.
 - Invocation changes
   - Remove `ConfigureAwait` from [Tasks](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.configureawait) and [Asynchronous Enumerations](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskasyncenumerableextensions.configureawait)
@@ -103,6 +103,18 @@ By default, this source generator removes `IProgress<T>` parameters from async m
 public async Task MethodAsync(IProgress<double> progress)
 {
     progress.Report(0.0);
+}
+```
+
+#### PreserveCancellationToken
+
+By default, this source generator removes `CancellationToken` parameters from async methods. To preserve them, use the `PreserveCancellationToken` option.
+
+```cs
+[Zomp.SyncMethodGenerator.CreateSyncVersion(PreserveCancellationToken = true)]
+public async Task MethodAsync(CancellationToken cancellationToken = default)
+{
+    cancellationToken.ThrowIfCancellationRequested();
 }
 ```
 

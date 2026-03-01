@@ -11,8 +11,9 @@ namespace Zomp.SyncMethodGenerator;
 /// <param name="semanticModel">The semantic model.</param>
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
 /// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress{T}"/> parameters.</param>
+/// <param name="preserveCancellationToken">Instructs the source generator to preserve <see cref="CancellationToken"/> parameters.</param>
 /// <param name="methodName">Method declaration syntax.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, MethodDeclarationSyntax methodName) : CSharpSyntaxRewriter
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, bool preserveCancellationToken, MethodDeclarationSyntax methodName) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -455,8 +456,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
+        // Remove [EnumeratorCancellation] attribute
+        var attributeLists = default(SyntaxList<AttributeListSyntax>);
+        foreach (var attributeList in node.AttributeLists)
+        {
+            var attributes = SeparatedList(attributeList.Attributes.Where(a => !IsEnumeratorCancellationAttribute(a)));
+            if (attributes.Count > 0)
+            {
+                attributeLists = attributeLists.Add(attributeList.WithAttributes(attributes));
+            }
+        }
+
         return node.Type is null || TypeAlreadyQualified(node.Type) ? @base
-            : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+            : @base.WithType(ProcessType(node.Type)).WithAttributeLists(attributeLists).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -1879,11 +1891,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private string ReplaceWithSpan(ISymbol symbol)
         => Regex.Replace(symbol.Name, Memory, Span);
 
-    private bool ShouldRemoveType(ITypeSymbol symbol)
+    private bool ShouldRemoveType(ITypeSymbol symbol, bool isArgument = false)
     {
         if (symbol is IArrayTypeSymbol at)
         {
-            return ShouldRemoveType(at.ElementType);
+            return ShouldRemoveType(at.ElementType, isArgument);
         }
 
         if (symbol is not INamedTypeSymbol namedSymbol)
@@ -1903,7 +1915,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        return (namedSymbol.IsIProgress && !preserveProgress) || namedSymbol.IsCancellationToken;
+        return (namedSymbol.IsIProgress && !preserveProgress) || (isArgument ? namedSymbol.IsCancellationToken : namedSymbol.IsCancellationToken && !preserveCancellationToken);
     }
 
     private bool ShouldRemoveArgument(ISymbol symbol, bool isNegated = false) => symbol switch
@@ -1912,10 +1924,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IPropertySymbol { IsCancellationRequested: true } => !isNegated,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
-                && ((ShouldRemoveType(ms.ReturnType) && ms.MethodKind != MethodKind.LocalFunction)
-                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver)))
+                && ((ShouldRemoveType(ms.ReturnType, isArgument: true) && ms.MethodKind != MethodKind.LocalFunction)
+                    || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver, isArgument: true)))
                 && !HasSyncMethod(ms),
-        _ => ShouldRemoveType(GetReturnType(symbol)),
+        _ => ShouldRemoveType(GetReturnType(symbol), isArgument: true),
     };
 
     private bool PreProcess(
@@ -2155,6 +2167,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
 
+    private bool IsEnumeratorCancellationAttribute(AttributeSyntax attributeSyntax)
+    {
+        var type = GetSymbol(attributeSyntax)?.ContainingType;
+        return type?.IsEnumeratorCancellationAttribute == true;
+    }
+
     private bool CanDropDeclaration(LocalDeclarationStatementSyntax local)
     {
         var symbol = GetSymbol(local.Declaration.Type);
@@ -2203,7 +2221,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     };
 
     private bool ChecksIfNegatedIsCancellationRequested(ExpressionSyntax condition)
-        => RemoveParentheses(condition) is PrefixUnaryExpressionSyntax { OperatorToken.RawKind: (int)SyntaxKind.ExclamationToken } pe
+        => !preserveCancellationToken && RemoveParentheses(condition) is PrefixUnaryExpressionSyntax { OperatorToken.RawKind: (int)SyntaxKind.ExclamationToken } pe
         && RemoveParentheses(pe.Operand) is MemberAccessExpressionSyntax { Name.Identifier.ValueText: IsCancellationRequested } mae
         && GetSymbol(mae) is { ContainingType.IsCancellationToken: true };
 

@@ -52,6 +52,12 @@ internal static class Extensions
             ContainingNamespace: { Name: Threading, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } }
         };
 
+        public bool IsEnumeratorCancellationAttribute => symbol is
+        {
+            Name: EnumeratorCancellationAttribute, IsGenericType: false,
+            ContainingNamespace: { Name: CompilerServices, ContainingNamespace: { Name: Runtime, ContainingNamespace: { Name: System, ContainingNamespace.IsGlobalNamespace: true } } }
+        };
+
         public bool IsIProgress => symbol is
         {
             Name: IProgress, IsGenericType: true,
@@ -118,6 +124,7 @@ internal static class Extensions
     // Type names
     private const string Enumerator = nameof(Span<>.Enumerator);
     private const string CancellationToken = nameof(global::System.Threading.CancellationToken);
+    private const string EnumeratorCancellationAttribute = nameof(global::System.Runtime.CompilerServices.EnumeratorCancellationAttribute);
     private const string IAsyncEnumerable = nameof(IAsyncEnumerable<>);
     private const string IAsyncEnumerator = nameof(IAsyncEnumerator<>);
     private const string Task = nameof(Task<>);
