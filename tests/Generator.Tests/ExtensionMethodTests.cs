@@ -121,7 +121,6 @@ static partial class Class
 
     [Fact]
     public Task EntityFrameworkQueryableExtensions() => """
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -132,9 +131,15 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     public partial class EntityFrameworkQueryableExtensions
     {
         [Zomp.SyncMethodGenerator.CreateSyncVersion]
-        public async Task<bool> QueryableExtensionAsync(IQueryable<object> source, CancellationToken cancellationToken)
+        public async Task<int> QueryableExtensionAsync(DbContext dbContext, CancellationToken cancellationToken)
         {
-            return await source.AnyAsync(cancellationToken);
+            var dbSet = dbContext.Set<object>();
+            if (await dbSet.AnyAsync(cancellationToken))
+            {
+                return await dbSet.ExecuteDeleteAsync(cancellationToken);
+            }
+            
+            return 0;
         }
     }
 }
