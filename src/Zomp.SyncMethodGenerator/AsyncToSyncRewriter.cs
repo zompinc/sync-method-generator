@@ -376,8 +376,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var extra = ProcessTrivia(leading, ds);
             if (extra is not null && extra.AdditionalStatements.Count > 0)
             {
-                modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
-                modifications.Add(i + 1, true);
+                modifications.Add(i, new Operation([.. extra.AdditionalStatements]));
+                modifications.Add(i + 1, new Operation(true));
             }
 
             if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
@@ -1074,8 +1074,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
             if (extra is { AdditionalStatements.Count: > 0 })
             {
-                modifications.Add(index, new List<StatementSyntax>(extra.AdditionalStatements));
-                modifications.Add(index + 1, true);
+                modifications.Add(index, new Operation([.. extra.AdditionalStatements]));
+                modifications.Add(index + 1, new Operation(true));
             }
 
             if (byExpression || nullableParameters is not { } parameters)
