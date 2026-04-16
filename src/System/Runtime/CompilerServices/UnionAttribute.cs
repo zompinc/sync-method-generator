@@ -1,4 +1,4 @@
-namespace System.Runtime.CompilerServices;
+﻿namespace System.Runtime.CompilerServices;
 
 /// <summary>
 /// Marks a type as a C# union.
