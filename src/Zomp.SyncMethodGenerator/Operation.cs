@@ -1,4 +1,4 @@
-namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator;
 
 /// <summary>
 /// Represents a sync-only operation.
