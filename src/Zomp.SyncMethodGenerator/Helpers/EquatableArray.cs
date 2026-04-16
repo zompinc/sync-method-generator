@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Zomp.SyncMethodGenerator.Helpers;
 
@@ -80,22 +79,13 @@ internal readonly struct EquatableArray<T>(ImmutableArray<T> array) : IEquatable
     /// </summary>
     /// <param name="array">The input <see cref="ImmutableArray{T}"/> instance.</param>
     /// <returns>An <see cref="EquatableArray{T}"/> instance from a given <see cref="ImmutableArray{T}"/>.</returns>
-    public static EquatableArray<T> FromImmutableArray(ImmutableArray<T> array)
-    {
-        return new(array);
-    }
+    public static EquatableArray<T> FromImmutableArray(ImmutableArray<T> array) => new(array);
 
     /// <inheritdoc/>
-    public bool Equals(EquatableArray<T> array)
-    {
-        return AsSpan().SequenceEqual(array.AsSpan());
-    }
+    public bool Equals(EquatableArray<T> array) => AsSpan().SequenceEqual(array.AsSpan());
 
     /// <inheritdoc/>
-    public override bool Equals([NotNullWhen(true)] object? obj)
-    {
-        return obj is EquatableArray<T> array && Equals(this, array);
-    }
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is EquatableArray<T> array && Equals(this, array);
 
     /// <inheritdoc/>
     public override int GetHashCode()
@@ -120,49 +110,31 @@ internal readonly struct EquatableArray<T>(ImmutableArray<T> array) : IEquatable
     /// </summary>
     /// <returns>The <see cref="ImmutableArray{T}"/> from the current <see cref="EquatableArray{T}"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ImmutableArray<T> AsImmutableArray()
-    {
-        return Unsafe.As<T[]?, ImmutableArray<T>>(ref Unsafe.AsRef(in array));
-    }
+    public ImmutableArray<T> AsImmutableArray() => Unsafe.As<T[]?, ImmutableArray<T>>(ref Unsafe.AsRef(in array));
 
     /// <summary>
     /// Returns a <see cref="ReadOnlySpan{T}"/> wrapping the current items.
     /// </summary>
     /// <returns>A <see cref="ReadOnlySpan{T}"/> wrapping the current items.</returns>
-    public ReadOnlySpan<T> AsSpan()
-    {
-        return AsImmutableArray().AsSpan();
-    }
+    public ReadOnlySpan<T> AsSpan() => AsImmutableArray().AsSpan();
 
     /// <summary>
     /// Copies the contents of this <see cref="EquatableArray{T}"/> instance to a mutable array.
     /// </summary>
     /// <returns>The newly instantiated array.</returns>
-    public T[] ToArray()
-    {
-        return [.. AsImmutableArray()];
-    }
+    public T[] ToArray() => [.. AsImmutableArray()];
 
     /// <summary>
     /// Gets an <see cref="ImmutableArray{T}.Enumerator"/> value to traverse items in the current array.
     /// </summary>
     /// <returns>An <see cref="ImmutableArray{T}.Enumerator"/> value to traverse items in the current array.</returns>
-    public ImmutableArray<T>.Enumerator GetEnumerator()
-    {
-        return AsImmutableArray().GetEnumerator();
-    }
+    public ImmutableArray<T>.Enumerator GetEnumerator() => AsImmutableArray().GetEnumerator();
 
     /// <inheritdoc/>
-    IEnumerator<T> IEnumerable<T>.GetEnumerator()
-    {
-        return ((IEnumerable<T>)AsImmutableArray()).GetEnumerator();
-    }
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => ((IEnumerable<T>)AsImmutableArray()).GetEnumerator();
 
     /// <inheritdoc/>
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return ((IEnumerable)AsImmutableArray()).GetEnumerator();
-    }
+    IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)AsImmutableArray()).GetEnumerator();
 }
 
 /// <summary>
@@ -178,8 +150,5 @@ internal static class EquatableArray
     /// <param name="array">The input <see cref="ImmutableArray{T}"/> instance.</param>
     /// <returns>An <see cref="EquatableArray{T}"/> instance from a given <see cref="ImmutableArray{T}"/>.</returns>
     public static EquatableArray<T> AsEquatableArray<T>(this ImmutableArray<T> array)
-        where T : IEquatable<T>
-    {
-        return new(array);
-    }
+        where T : IEquatable<T> => new(array);
 }

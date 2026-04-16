@@ -436,7 +436,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (ps.Type is INamedTypeSymbol { IsMemory: true })
         {
-            changedMemoryToSpan.Add(ps);
+            _ = changedMemoryToSpan.Add(ps);
         }
 
         var @base = (ParameterSyntax)base.VisitParameter(node)!;
@@ -557,7 +557,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (changeMemoryToSpan && endsWithMemory)
         {
-            changedMemoryToSpan.Add(symbol);
+            _ = changedMemoryToSpan.Add(symbol);
         }
 
         if (newName is not null)
@@ -769,7 +769,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 .WithCloseBraceToken(MissingToken(SyntaxKind.CloseBraceToken));
         }
 
-        return base.VisitReturnStatement(node)!;
+        return base.VisitReturnStatement(node);
     }
 
     /// <inheritdoc/>
@@ -1104,12 +1104,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         ProcessSyncOnlyEntries(entries, ref newParams, ref removeTrailingEndIf, extraParameter =>
         {
-            if (extraParameter is not ExpressionStatementSyntax ess)
-            {
-                return null;
-            }
-
-            return Argument(ess.Expression);
+            return extraParameter is ExpressionStatementSyntax ess ? Argument(ess.Expression) : null;
         });
 
         var retval = @base.WithArguments(newParams);
@@ -1132,16 +1127,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
     {
-        static IdentifierNameSyntax? GetIdentifier(ExpressionSyntax es)
+        static IdentifierNameSyntax? GetIdentifier(ExpressionSyntax es) => es switch
         {
-            return es switch
-            {
-                InvocationExpressionSyntax ies => GetIdentifier(ies.Expression),
-                MemberAccessExpressionSyntax mes => GetIdentifier(mes.Expression),
-                IdentifierNameSyntax ins => ins,
-                _ => null,
-            };
-        }
+            InvocationExpressionSyntax ies => GetIdentifier(ies.Expression),
+            MemberAccessExpressionSyntax mes => GetIdentifier(mes.Expression),
+            IdentifierNameSyntax ins => ins,
+            _ => null,
+        };
 
         if (GetIdentifier(node.Expression) is { } identifier
             && GetSymbol(identifier) is { }
@@ -1149,7 +1141,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             if (s.Type is INamedTypeSymbol { IsMemory: true })
             {
-                changeMemoryToSpan.Add(s);
+                _ = changeMemoryToSpan.Add(s);
             }
         }
 
@@ -1278,7 +1270,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         if (semanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
             && !node.InitializedToNull())
         {
-            changedMemoryToSpan.Add(symbol);
+            _ = changedMemoryToSpan.Add(symbol);
         }
 
         var @base = (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;
@@ -1740,14 +1732,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 continue;
             }
 
-            if (named.IsMemory)
-            {
-                return true;
-            }
-            else
-            {
-                return IsGenericMethodThatHasMemory(named);
-            }
+            return named.IsMemory || IsGenericMethodThatHasMemory(named);
         }
 
         return false;
