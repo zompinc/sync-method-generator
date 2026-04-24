@@ -111,9 +111,16 @@ jobs:
           name: coverage_${{ matrix.os }}
           path: reports/coverage
         if: steps.codecov.outcome == 'success'
+      - name: Build Roslyn variants
+        if: ${{ runner.os != 'Windows' }}
+        run: |
+          gen="src/Zomp.SyncMethodGenerator/Zomp.SyncMethodGenerator.csproj"
+          for rv in roslyn4.8 roslyn4.12 roslyn5.0; do
+            dotnet build "$gen" -c Release -p:RoslynVersion=$rv -p:BaseIntermediateOutputPath=obj/$rv/ -p:OutputPath=bin/$rv/Release/
+          done
       - name: Pack
         if: ${{ runner.os != 'Windows' }}
-        run: dotnet pack --configuration Release -o packages --no-build
+        run: dotnet pack src/Zomp.SyncMethodGenerator.Pack/Zomp.SyncMethodGenerator.Pack.csproj --configuration Release -o packages --no-build
       - name: Upload artifacts (.nupkg)
         if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4

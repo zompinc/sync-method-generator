@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+
+    <PackageId>Zomp.SyncMethodGenerator</PackageId>
+    <Description>Generates synchronized method from async method</Description>
+    <PackageTags>async sync csharp source generator</PackageTags>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IsRoslynComponent>true</IsRoslynComponent>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Microsoft.Bcl.HashCode must be bundled alongside the generator in each variant folder -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Bcl.HashCode" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+  </ItemGroup>
+
+  <!-- Roslyn 4.8 variant (for .NET 8 SDK) -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)\..\Zomp.SyncMethodGenerator\bin\roslyn4.8\$(Configuration)\Zomp.SyncMethodGenerator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn4.8/cs/" Visible="false" />
+    <None Include="$(PkgMicrosoft_Bcl_HashCode)\lib\netstandard2.0\*.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn4.8/cs/" Visible="false" />
+  </ItemGroup>
+
+  <!-- Roslyn 4.12 variant (for .NET 9 SDK) -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)\..\Zomp.SyncMethodGenerator\bin\roslyn4.12\$(Configuration)\Zomp.SyncMethodGenerator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn4.12/cs/" Visible="false" />
+    <None Include="$(PkgMicrosoft_Bcl_HashCode)\lib\netstandard2.0\*.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn4.12/cs/" Visible="false" />
+  </ItemGroup>
+
+  <!-- Roslyn 5.0 variant (for .NET 10 SDK) -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)\..\Zomp.SyncMethodGenerator\bin\roslyn5.0\$(Configuration)\Zomp.SyncMethodGenerator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn5.0/cs/" Visible="false" />
+    <None Include="$(PkgMicrosoft_Bcl_HashCode)\lib\netstandard2.0\*.dll"
+          Pack="true" PackagePath="analyzers/dotnet/roslyn5.0/cs/" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -24,6 +24,7 @@
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
     <Project Path="src/Zomp.SyncMethodGenerator/Zomp.SyncMethodGenerator.csproj" />
+    <Project Path="src/Zomp.SyncMethodGenerator.Pack/Zomp.SyncMethodGenerator.Pack.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/coverlet.runsettings" />
