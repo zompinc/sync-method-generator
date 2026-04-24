@@ -94,14 +94,26 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         if (ctx.TargetNode is TypeDeclarationSyntax typeDecl)
         {
+#if ROSLYN_4_12_OR_GREATER
             return [.. typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s))];
+#else
+            return ImmutableArray.CreateRange(typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s)));
+#endif
         }
         else if (ctx.TargetNode is MethodDeclarationSyntax methodDecl)
         {
+#if ROSLYN_4_12_OR_GREATER
             return [new TransformResult(ctx, methodDecl)];
+#else
+            return ImmutableArray.Create(new TransformResult(ctx, methodDecl));
+#endif
         }
 
+#if ROSLYN_4_12_OR_GREATER
         return [];
+#else
+        return ImmutableArray<TransformResult>.Empty;
+#endif
     }
 
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
@@ -201,15 +213,19 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;
+#if ROSLYN_5_0_OR_GREATER
         ExtensionBlockDeclarationSyntax? extensionParent = null;
+#endif
         while (node.Parent is not null)
         {
             node = node.Parent;
+#if ROSLYN_5_0_OR_GREATER
             if (node is ExtensionBlockDeclarationSyntax eds)
             {
                 extensionParent = eds;
                 continue;
             }
+#endif
 
             MethodParentDeclaration? mpd = node switch
             {
@@ -240,7 +256,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var preserveProgress = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveProgress) is { Value.Value: true };
         var preserveCancellationToken = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveCancellationToken) is { Value.Value: true };
 
+#if ROSLYN_5_0_OR_GREATER
         var toVisit = extensionParent ?? (SyntaxNode)methodDeclarationSyntax;
+#else
+        var toVisit = (SyntaxNode)methodDeclarationSyntax;
+#endif
         var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress, preserveCancellationToken, methodDeclarationSyntax);
         var sn = rewriter.Visit(toVisit);
         var content = sn.ToFullString();
@@ -277,7 +297,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, extensionParent is not null, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+#if ROSLYN_5_0_OR_GREATER
+        var isCSharp14Extension = extensionParent is not null;
+#else
+        var isCSharp14Extension = false;
+#endif
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
 
         return result;
     }
