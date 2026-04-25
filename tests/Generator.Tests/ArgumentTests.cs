@@ -4,6 +4,7 @@ public class ArgumentTests
 {
     [Fact]
     public Task DropNullArgument() => """
+public void ProgressMethod() { }
 public void ProgressMethodAsync() { }
 
 public async Task ProgressMethodAsync(IProgress<int>? a) => await Task.CompletedTask;

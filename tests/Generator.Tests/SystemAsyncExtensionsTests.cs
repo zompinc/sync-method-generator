@@ -19,7 +19,7 @@ public static async Task Iterate<T>(this IAsyncEnumerable<T> list1, [EnumeratorC
     {
     }
 }
-""".Verify();
+""".Verify(sourceType: SourceType.StaticClassBody);
 
     [Fact]
     public Task DropWithCancellation() => """
@@ -30,25 +30,20 @@ public static async Task Iterate<T>(this IAsyncEnumerable<T> list1, [EnumeratorC
     {
     }
 }
-""".Verify();
+""".Verify(sourceType: SourceType.StaticClassBody);
 
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(false, false)]
-    public Task DropConfigureAwaitExtensions(bool isGeneric, bool isValueTask)
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task DropConfigureAwaitExtensions(bool isValueTask)
     {
         var taskPart = isValueTask ? "ValueTask" : "Task";
-        var genericPart = isGeneric ? "<T>" : string.Empty;
-        var genericTaskPart = taskPart + genericPart;
-        var variablePart = isGeneric ? "T" : "int";
         return $$"""
 namespace Test;
 
 public static class AwaitHelper
 {
-    public static Configured{{taskPart}}Awaitable{{genericPart}} Caf{{genericPart}}(this {{genericTaskPart}} task)
+    public static Configured{{taskPart}}Awaitable Caf(this {{taskPart}} task)
     {
         return task.ConfigureAwait(false);
     }
@@ -56,9 +51,40 @@ public static class AwaitHelper
 
 partial class Class
 {
-    {{variablePart}} GetItem{{genericPart}}({{variablePart}} z) => default;
+    int GetItem(int z) => default;
 
-    async {{genericTaskPart}} GetItemAsync{{genericPart}}({{variablePart}} z) => default;
+    async {{taskPart}} GetItemAsync(int z) => await Task.CompletedTask;
+
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task InvokeAsync()
+        => await GetItemAsync(4).Caf();
+}
+""".Verify(disableUnique: true, sourceType: SourceType.Full);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task DropConfigureAwaitExtensionsGeneric(bool isValueTask)
+    {
+        var taskPart = isValueTask ? "ValueTask" : "Task";
+
+        return $$"""
+namespace Test;
+
+public static class AwaitHelper
+{
+    public static Configured{{taskPart}}Awaitable<T> Caf<T>(this {{taskPart}}<T> task)
+    {
+        return task.ConfigureAwait(false);
+    }
+}
+
+partial class Class
+{
+    T GetItem<T>(T z) => default;
+
+    async {{taskPart}}<T> GetItemAsync<T>(T z) => default;
 
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public async Task InvokeAsync()

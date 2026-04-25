@@ -68,7 +68,7 @@ public static async IAsyncEnumerable<(TLeft Left, TRight Right)> CombineAsync<TL
         yield return (item, enumerator2.Current);
     }
 }
-""".Verify();
+""".Verify(sourceType: SourceType.StaticClassBody);
 
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]

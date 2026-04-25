@@ -183,7 +183,7 @@ public static async Task WriteAsync(IAsyncEnumerable<ReadOnlyMemory<byte>> buffe
     [Fact]
     public Task ChangeType() => """
 
-public static async IEnumerable<System.Drawing.Point> GetPointsFromMemory(IEnumerable<ReadOnlyMemory<bool>> input)
+public static IEnumerable<System.Drawing.Point> GetPointsFromMemory(IEnumerable<ReadOnlyMemory<bool>> input)
 {
     yield return default;
 }
@@ -324,6 +324,10 @@ internal partial class Class
     }
 
     public async Task DoAsync(ReadOnlyMemory<byte> memory)
+    {
+    }
+
+    public void Do(ReadOnlySpan<byte> memory)
     {
     }
 }

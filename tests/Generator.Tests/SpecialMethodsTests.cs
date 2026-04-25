@@ -38,6 +38,7 @@ public class SpecialMethodsTests
 public static async Task<int> MethodAsync(CancellationToken ct)
 {
     {{invocation}}
+    return await Task.FromResult(1);
 }
 
 private class PrivateClass
