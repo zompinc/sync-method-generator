@@ -1,4 +1,5 @@
-﻿using System.Data.Common;
+﻿using System.ComponentModel;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -77,7 +78,7 @@ async Task MethodAsync(CancellationToken ct)
             source = ChangeIndentation(source, InsertIndentation);
             source = $$"""
 namespace Test;
-partial class Class
+{{(sourceType == SourceType.StaticClassBody ? "static " : string.Empty)}}partial class Class
 {
 {{source}}
 }
@@ -104,6 +105,10 @@ partial class Class
             typeof(LinkedListNode<>).Assembly.Location,
             typeof(XmlReader).Assembly.Location,
             typeof(IQueryable).Assembly.Location,
+            typeof(System.Net.HttpStatusCode).Assembly.Location,
+            typeof(IListSource).Assembly.Location,
+            typeof(Regex).Assembly.Location,
+            typeof(Queryable).Assembly.Location,
 #if NET8_0_OR_GREATER
             typeof(AsyncEnumerable).Assembly.Location,
             typeof(Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions).Assembly.Location,
@@ -123,10 +128,17 @@ partial class Class
         var references = distinct
             .Select(l => MetadataReference.CreateFromFile(l));
 
+        List<SyntaxTree> syntaxTrees = [syntaxTree];
+
+        if (languageVersion >= LanguageVersion.CSharp10)
+        {
+            syntaxTrees.Add(globalUsings);
+        }
+
         var compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
-            options: new(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable),
-            syntaxTrees: [syntaxTree, globalUsings],
+            options: new(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: languageVersion >= LanguageVersion.CSharp8 ? NullableContextOptions.Enable : NullableContextOptions.Disable),
+            syntaxTrees: syntaxTrees,
             references: references);
 
         var generator = new SyncMethodSourceGenerator();
@@ -140,6 +152,15 @@ partial class Class
         if (results.Diagnostics.Length == 0 && results.GeneratedTrees.Length < 3)
         {
             throw new InvalidOperationException("Nothing generated");
+        }
+
+        // Ensure compilation has no errors
+        var generatedCompilation = compilation.AddSyntaxTrees(results.GeneratedTrees);
+        var diagnostics = generatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        if (diagnostics.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Compilation errors:\n" + string.Join("\n", diagnostics.Select(d => d.ToString())));
         }
 
         var target = new RunResultWithIgnoreList

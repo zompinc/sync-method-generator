@@ -102,12 +102,12 @@ internal static class Extension
 
     [Fact]
     public Task NoNullableSupport() => """
-namespace Test;
-
-partial class WithNullableDisabled
-{
-    [CreateSyncVersion]
-    public async Task MethodAsync(string l) => await Task.CompletedTask;
+namespace Test {
+    partial class WithNullableDisabled
+    {
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async System.Threading.Tasks.Task MethodAsync(string l) => await System.Threading.Tasks.Task.CompletedTask;
+    }
 }
 """.Verify(sourceType: SourceType.Full, languageVersion: LanguageVersion.CSharp7_3);
 }

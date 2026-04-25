@@ -62,6 +62,7 @@ partial class Class
     public Task MethodAsync()
     {
         _ = {{(isQualified ? "System.Data.ConnectionState." : string.Empty)}}Closed is System.Data.ConnectionState.Closed;
+        return Task.CompletedTask;
     }
 }
 """

@@ -79,7 +79,8 @@ namespace Tests;
 static partial class Class
 {
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
-    public async IAsyncEnumerable<T> WhereGreaterThan(this IAsyncEnumerable<T> source, T threshold, int dummy)
+    public static async IAsyncEnumerable<T> WhereGreaterThan<T>(this IAsyncEnumerable<T> source, T threshold, int dummy)
+        where T : INumber<T>
     {
         await foreach (var item in source)
         {

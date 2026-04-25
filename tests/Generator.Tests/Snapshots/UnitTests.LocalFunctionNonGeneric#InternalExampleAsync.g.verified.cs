@@ -6,4 +6,5 @@ public static int InternalExample(global::System.IO.Stream stream)
     }
 
     LocalFunc();
+    return 0;
 }

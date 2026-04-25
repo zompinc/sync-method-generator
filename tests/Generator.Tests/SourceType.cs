@@ -13,6 +13,11 @@ public enum SourceType
     ClassBody,
 
     /// <summary>
+    /// Listing of a body of a static class.
+    /// </summary>
+    StaticClassBody,
+
+    /// <summary>
     /// Listing for the file in full.
     /// </summary>
     Full,

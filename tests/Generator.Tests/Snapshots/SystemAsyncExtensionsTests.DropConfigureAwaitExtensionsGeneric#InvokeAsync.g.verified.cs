@@ -1,3 +1,3 @@
 ﻿//HintName: Test.Class.InvokeAsync.g.cs
 public void Invoke()
-    => GetItem(4);
+    => _ = GetItem(4);

@@ -86,7 +86,7 @@ partial class GenericClass<T>
         => await this.InnerFooAsync<T>(ct);
 
     private async Task<T> InnerFooAsync<T>(CancellationToken ct = default) => default;
-    private async T InnerFoo<T>() => default;
+    private T InnerFoo<T>() => default;
 }
 """.Verify(sourceType: SourceType.Full);
 
@@ -125,7 +125,7 @@ public static ValueTask DoSomethingAsync() {statement}
     [Fact]
     public Task KeepDefaultValueTaskWithResult() => $"""
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
-public static ValueTask<int> ReturnDefault() => default;
+public static ValueTask<int> ReturnDefaultAsync() => default;
 """.Verify();
 
     [Theory]
@@ -517,7 +517,7 @@ private class ClassWithAsyncFunc
     [Fact]
     public Task WithAction() => """
 [CreateSyncVersion]
-public static async Task WithAction(Action<Point, IEnumerable<Point>>? action) { }
+public static async Task WithActionAsync(Action<Point, IEnumerable<Point>>? action) { }
 """.Verify();
 
     [Fact]
@@ -528,7 +528,8 @@ public static async Task MethodAsync(CancellationToken ct)
     int a = await PrivateClass.FromResult(2, 6), b = await Task.FromResult(2),  c = await pc.IntProperty(ct);
 }
 
-PrivateClass pc = new PrivateClass();
+static PrivateClass pc = new PrivateClass();
+
 private class PrivateClass
 {
     internal Func<CancellationToken, Task<int>> IntProperty => (ct) => Task.FromResult(2);
@@ -551,6 +552,7 @@ public static async Task<int> InternalExampleAsync(Stream stream, CancellationTo
 }
 """.Verify();
 
+#if NETCOREAPP1_0_OR_GREATER
     [Fact]
     public Task BasicInterface() => """
 namespace Test;
@@ -563,6 +565,7 @@ public partial interface IMyInterface
     }
 }
 """.Verify(sourceType: SourceType.Full);
+#endif
 
     [Fact]
     public Task LocalFunctionNonGeneric() => """
@@ -575,6 +578,7 @@ public static async Task<int> InternalExampleAsync(Stream stream, CancellationTo
     }
 
     await LocalFuncAsync();
+    return await Task.FromResult(0);
 }
 """.Verify();
 
@@ -666,7 +670,7 @@ async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToke
     => await stream.ReadAsync(sampleBytes.AsMemory(0, 123), ct).ConfigureAwait(false);
 
 [CreateSyncVersion]
-async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes)
+async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, int z)
     => await stream.ReadAsync(sampleBytes.AsMemory(0, 123)).ConfigureAwait(false);
 """.Verify();
 

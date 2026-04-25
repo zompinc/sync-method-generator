@@ -4,7 +4,8 @@
 namespace Tests;
 static partial class Class
 {
-    public global::System.Collections.Generic.IEnumerable<T> WhereGreaterThan(this global::System.Collections.Generic.IEnumerable<T> source, T threshold, int dummy)
+    public static global::System.Collections.Generic.IEnumerable<T> WhereGreaterThan<T>(this global::System.Collections.Generic.IEnumerable<T> source, T threshold, int dummy)
+        where T : global::System.Numerics.INumber<T>
     {
         foreach (var item in source)
         {

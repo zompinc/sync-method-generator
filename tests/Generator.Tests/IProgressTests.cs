@@ -28,7 +28,7 @@ public static async Task WithIProgressAsync(IProgress<float>? progress = null)
 
 static Func<IProgress<float>?, IProgress<float>?> ProgressFunc = (p) => p;
 
-bool someBool = true;
+static bool someBool = true;
 
 class ClassWithProgress
 {
@@ -86,7 +86,7 @@ public static async Task WithIProgressAsync(IProgress<float>? progress = null)
 
 static Func<IProgress<float>?, IProgress<float>?> ProgressFunc = (p) => p;
 
-bool someBool = true;
+static bool someBool = true;
 
 class ClassWithProgress
 {
@@ -193,7 +193,7 @@ public static async Task WithIProgressAsync(IProgress<float>? progress = null)
     await Task.CompletedTask;
 }
 
-public static void WithIProgress()
+public static void WithIProgress(IProgress<float>? progress = null)
 {
 }
 
