@@ -10,6 +10,7 @@ env:
   Configuration: Release
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   ACT:
 
 jobs:
@@ -30,7 +31,7 @@ jobs:
         run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
         shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
 
@@ -56,7 +57,7 @@ jobs:
 
       - name: Setup .NET
         if: ${{ runner.os != 'Windows' || !env.ACT }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
             10.0.x
@@ -85,7 +86,7 @@ jobs:
         run: bash $GITHUB_WORKSPACE/.husky/pre-commit normal
 
       # https://github.com/actions/cache/blob/main/examples.md
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -100,13 +101,13 @@ jobs:
       - name: Generate code coverage report
         run: dotnet dnx --yes dotnet-reportgenerator-globaltool -reports:**/coverage.cobertura.xml -targetdir:./reports/coverage
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         id: codecov
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         if: ${{ env.CODECOV_TOKEN != '' }}
       - name: Upload artifacts (code coverage)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage_${{ matrix.os }}
           path: reports/coverage
@@ -123,7 +124,7 @@ jobs:
         run: dotnet pack src/Zomp.SyncMethodGenerator.Pack/Zomp.SyncMethodGenerator.Pack.csproj --configuration Release -o packages --no-build
       - name: Upload artifacts (.nupkg)
         if: ${{ runner.os != 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: packages
           path: packages/
@@ -148,7 +149,7 @@ jobs:
 
       - name: Setup .NET
         if: ${{ runner.os != 'Windows' || !env.ACT }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
             10.0.x
@@ -166,7 +167,7 @@ jobs:
           fi
 
       - name: Download Package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
 
       - name: Sign
         env:
@@ -184,7 +185,7 @@ jobs:
           -v normal
 
       - name: Upload artifacts (.nupkg)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: packages-signed
           path: packages/
@@ -201,13 +202,13 @@ jobs:
 
       - name: Setup .NET
         if: ${{ runner.os != 'Windows' || !env.ACT }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
             10.0.x
 
       - name: Download Package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: packages-signed
 
