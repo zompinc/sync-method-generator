@@ -10,7 +10,6 @@
     <!-- <PackageVersion Include="Microsoft.Net.Compilers.Toolset" Version="5.0.0" /> -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.202" />
-    <PackageVersion Include="N.SourceGenerators.UnionTypes" Version="0.28.2" />
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.9.50" />
     <PackageVersion Include="PolySharp" Version="1.15.0" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
