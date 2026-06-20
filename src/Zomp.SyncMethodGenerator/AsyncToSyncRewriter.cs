@@ -22,11 +22,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string Func = "Func";
     private const string Generic = "Generic";
     private const string System = "System";
+    private const string Tasks = "Tasks";
+    private const string Threading = "Threading";
 
     // Type names
     private const string Memory = nameof(Memory<>);
     private const string IAsyncResult = nameof(global::System.IAsyncResult);
     private const string Object = "object";
+    private const string TaskName = nameof(Task);
+    private const string TimeProviderTaskExtensions = "TimeProviderTaskExtensions";
 
     // Members
     private const string CompletedTask = nameof(Task.CompletedTask);
@@ -41,6 +45,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string SystemFunc = $"{System}.{Func}";
     private const string IEnumerable = $"{System}.{Collections}.{Generic}.{nameof(IEnumerable<>)}";
     private const string IEnumerator = $"{System}.{Collections}.{Generic}.{nameof(IEnumerator<>)}";
+    private const string TaskFullyQualified = $"{System}.{Threading}.{Tasks}.{TaskName}";
+    private const string TimeProviderTaskExtensionsFullyQualified = $"{System}.{Threading}.{Tasks}.{TimeProviderTaskExtensions}";
 
     private static readonly SymbolDisplayFormat GlobalDisplayFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
@@ -1679,24 +1685,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => false,
         };
 
-    private static bool EndsWithAsync(ExpressionSyntax expression) => expression switch
-    {
-        IdentifierNameSyntax id => ReplaceAsync(id) is not null,
-        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
-        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
-        GenericNameSyntax gn => ReplaceAsync(gn) is not null,
-        _ => false,
-    };
-
-    private static string? ReplaceAsync(ExpressionSyntax expression) => expression switch
-    {
-        IdentifierNameSyntax { Identifier.ValueText: var oldName and not WaitAsync } when TryStripAsync(oldName, out var newName) => newName,
-        MemberAccessExpressionSyntax m when ReplaceAsync(m.Name) is { } newName => newName,
-        InvocationExpressionSyntax ie => ReplaceAsync(ie.Expression),
-        GenericNameSyntax gn when TryStripAsync(gn.Identifier.Text, out var newName) => newName,
-        _ => null,
-    };
-
     private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
     {
         IdentifierNameSyntax => ProcessSymbol(symbol),
@@ -1835,6 +1823,42 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         return newLeadingTrivia;
+    }
+
+    private bool EndsWithAsync(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => ReplaceAsync(id) is not null,
+        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
+        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
+        GenericNameSyntax gn => ReplaceAsync(gn) is not null,
+        _ => false,
+    };
+
+    private string? ReplaceAsync(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => TryReplaceIdentifier(id),
+        MemberAccessExpressionSyntax m when ReplaceAsync(m.Name) is { } newName => newName,
+        InvocationExpressionSyntax ie => ReplaceAsync(ie.Expression),
+        GenericNameSyntax gn when TryStripAsync(gn.Identifier.Text, out var newName) => newName,
+        _ => null,
+    };
+
+    private string? TryReplaceIdentifier(IdentifierNameSyntax id)
+    {
+        if (id.Identifier.ValueText is WaitAsync)
+        {
+            var symbol = semanticModel.GetSymbolInfo(id).Symbol as IMethodSymbol;
+            if (symbol?.ContainingType?.ToDisplayString() is { } containingType)
+            {
+                if (containingType.StartsWith(TaskFullyQualified, StringComparison.Ordinal) ||
+                    containingType.StartsWith(TimeProviderTaskExtensionsFullyQualified, StringComparison.Ordinal))
+                {
+                    return null;
+                }
+            }
+        }
+
+        return TryStripAsync(id.Identifier.ValueText, out var newName) ? newName : null;
     }
 
     private InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool changeMemoryToSpan, IMethodSymbol reducedFrom, ExpressionSyntax expression)
