@@ -1679,11 +1679,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => false,
         };
 
-    private static bool EndsWithAsync(ExpressionSyntax expression) => ReplaceAsync(expression) is not null;
+    private static bool EndsWithAsync(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => ReplaceAsync(id) is not null,
+        MemberAccessExpressionSyntax m => EndsWithAsync(m.Name) || EndsWithAsync(m.Expression),
+        InvocationExpressionSyntax ie => EndsWithAsync(ie.Expression),
+        GenericNameSyntax gn => ReplaceAsync(gn) is not null,
+        _ => false,
+    };
 
     private static string? ReplaceAsync(ExpressionSyntax expression) => expression switch
     {
-        IdentifierNameSyntax { Identifier: { ValueText: not WaitAsync } z } when TryStripAsync(z.ValueText, out var newName) => newName,
+        IdentifierNameSyntax { Identifier.ValueText: var oldName and not WaitAsync } when TryStripAsync(oldName, out var newName) => newName,
         MemberAccessExpressionSyntax m when ReplaceAsync(m.Name) is { } newName => newName,
         InvocationExpressionSyntax ie => ReplaceAsync(ie.Expression),
         GenericNameSyntax gn when TryStripAsync(gn.Identifier.Text, out var newName) => newName,
