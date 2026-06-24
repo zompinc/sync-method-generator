@@ -1875,16 +1875,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newName = reducedFrom.Name;
         newName = changeMemoryToSpan ? GetNewName(reducedFrom) : RemoveAsync(newName);
 
-        var newNameExistsInContainingType = semanticModel.Compilation.References
+        var membersWithNewNameInContainingType = semanticModel.Compilation.References
             .Select(semanticModel.Compilation.GetAssemblyOrModuleSymbol)
             .Append(semanticModel.Compilation.Assembly)
             .OfType<IAssemblySymbol>()
             .Select(assemblySymbol => assemblySymbol.GetTypeByMetadataName(reducedFrom.ContainingType.ToString()))
             .OfType<INamedTypeSymbol>()
-            .SelectMany(symbol => symbol.GetMembers(newName))
-            .Any();
+            .SelectMany(symbol => symbol.GetMembers(newName));
 
-        var fullyQualifiedName = newNameExistsInContainingType
+        // When the method is an AsyncEnumerable extension it must be converted to the corresponding Enumerable extension
+        // regardless of the containing type featuring members with compatible names
+        var fullyQualifiedName = !reducedFrom.ContainingType.Name.Equals("AsyncEnumerable", StringComparison.Ordinal) && membersWithNewNameInContainingType.Any()
             ? $"{reducedFrom.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{newName}"
             : $"{MakeType(reducedFrom.ContainingType)}.{newName}";
 

@@ -202,4 +202,15 @@ internal static partial class Extensions
     }
 }
 """.Verify(sourceType: SourceType.Full);
+
+#if NET
+    [Fact]
+    public Task LinqConversion() => """
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task MethodAsync(IAsyncEnumerable<int> foo)
+{
+    var elements = await foo.Select(i => i + 5).Where(i => i > 0).ToListAsync();
+}
+""".Verify();
+#endif
 }
