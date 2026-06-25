@@ -168,6 +168,9 @@ jobs:
 
       - name: Download Package artifact
         uses: actions/download-artifact@v5
+        with:
+          name: packages
+          path: packages
 
       - name: Sign
         env:
