@@ -13,6 +13,17 @@ public async Task MethodAsync(XmlReader reader, CancellationToken ct)
 """.Verify();
 
     [Fact]
+    public Task DropWaitAsyncFullSource() => """
+private XmlReader reader;
+
+[CreateSyncVersion]
+public async Task MethodAsync(CancellationToken ct = default)
+{
+    _ = await reader.ReadAsync().WaitAsync(ct);
+}
+""".Verify();
+
+    [Fact]
     public Task DropWaitAsyncStatement() => """
 [CreateSyncVersion]
 public async Task MethodAsync(Task task, CancellationToken ct)

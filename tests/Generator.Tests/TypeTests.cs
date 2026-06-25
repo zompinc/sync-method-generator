@@ -275,16 +275,21 @@ internal partial class Class<T>
     [Fact]
     public Task SemaphoreSlimWaitAndRelease()
         => """
-var semaphore = new SemaphoreSlim(1, 1);
+private SemaphoreSlim semaphore = new(1, 1);
 
-await semaphore.WaitAsync();
-
-try
-{ 
-}
-finally
+[CreateSyncVersion]
+public async Task MethodAsync(CancellationToken ct = default) 
 {
-    semaphore.Release();
+    await semaphore.WaitAsync(ct);
+
+    try
+    {
+        await Task.Delay(100, ct);
+    }
+    finally
+    {
+        semaphore.Release();
+    }
 }
-""".Verify(sourceType: SourceType.MethodBody);
+""".Verify();
 }
