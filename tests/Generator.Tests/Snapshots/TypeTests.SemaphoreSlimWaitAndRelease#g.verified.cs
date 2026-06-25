@@ -1,10 +1,9 @@
 ﻿//HintName: Test.Class.MethodAsync.g.cs
-var semaphore = new global::System.Threading.SemaphoreSlim(1, 1);
-
 semaphore.Wait();
 
 try
-{ 
+{
+    global::System.Threading.Thread.Sleep(100);
 }
 finally
 {
