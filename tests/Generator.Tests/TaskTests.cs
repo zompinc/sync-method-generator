@@ -14,19 +14,14 @@ public async Task MethodAsync(XmlReader reader, CancellationToken ct)
 
     [Fact]
     public Task DropWaitAsyncFullSource() => """
-namespace Test;
+private XmlReader reader;
 
-public partial class Class
+[CreateSyncVersion]
+public async Task MethodAsync(CancellationToken ct = default)
 {
-    private XmlReader reader;
-
-    [CreateSyncVersion]
-    public async Task MethodAsync(CancellationToken ct = default)
-    {
-        _ = await reader.ReadAsync().WaitAsync(ct);
-    }
+    _ = await reader.ReadAsync().WaitAsync(ct);
 }
-""".Verify(sourceType: SourceType.Full);
+""".Verify();
 
     [Fact]
     public Task DropWaitAsyncStatement() => """
