@@ -17,6 +17,7 @@
     <None Include="GenericMathTests.cs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Basic.Reference.Assemblies.Net100" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Condition="'$(TargetFramework)' != 'net472'" />
     <PackageReference Include="PolySharp">
       <PrivateAssets>all</PrivateAssets>

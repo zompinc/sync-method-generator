@@ -1,8 +1,5 @@
-﻿using System.ComponentModel;
-using System.Data.Common;
-using System.Diagnostics;
+using Basic.Reference.Assemblies;
 using System.Text.RegularExpressions;
-using System.Xml;
 using Zomp.SyncMethodGenerator;
 using static Generator.Tests.ModuleInitializer;
 
@@ -88,46 +85,6 @@ namespace Test;
         var syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
         var globalUsings = CSharpSyntaxTree.ParseText(GlobalUsingsSource, parseOptions);
 
-        // SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
-        var linqAssembly = typeof(Enumerable).Assembly.Location;
-        var locations = new List<string>
-        {
-            typeof(IAsyncEnumerable<>).Assembly.Location,
-            typeof(DataReceivedEventHandler).Assembly.Location,
-            typeof(DbDataReader).Assembly.Location,
-            typeof(ValueTask<>).Assembly.Location,
-            typeof(System.Drawing.Point).Assembly.Location,
-            typeof(object).Assembly.Location,
-            typeof(Console).Assembly.Location,
-            typeof(Memory<>).Assembly.Location,
-            typeof(System.Buffers.MemoryPool<>).Assembly.Location,
-            typeof(Queue<>).Assembly.Location,
-            typeof(LinkedListNode<>).Assembly.Location,
-            typeof(XmlReader).Assembly.Location,
-            typeof(IQueryable).Assembly.Location,
-            typeof(System.Net.HttpStatusCode).Assembly.Location,
-            typeof(IListSource).Assembly.Location,
-            typeof(Regex).Assembly.Location,
-            typeof(Queryable).Assembly.Location,
-#if NET8_0_OR_GREATER
-            typeof(AsyncEnumerable).Assembly.Location,
-            typeof(Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions).Assembly.Location,
-#endif
-            linqAssembly,
-        };
-
-        var directory = Path.GetDirectoryName(linqAssembly);
-        var runtimeLocation = directory is null ? null : Path.Combine(directory, "System.Runtime.dll");
-        if (runtimeLocation is not null && File.Exists(runtimeLocation))
-        {
-            locations.Add(runtimeLocation);
-        }
-
-        var distinct = locations.Distinct().ToArray();
-
-        var references = distinct
-            .Select(l => MetadataReference.CreateFromFile(l));
-
         List<SyntaxTree> syntaxTrees = [syntaxTree];
 
         if (languageVersion >= LanguageVersion.CSharp10)
@@ -135,11 +92,19 @@ namespace Test;
             syntaxTrees.Add(globalUsings);
         }
 
+#if NET8_0_OR_GREATER
+        var assemblies = new[]
+        {
+            typeof(Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions).Assembly,
+        };
+#else
+        IEnumerable<System.Reflection.Assembly> assemblies = [];
+#endif
         var compilation = CSharpCompilation.Create(
             assemblyName: "Tests",
             options: new(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: languageVersion >= LanguageVersion.CSharp8 ? NullableContextOptions.Enable : NullableContextOptions.Disable),
             syntaxTrees: syntaxTrees,
-            references: references);
+            references: Net100.References.All.Concat(assemblies.Select(a => MetadataReference.CreateFromFile(a.Location))));
 
         var generator = new SyncMethodSourceGenerator();
 
