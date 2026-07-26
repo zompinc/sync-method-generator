@@ -3,6 +3,10 @@ coverage:
     project:
       default:
         threshold: 10%
+    # Reported on the pull request but never failing. A fix here is usually a
+    # handful of lines, so one branch which cannot be reached (a defensive null
+    # guard, a type test the grammar already guarantees) reads as a third of the
+    # patch being uncovered. The project status above guards against erosion.
     patch:
       default:
-        threshold: 10%
+        informational: true
