@@ -863,10 +863,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var isFunc = node.Parent is { } parent
             && semanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true, IsSystemFunc: true } n;
 
+        // Generic method type arguments like Bar<Task<T>> are unwrapped to Bar<T>, not removed
+        var isMethodTypeArgumentList = node.Parent is GenericNameSyntax gn && GetSymbol(gn) is IMethodSymbol;
+
         // Do not remove Task<T>, but remove Task inside a Func<>
         bool RemoveType(TypeSyntax z, int index) =>
             !(isFunc && index == node.Arguments.Count - 1 && z is GenericNameSyntax)
             && semanticModel.GetTypeInfo(z).Type is { } type
+            && !(isMethodTypeArgumentList && type is INamedTypeSymbol { IsTaskOrValueTask: true, IsGenericType: true })
             && ShouldRemoveType(type);
 
         var indicesToRemove = node.Arguments.GetIndices(RemoveType);
@@ -1917,7 +1921,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         IPropertySymbol { IsCancellationRequested: true } => !isNegated,
         IMethodSymbol ms =>
             IsSpecialMethod(ms) is SpecialMethod.None or SpecialMethod.Drop
-                && ((ShouldRemoveType(ms.ReturnType, isArgument: true) && ms.MethodKind != MethodKind.LocalFunction)
+                && ((ShouldRemoveType(ms.ReturnType, isArgument: true) && ms.MethodKind != MethodKind.LocalFunction
+                        && ms.OriginalDefinition.ReturnType is not ITypeParameterSymbol { TypeParameterKind: TypeParameterKind.Method })
                     || (ms.ReceiverType is { } receiver && ShouldRemoveType(receiver, isArgument: true)))
                 && !HasSyncMethod(ms),
         _ => ShouldRemoveType(GetReturnType(symbol), isArgument: true),
