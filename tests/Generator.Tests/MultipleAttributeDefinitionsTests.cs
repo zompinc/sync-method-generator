@@ -15,16 +15,7 @@ public class MultipleAttributeDefinitionsTests
     [Fact]
     public void GenerateWhenAttributeIsDefinedInMultipleReferences()
     {
-        // Each library bakes in its own internal copy of the marker attribute. Only the second one
-        // exposes its internals to the consumer, so the attribute usage below still binds uniquely.
-        var first = CreateLibraryWithAttribute("First", Net100.References.All, "Second");
-        var second = CreateLibraryWithAttribute("Second", [.. Net100.References.All, first], "Consumer");
-
-        var parseOptions = CSharpParseOptions.Default
-            .WithLanguageVersion(LanguageVersion.Preview)
-            .WithPreprocessorSymbols(DisableAttributeGeneration);
-
-        var source = """
+        var (compilation, result) = RunGenerator("""
 using System.Threading.Tasks;
 
 namespace Consuming;
@@ -34,7 +25,53 @@ public partial class Class
     [Zomp.SyncMethodGenerator.CreateSyncVersion]
     public async Task MethodAsync() => await Task.CompletedTask;
 }
-""";
+""");
+
+        var generated = Assert.Single(GeneratedFor(result, "MethodAsync"));
+        Assert.Contains("public void Method()", generated.ToString(), StringComparison.Ordinal);
+
+        var errors = compilation.AddSyntaxTrees(result.GeneratedTrees)
+            .GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void SkipAttributeIsHonoredWhenAttributesAreDefinedInMultipleReferences()
+    {
+        var (_, result) = RunGenerator("""
+using System.Threading.Tasks;
+
+namespace Consuming;
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public partial class Class
+{
+    public async Task IncludedAsync() => await Task.CompletedTask;
+
+    [Zomp.SyncMethodGenerator.SkipSyncVersion]
+    public async Task ExcludedAsync() => await Task.CompletedTask;
+}
+""");
+
+        _ = Assert.Single(GeneratedFor(result, "IncludedAsync"));
+        Assert.Empty(GeneratedFor(result, "ExcludedAsync"));
+    }
+
+    private static IEnumerable<SyntaxTree> GeneratedFor(GeneratorDriverRunResult result, string methodName)
+        => result.GeneratedTrees.Where(t => t.FilePath.EndsWith($"Consuming.Class.{methodName}.g.cs", StringComparison.Ordinal));
+
+    private static (CSharpCompilation Compilation, GeneratorDriverRunResult Result) RunGenerator(string source)
+    {
+        // Each library bakes in its own internal copy of the marker attributes. Only the second one
+        // exposes its internals to the consumer, so attribute usages still bind uniquely.
+        var first = CreateLibraryWithAttribute("First", Net100.References.All, "Second");
+        var second = CreateLibraryWithAttribute("Second", [.. Net100.References.All, first], "Consumer");
+
+        var parseOptions = CSharpParseOptions.Default
+            .WithLanguageVersion(LanguageVersion.Preview)
+            .WithPreprocessorSymbols(DisableAttributeGeneration);
 
         var compilation = CSharpCompilation.Create(
             assemblyName: "Consumer",
@@ -48,16 +85,7 @@ public partial class Class
             .RunGenerators(compilation)
             .GetRunResult();
 
-        var generated = Assert.Single(
-            result.GeneratedTrees.Where(t => t.FilePath.EndsWith("Consuming.Class.MethodAsync.g.cs", StringComparison.Ordinal)));
-
-        Assert.Contains("public void Method()", generated.ToString(), StringComparison.Ordinal);
-
-        var errors = compilation.AddSyntaxTrees(result.GeneratedTrees)
-            .GetDiagnostics()
-            .Where(d => d.Severity == DiagnosticSeverity.Error);
-
-        Assert.Empty(errors);
+        return (compilation, result);
     }
 
     private static PortableExecutableReference CreateLibraryWithAttribute(
