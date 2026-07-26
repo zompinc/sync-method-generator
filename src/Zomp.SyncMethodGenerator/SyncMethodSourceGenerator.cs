@@ -166,14 +166,18 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 
         var hash = Hash(fileName);
 
-        // scope, separator, hash, dot, method, extension
-        var available = MaxFileNameLength - 1 - hash.Length - 1 - method.Length - extension.Length;
+        // separator, hash, dot, extension
+        var fixedLength = 1 + hash.Length + 1 + extension.Length;
 
-        var shortenedScope = available > 0
-            ? scope[..Math.Min(scope.Length, available)]
-            : string.Empty;
+        var forScope = MaxFileNameLength - fixedLength - method.Length;
 
-        return $"{shortenedScope}_{hash}.{method}{extension}";
+        if (forScope > 0)
+        {
+            return $"{scope[..Math.Min(scope.Length, forScope)]}_{hash}.{method}{extension}";
+        }
+
+        // The method name alone fills the budget, so it has to be shortened as well.
+        return $"_{hash}.{method[..(MaxFileNameLength - fixedLength)]}{extension}";
     }
 
     /// <summary>

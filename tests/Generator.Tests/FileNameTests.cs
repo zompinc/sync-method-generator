@@ -48,6 +48,19 @@ public partial class OuterClass
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task ShortenLongFileNameWhenTheMethodNameFillsIt() => """
+namespace A.Long.Enough.Namespace.To.Make.The.Generated.File.Name.Exceed.What.Is.Reasonable;
+
+public partial class OuterClass
+{
+    [CreateSyncVersion]
+    public async Task ThisMethodHasAnUnreasonablyLongNameWhichOnItsOwnLeavesNoRoomForTheNamespaceOrTheContainingTypeAsync()
+    {
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
     public Task ShortenLongFileNameKeepsOverloadsApart() => """
 namespace A.Long.Enough.Namespace.To.Make.The.Generated.File.Name.Exceed.What.Is.Reasonable;
 
