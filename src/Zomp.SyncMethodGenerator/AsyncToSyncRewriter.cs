@@ -605,6 +605,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return UnwrapExtension(@base, changeMemoryToSpan, reducedFromExtensionMethod, replaceInInvocation.Pop());
         }
 
+        // Rename direct invocation through conditional access eg. bar?.BarBarAsync()
+        if (@base.Expression is MemberBindingExpressionSyntax mbe
+            && reducedFromExtensionMethod is null
+            && node.Expression is MemberBindingExpressionSyntax originalMbe
+            && ReplaceAsync(originalMbe.Name) is { } memberBindingNewName)
+        {
+            return @base.WithExpression(mbe.WithName(mbe.ChangeIdentifier(memberBindingNewName)));
+        }
+
         if (changeMemoryToSpan && reducedFromExtensionMethod is null && !endsWithMemory)
         {
             return AppendSpan(@base);
@@ -687,8 +696,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node)
     {
-        var dropParentheses = node.Expression is AwaitExpressionSyntax && node.Parent is not InterpolationSyntax;
         var @base = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node)!;
+        var dropParentheses = node.Parent is not InterpolationSyntax
+            && (node.Expression is AwaitExpressionSyntax
+                || (node.Expression.IsKind(SyntaxKind.CoalesceExpression) && @base.Expression is not BinaryExpressionSyntax));
         return dropParentheses ? @base.Expression.WithTriviaFrom(@base) : @base;
     }
 
@@ -1368,6 +1379,25 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
     {
         var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
+
+        // For task-valued null coalescing (eg. await (t?.DoAsync() ?? Task.CompletedTask)),
+        // reduce to the side which has a synchronized version when the other side has none.
+        if (node.IsKind(SyntaxKind.CoalesceExpression)
+            && semanticModel.GetTypeInfo(node).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true })
+        {
+            var removeLeft = ShouldRemoveArgument(node.Left);
+            var removeRight = ShouldRemoveArgument(node.Right);
+
+            if (removeRight && !removeLeft)
+            {
+                return @base.Left.WithTriviaFrom(@base);
+            }
+
+            if (removeLeft && !removeRight)
+            {
+                return @base.Right.WithTriviaFrom(@base);
+            }
+        }
 
         if (@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) || @base.OperatorToken.IsKind(SyntaxKind.AsKeyword))
         {
@@ -2287,6 +2317,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private bool ShouldRemoveArgument(ExpressionSyntax expr, RemoveArgumentContext context) => expr switch
     {
         ElementAccessExpressionSyntax ee => ShouldRemoveArgument(ee.Expression, context),
+        BinaryExpressionSyntax be when be.IsKind(SyntaxKind.CoalesceExpression) => ShouldRemoveArgument(be.Left, context) && ShouldRemoveArgument(be.Right, context),
         BinaryExpressionSyntax be => ShouldRemoveArgument(be.Left, context) || ShouldRemoveArgument(be.Right, context),
         CastExpressionSyntax ce => HasSymbolAndShouldBeRemoved(expr) || ShouldRemoveArgument(ce.Expression, context),
         ParenthesizedExpressionSyntax pe => ShouldRemoveArgument(pe.Expression, context),
