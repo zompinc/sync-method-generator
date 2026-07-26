@@ -701,7 +701,7 @@ if (true)
 #endif
 """.Verify(sourceType: SourceType.MethodBody);
 
-    [Fact(Skip = "Need to look into this more https://github.com/zompinc/sync-method-generator/issues/45#issuecomment-1893956960")]
+    [Fact]
     public Task BrokenIfStatement() => $$"""
 #if MY_SPECIAL_SYMBOL
 if (true)
@@ -710,6 +710,27 @@ if (true)
 #endif
 {
 }
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task BrokenUsingStatement() => $$"""
+#if MY_SPECIAL_SYMBOL
+using (var stream = new global::System.IO.MemoryStream())
+#else
+using (var stream2 = new global::System.IO.MemoryStream())
+#endif
+{
+}
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task DirectiveInsideStatement() => $$"""
+var bar =
+#if MY_SPECIAL_SYMBOL
+    true;
+#else
+    false;
+#endif
 """.Verify(sourceType: SourceType.MethodBody);
 
     [Fact]

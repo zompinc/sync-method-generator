@@ -1,8 +1,7 @@
 ﻿//HintName: Test.Class.MethodAsync.g.cs
+var bar =
 #if MY_SPECIAL_SYMBOL
-if (true)
+    true;
 #else
-if (true)
+    false;
 #endif
-{
-}
