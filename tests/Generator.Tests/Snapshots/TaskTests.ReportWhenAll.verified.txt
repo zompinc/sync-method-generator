@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: : (6,14)-(6,50),
+      Message: Cannot synchronize 'WhenAll'. It waits on several operations at once, which has no synchronous equivalent. Provide a synchronous implementation in an #if SYNC_ONLY region.,
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN004,
+        Title: Method has no synchronous equivalent,
+        MessageFormat: Cannot synchronize '{0}'. It waits on several operations at once, which has no synchronous equivalent. Provide a synchronous implementation in an #if SYNC_ONLY region.,
+        Category: Usage,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

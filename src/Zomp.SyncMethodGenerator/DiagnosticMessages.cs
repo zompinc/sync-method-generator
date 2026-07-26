@@ -26,5 +26,15 @@ internal static class DiagnosticMessages
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    internal static readonly DiagnosticDescriptor NoSynchronousEquivalent = new(
+        id: "ZSMGEN004",
+        title: "Method has no synchronous equivalent",
+        messageFormat: $"Cannot synchronize '{{0}}'. It waits on several operations at once, which has no synchronous equivalent. Provide a synchronous implementation in an #if {AsyncToSyncRewriter.SyncOnly} region.",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private const string Preprocessor = "Preprocessor";
+
+    private const string Usage = "Usage";
 }

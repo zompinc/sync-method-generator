@@ -37,6 +37,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string Delay = nameof(Task<>.Delay);
     private const string FromResult = nameof(Task<>.FromResult);
     private const string WaitAsync = "WaitAsync";
+    private const string WhenAll = nameof(Task.WhenAll);
+    private const string WhenAny = nameof(Task.WhenAny);
     private const string IsCancellationRequested = nameof(CancellationToken.IsCancellationRequested);
     private const string MoveNextAsync = nameof(IAsyncEnumerator<>.MoveNextAsync);
     private const string DisposeAsync = nameof(IAsyncEnumerator<>.DisposeAsync);
@@ -552,6 +554,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         if (symbol is not IMethodSymbol methodSymbol)
         {
             throw new InvalidOperationException($"Could not get symbol of {node}");
+        }
+
+        if (IsCombinator(methodSymbol))
+        {
+            // Dropping the call would silently discard the work it waits on, so refuse the method.
+            diagnostics.Add(ReportedDiagnostic.Create(NoSynchronousEquivalent, node.GetLocation(), methodSymbol.Name));
+            return base.VisitInvocationExpression(node);
         }
 
         var changeMemoryToSpan = methodSymbol.ReturnType is INamedTypeSymbol { IsMemory: true }
@@ -1499,6 +1508,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
     }
+
+    /// <summary>
+    /// Checks for the task combinators, which wait on several operations at once. Synchronous
+    /// code has no equivalent: the operations have already run to completion one by one.
+    /// </summary>
+    private static bool IsCombinator(IMethodSymbol methodSymbol)
+        => methodSymbol is { Name: WhenAll or WhenAny, ContainingType.IsNonGenericTaskOrValueTask: true };
 
     private static SpecialMethod IsSpecialMethod(IMethodSymbol methodSymbol) => methodSymbol switch
     {
