@@ -747,17 +747,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                     .WithTrailingTrivia(node.GetTrailingTrivia());
             }
 
-            // Don't return if the return statement is the last statement in the method.
-            if (node.Parent?.Parent is MethodDeclarationSyntax { Body.Statements: [.., var lastStatement] } &&
-                lastStatement == node)
-            {
-                return result is null
-                    ? null
-                    : (SyntaxNode)result
-                    .WithLeadingTrivia(node.GetLeadingTrivia())
-                    .WithTrailingTrivia(node.GetTrailingTrivia());
-            }
-
             if (result is null)
             {
                 return ReturnStatement()
@@ -827,35 +816,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitSwitchSection(SwitchSectionSyntax node)
     {
-        var statementProcessor = new StatementProcessor(this, node.Statements);
-        if (statementProcessor.HasErrors)
-        {
-            return node;
-        }
-
         var @base = (SwitchSectionSyntax)base.VisitSwitchSection(node)!;
-        var newStatements = statementProcessor.PostProcess(@base.Statements);
-        var retVal = @base.WithStatements(newStatements);
-
-        return retVal;
+        var newStatements = Process(node.Statements, @base.Statements, new DirectiveStack());
+        return @base.WithStatements(newStatements);
     }
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax node)
     {
-        var statementProcessor = new StatementProcessor(this, node.Statements);
-        if (statementProcessor.HasErrors)
-        {
-            return node;
-        }
-
         var @base = (BlockSyntax)base.VisitBlock(node)!;
 
-        var newStatements = statementProcessor.PostProcess(@base.Statements);
+        var directiveStack = new DirectiveStack();
+        var newStatements = Process(node.Statements, @base.Statements, directiveStack);
+
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, statementProcessor.DirectiveStack) is var (_, newStatements2, newTrivia, _))
+        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
         {
             var oldStatements = retVal.Statements.ToList();
             oldStatements.AddRange([.. newStatements2]);
@@ -1509,55 +1486,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => SpecialMethod.None,
     };
 
-    private static SyntaxList<StatementSyntax> ProcessStatements(SyntaxList<StatementSyntax> list, List<ExtraNodeInfo> extraNodeInfoList)
-    {
-        var newStatements = new List<StatementSyntax>();
-
-        for (var i = 0; i < list.Count; ++i)
-        {
-            var statement = list[i];
-
-            var (statementGetsDropped, statements, leadingTrivia, dropReturn) = extraNodeInfoList[i];
-
-            for (var j = 0; j < statements.Count; ++j)
-            {
-                var syncOnlyStatement = statements[j];
-                var syncOnlyStatementWithTrivia = syncOnlyStatement;
-
-                if (j == statements.Count - 1 && leadingTrivia.Count > 0)
-                {
-                    var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
-                    trailingTrivia.AddRange(leadingTrivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
-                    syncOnlyStatementWithTrivia = syncOnlyStatementWithTrivia.WithTrailingTrivia(trailingTrivia);
-                }
-
-                newStatements.Add(syncOnlyStatementWithTrivia);
-            }
-
-            if (dropReturn && statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax ies })
-            {
-                var newStatement = ExpressionStatement(ies).WithTriviaFrom(statement);
-                newStatements.Add(newStatement);
-            }
-            else if (!statementGetsDropped)
-            {
-                var newStatement = statement;
-                newStatement = newStatement.WithLeadingTrivia(leadingTrivia);
-
-                newStatements.Add(newStatement);
-            }
-            else if (leadingTrivia is not null)
-            {
-                if (leadingTrivia.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia)))
-                {
-                    newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(leadingTrivia));
-                }
-            }
-        }
-
-        return List(newStatements);
-    }
-
     private static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
         => TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
 
@@ -1958,55 +1886,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => ShouldRemoveType(GetReturnType(symbol), isArgument: true),
     };
 
-    private bool PreProcess(
-        SyntaxList<StatementSyntax> statements,
-        List<ExtraNodeInfo> extraNodeInfoList,
-        DirectiveStack directiveStack)
-    {
-        var removeRemaining = false;
-        for (var i = 0; i < statements.Count; ++i)
-        {
-            var statement = statements[i];
-            if (ProcessTrivia(statement.GetLeadingTrivia(), directiveStack) is not { } eni)
-            {
-                return false;
-            }
-
-            if (removeRemaining)
-            {
-                eni = eni with { DropOriginal = true };
-            }
-            else if (CanDropStatement(statement))
-            {
-                if (!removeRemaining && statement is ReturnStatementSyntax)
-                {
-                    removeRemaining = true;
-                }
-
-                eni = eni with { DropOriginal = true };
-            }
-
-            if (directiveStack.IsSyncOnly == false)
-            {
-                eni = eni with { DropOriginal = true };
-            }
-            else
-            {
-                if (statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax } r)
-                {
-                    if (r.Parent is BlockSyntax { Parent: MethodDeclarationSyntax mds } && semanticModel.GetTypeInfo(mds.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true })
-                    {
-                        eni = eni with { DropReturn = true };
-                    }
-                }
-            }
-
-            extraNodeInfoList.Add(eni);
-        }
-
-        return true;
-    }
-
     private TypeSyntax MaybeNullableType(TypeSyntax argumentTypeExpr, bool isValueType = false)
         => disableNullable && !isValueType ? argumentTypeExpr : NullableType(argumentTypeExpr);
 
@@ -2158,7 +2037,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             statements.Add(statement);
         });
 
-        return new(false, List(statements), triviaList);
+        return new(List(statements), triviaList);
     }
 
     private SyncOnlyAttributeContext ProcessSyncOnlyAttributes(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
@@ -2220,6 +2099,101 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
 
         return true;
+    }
+
+    private SyntaxList<StatementSyntax> Process(
+        SyntaxList<StatementSyntax> originalStatements,
+        SyntaxList<StatementSyntax> rewrittenStatements,
+        DirectiveStack directiveStack)
+    {
+        var newStatements = new List<StatementSyntax>();
+        var removeRemaining = false;
+
+        for (var i = 0; i < originalStatements.Count && i < rewrittenStatements.Count; ++i)
+        {
+            var statement = originalStatements[i];
+            var rewritten = rewrittenStatements[i];
+
+            var leadingTrivia = new List<SyntaxTrivia>();
+            var syncOnlyStatements = new List<StatementSyntax>();
+
+            ProcessTrivia(statement.GetLeadingTrivia(), directiveStack, leadingTrivia, (m) =>
+            {
+                if (m is not GlobalStatementSyntax gs)
+                {
+                    return;
+                }
+
+                var syncOnlyStatement = gs.Statement;
+                if (leadingTrivia.Count > 0)
+                {
+                    leadingTrivia.AddRange([.. syncOnlyStatement.GetLeadingTrivia()]);
+                    syncOnlyStatement = syncOnlyStatement.WithLeadingTrivia(leadingTrivia);
+                    leadingTrivia.Clear();
+                }
+
+                // Cannot visit the statement because it is not within the syntax tree.
+                syncOnlyStatements.Add(syncOnlyStatement);
+            });
+
+            var dropOriginal = removeRemaining;
+
+            if (!dropOriginal && CanDropStatement(statement))
+            {
+                if (statement is ReturnStatementSyntax)
+                {
+                    removeRemaining = true;
+                }
+
+                dropOriginal = true;
+            }
+
+            if (CanDropEmptyStatement(rewritten) || directiveStack.IsSyncOnly == false)
+            {
+                dropOriginal = true;
+            }
+
+            for (var j = 0; j < syncOnlyStatements.Count; ++j)
+            {
+                var syncOnlyStatement = syncOnlyStatements[j];
+
+                if (j == syncOnlyStatements.Count - 1 && leadingTrivia.Count > 0)
+                {
+                    var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
+                    trailingTrivia.AddRange(leadingTrivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
+                    syncOnlyStatement = syncOnlyStatement.WithTrailingTrivia(trailingTrivia);
+                }
+
+                newStatements.Add(syncOnlyStatement);
+            }
+
+            var dropReturn = directiveStack.IsSyncOnly != false
+                && statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax, Parent: BlockSyntax { Parent: MethodDeclarationSyntax mds } }
+                && semanticModel.GetTypeInfo(mds.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true };
+
+            if (dropReturn && rewritten is ReturnStatementSyntax { Expression: InvocationExpressionSyntax ies })
+            {
+                newStatements.Add(ExpressionStatement(ies).WithTriviaFrom(rewritten));
+            }
+            else if (!dropOriginal)
+            {
+                // Don't return if the return statement is the last statement in the method.
+                if (i == originalStatements.Count - 1
+                    && statement is ReturnStatementSyntax { Expression: not null, Parent: BlockSyntax { Parent: MethodDeclarationSyntax } }
+                    && rewritten is BlockSyntax { OpenBraceToken.IsMissing: true, Statements: [{ } resultStatement, ReturnStatementSyntax { Expression: null } lastReturn] })
+                {
+                    rewritten = resultStatement.WithTrailingTrivia(lastReturn.GetTrailingTrivia());
+                }
+
+                newStatements.Add(rewritten.WithLeadingTrivia(leadingTrivia));
+            }
+            else if (leadingTrivia.Any(st => st.IsKind(SyntaxKind.IfDirectiveTrivia)))
+            {
+                newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(leadingTrivia));
+            }
+        }
+
+        return List(newStatements);
     }
 
     private bool RemoveDeclarator(VariableDeclaratorSyntax variable)
@@ -2397,36 +2371,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private sealed record SyncOnlyAttributeContext(SyntaxList<AttributeListSyntax> Attributes, IList<SyntaxTrivia> LeadingTrivia);
 
-    private sealed record ExtraNodeInfo(bool DropOriginal, SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia, bool DropReturn = false);
-
-    private sealed class StatementProcessor
-    {
-        private readonly List<ExtraNodeInfo> extraNodeInfoList = [];
-
-        public StatementProcessor(AsyncToSyncRewriter rewriter, SyntaxList<StatementSyntax> statements)
-        {
-            HasErrors = !rewriter.PreProcess(statements, extraNodeInfoList, DirectiveStack);
-        }
-
-        public bool HasErrors { get; }
-
-        public DirectiveStack DirectiveStack { get; } = new();
-
-        public SyntaxList<StatementSyntax> PostProcess(SyntaxList<StatementSyntax> statements)
-        {
-            for (var i = 0; i < statements.Count; ++i)
-            {
-                var statement = statements[i];
-                if (CanDropEmptyStatement(statement))
-                {
-                    var zz = extraNodeInfoList[i];
-                    extraNodeInfoList[i] = zz with { DropOriginal = true };
-                }
-            }
-
-            return ProcessStatements(statements, extraNodeInfoList);
-        }
-    }
+    private sealed record ExtraNodeInfo(SyntaxList<StatementSyntax> AdditionalStatements, IList<SyntaxTrivia> LeadingTrivia);
 
     private sealed record ExtensionExprSymbol(InvocationExpressionSyntax InvocationExpression, ITypeSymbol ReturnType);
 
