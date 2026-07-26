@@ -202,6 +202,8 @@ jobs:
     # secrets, so the release pipeline can't do anything useful for them.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create the tag and GitHub Release
 
     steps:
       - name: Set path for nektos/act
@@ -230,3 +232,18 @@ jobs:
       - name: Push to NuGet
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
+
+      - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # gh infers the repo from this when no checkout is present
+        run: |
+          pkg=$(ls Zomp.SyncMethodGenerator.*.nupkg | head -1)
+          version=${pkg#Zomp.SyncMethodGenerator.}
+          version=${version%.nupkg}
+          gh release create "v$version" \
+            --target "$GITHUB_SHA" \
+            --title "v$version" \
+            --generate-notes \
+            ./*.nupkg
