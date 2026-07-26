@@ -41,4 +41,28 @@ public async Task MethodAsync(Task task, CancellationToken ct)
     await task.ConfigureAwait(false);
 }
 """.Verify();
+
+    [Fact]
+    public Task ReportWhenAll() => """
+[CreateSyncVersion]
+public async Task MethodAsync()
+{
+    await Task.WhenAll(FooAsync(), FooAsync());
+}
+
+private async Task FooAsync() => await Task.CompletedTask;
+private void Foo() { }
+""".Verify();
+
+    [Fact]
+    public Task ReportWhenAny() => """
+[CreateSyncVersion]
+public async Task MethodAsync()
+{
+    _ = await Task.WhenAny(FooAsync(), FooAsync());
+}
+
+private async Task FooAsync() => await Task.CompletedTask;
+private void Foo() { }
+""".Verify();
 }
