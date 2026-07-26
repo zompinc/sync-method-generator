@@ -53,6 +53,28 @@ namespace M
 """.Verify(sourceType: SourceType.Full);
 
     [Fact]
+    public Task GenericMethodInferringTaskTypeArgument() => """
+[CreateSyncVersion]
+public async Task<bool> FooAsync()
+{
+    return await Bar(() => Task.FromResult(true));
+}
+
+public T Bar<T>(Func<T> innerLogic) => innerLogic();
+""".Verify();
+
+    [Fact]
+    public Task GenericMethodWithExplicitTaskTypeArgument() => """
+[CreateSyncVersion]
+public async Task<bool> FooAsync()
+{
+    return await Bar<Task<bool>>(() => Task.FromResult(true));
+}
+
+public T Bar<T>(Func<T> innerLogic) => innerLogic();
+""".Verify();
+
+    [Fact]
     public Task MultipleNamespaces() => """
 namespace NsOne
 {
