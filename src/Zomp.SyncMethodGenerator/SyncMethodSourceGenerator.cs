@@ -19,9 +19,16 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
     internal const string QualifiedSkipSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{SkipSyncVersionAttribute}";
 
+    /// <summary>
+    /// Longest generated file name before the scope is shortened. Emitted files sit under
+    /// {project}\obj\{configuration}\{framework}\generated\{generator assembly}\{generator},
+    /// which alone is around a hundred characters before the project path is counted.
+    /// </summary>
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
     internal const string PreserveCancellationToken = "PreserveCancellationToken";
+
+    private const int MaxFileNameLength = 100;
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -123,14 +130,73 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 ? c.ParentName
                 : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
 
-        var sourcePath = $"{string.Join(".", m.Namespaces)}" +
+        var scope = $"{string.Join(".", m.Namespaces)}" +
             $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
-            (m.IsCSharp14Extension ? ".ext" : string.Empty) +
-            $".{m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index)}.g.cs";
+            (m.IsCSharp14Extension ? ".ext" : string.Empty);
+
+        var method = m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index);
+
+        var sourcePath = BuildFileName(scope, method);
 
         var source = SourceGenerationHelper.GenerateExtensionClass(m);
 
         return (m, sourcePath, source);
+    }
+
+    /// <summary>
+    /// Builds the file name a generated method is emitted under, shortening it when the
+    /// namespace and containing type chain make it long enough to be a problem. Emitted files
+    /// live several directories deep inside the intermediate output path, so a long name here
+    /// can carry the full path past the limit the file system accepts.
+    /// </summary>
+    /// <remarks>
+    /// The scope is what gets shortened, since the method name is what someone reads the file
+    /// name for. A hash of the untruncated name keeps distinct methods in distinct files.
+    /// </remarks>
+    private static string BuildFileName(string scope, string method)
+    {
+        const string extension = ".g.cs";
+
+        var fileName = $"{scope}.{method}{extension}";
+
+        if (fileName.Length <= MaxFileNameLength)
+        {
+            return fileName;
+        }
+
+        var hash = Hash(fileName);
+
+        // scope, separator, hash, dot, method, extension
+        var available = MaxFileNameLength - 1 - hash.Length - 1 - method.Length - extension.Length;
+
+        var shortenedScope = available > 0
+            ? scope[..Math.Min(scope.Length, available)]
+            : string.Empty;
+
+        return $"{shortenedScope}_{hash}.{method}{extension}";
+    }
+
+    /// <summary>
+    /// FNV-1a. Short, dependency free, and stable across processes and runtimes, which
+    /// <see cref="string.GetHashCode()"/> is not.
+    /// </summary>
+    private static string Hash(string value)
+    {
+        const uint offsetBasis = 2166136261;
+        const uint prime = 16777619;
+
+        var hash = offsetBasis;
+
+        unchecked
+        {
+            foreach (var c in value)
+            {
+                hash ^= c;
+                hash *= prime;
+            }
+        }
+
+        return hash.ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
