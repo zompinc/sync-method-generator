@@ -156,13 +156,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var createSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedCreateSyncVersionAttribute);
-        if (createSyncVersionAttribute == null)
-        {
-            // nothing to do if this type isn't available
-            return null;
-        }
-
         // find the index of the method in the containing type
         var index = 1;
 
@@ -182,34 +175,24 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var skipSyncVersionAttribute = context.SemanticModel.Compilation.GetTypeByMetadataName(QualifiedSkipSyncVersionAttribute);
-
         foreach (var attributeData in methodSymbol.GetAttributes())
         {
-            if (skipSyncVersionAttribute != null && skipSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            var attributeClassName = attributeData.AttributeClass?.ToDisplayString();
+
+            if (attributeClassName == QualifiedSkipSyncVersionAttribute)
             {
                 // Skip processing if the method has the skip attribute applied
                 return null;
             }
 
-            if (isTargetTypeSymbol && createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
+            if (isTargetTypeSymbol && attributeClassName == QualifiedCreateSyncVersionAttribute)
             {
                 // Skip processing if the attribute is defined on the type to prioritize method-level attribute
                 return null;
             }
         }
 
-        AttributeData syncMethodGeneratorAttributeData = null!;
-        foreach (var attributeData in context.TargetSymbol.GetAttributes())
-        {
-            if (!createSyncVersionAttribute.Equals(attributeData.AttributeClass, SymbolEqualityComparer.Default))
-            {
-                continue;
-            }
-
-            syncMethodGeneratorAttributeData = attributeData;
-            break;
-        }
+        var syncMethodGeneratorAttributeData = context.Attributes[0];
 
         var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
         SyntaxNode? node = methodDeclarationSyntax;
