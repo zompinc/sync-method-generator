@@ -1356,13 +1356,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitDeclarationPattern(DeclarationPatternSyntax node)
     {
         var @base = (DeclarationPatternSyntax)base.VisitDeclarationPattern(node)!;
-        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitTypeOfExpression(TypeOfExpressionSyntax node)
     {
         var @base = (TypeOfExpressionSyntax)base.VisitTypeOfExpression(node)!;
-        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
