@@ -1517,6 +1517,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return result.WithTrailingTrivia(lastReturn.GetTrailingTrivia());
     }
 
+    /// <summary>
+    /// Checks whether the statement contains preprocessor directives anywhere past its leading
+    /// trivia (e.g. an <c>#endif</c> between the <c>if</c> header and its block). Dropping such
+    /// a statement would emit unbalanced directives, because only leading trivia is preserved.
+    /// </summary>
+    private static bool ContainsInteriorDirective(StatementSyntax statement)
+        => statement.DescendantTrivia()
+            .Skip(statement.GetLeadingTrivia().Count)
+            .Any(t => t.IsDirective);
+
     private static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
         => TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
 
@@ -2117,7 +2127,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 dropOriginal = true;
             }
 
-            if (CanDropEmptyStatement(rewritten) || directiveStack.IsSyncOnly == false)
+            if ((CanDropEmptyStatement(rewritten) && !ContainsInteriorDirective(statement)) || directiveStack.IsSyncOnly == false)
             {
                 dropOriginal = true;
             }
