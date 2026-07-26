@@ -2,6 +2,56 @@
 
 public class UnitTests
 {
+    // Uses SourceType.Full because the defect is that a file scoped using does not
+    // reach the generated file. A global using would apply to it and hide the problem.
+    [Fact]
+    public Task GenericTypeInDeclarationPattern() => """
+namespace N
+{
+    public class A { }
+}
+
+namespace M
+{
+    using N;
+
+    public partial class B
+    {
+        [CreateSyncVersion]
+        public async Task DoSomethingAsync(object arg)
+        {
+            if (arg is List<A> lst)
+            {
+                await Task.Delay(1);
+            }
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task GenericTypeInTypeOfExpression() => """
+namespace N
+{
+    public class A { }
+}
+
+namespace M
+{
+    using N;
+
+    public partial class B
+    {
+        [CreateSyncVersion]
+        public async Task DoSomethingAsync()
+        {
+            _ = typeof(List<A>);
+            await Task.Delay(1);
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
     [Fact]
     public Task MultipleNamespaces() => """
 namespace NsOne
