@@ -12,8 +12,8 @@ namespace Zomp.SyncMethodGenerator;
 /// <param name="disableNullable">Instructs the source generator that nullable context should be disabled.</param>
 /// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress{T}"/> parameters.</param>
 /// <param name="preserveCancellationToken">Instructs the source generator to preserve <see cref="CancellationToken"/> parameters.</param>
-/// <param name="methodName">Method declaration syntax.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, bool preserveCancellationToken, MethodDeclarationSyntax methodName) : CSharpSyntaxRewriter
+/// <param name="targetMethod">The method declaration to rewrite; other method declarations are ignored.</param>
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, bool preserveCancellationToken, MethodDeclarationSyntax targetMethod) : CSharpSyntaxRewriter
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -64,10 +64,18 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
+    /// <summary>
+    /// Marks the brace-less block which <see cref="VisitReturnStatement"/> produces for
+    /// <c>return TaskReturningAsync();</c> (<c>TaskReturning(); return;</c>) so that
+    /// <see cref="Process"/> can recognize the expansion and drop the redundant
+    /// <c>return;</c> when it ends the method body.
+    /// </summary>
+    private static readonly SyntaxAnnotation ExpandedReturnAnnotation = new(nameof(ExpandedReturnAnnotation));
+
     private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
     private readonly bool preserveProgress = preserveProgress;
-    private readonly MethodDeclarationSyntax methodName = methodName;
+    private readonly MethodDeclarationSyntax targetMethod = targetMethod;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
 
     /// <summary>
@@ -317,12 +325,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         if (node.Parent is not MemberAccessExpressionSyntax)
         {
             var symbol = GetSymbol(node);
-            if (symbol is { IsStatic: true, ContainingType: { } containingType } fieldSymbol)
+            if (symbol is { IsStatic: true, ContainingType: { } containingType } memberSymbol)
             {
                 if (symbol is IFieldSymbol or IMethodSymbol { MethodKind: not MethodKind.LocalFunction })
                 {
                     var typeString = containingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
-                    return @base.WithIdentifier(Identifier($"{typeString}.{fieldSymbol.Name}")).WithTriviaFrom(node);
+                    return @base.WithIdentifier(Identifier($"{typeString}.{memberSymbol.Name}")).WithTriviaFrom(node);
                 }
             }
         }
@@ -380,7 +388,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             var leading = ps.GetLeadingTrivia();
             var extra = ProcessTrivia(leading, ds);
-            if (extra is not null && extra.AdditionalStatements.Count > 0)
+            if (extra.AdditionalStatements.Count > 0)
             {
                 modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
                 modifications.Add(i + 1, true);
@@ -537,9 +545,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (symbol is null)
         {
-            // return node is { Expression: IdentifierNameSyntax { Identifier.Value: "nameof" } }
-            //     ? base.VisitInvocationExpression(node)
-            //     : throw new InvalidOperationException("This usually occurs when a test doesn't compile due to a compilation error or a missing reference / usings");
+            // A missing symbol usually means the code doesn't compile due to an error or a missing reference / usings.
             return base.VisitInvocationExpression(node);
         }
 
@@ -586,7 +592,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (changeMemoryToSpan)
         {
-            newName = GetNewName(methodSymbol);
+            newName = ReplaceWithSpan(methodSymbol);
         }
 
         var reducedFromExtensionMethod = methodSymbol.IsExtensionMethod ? methodSymbol.ReducedFrom : null;
@@ -617,7 +623,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // Handle .ConfigureAwait(), .WithCancellationToken() and return the part in front of it
         if (methodSymbol is { IsTaskExtension: true, Name: not (MoveNextAsync or DisposeAsync) })
         {
-            return memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
+            return KeepExpressionBeforeDot(memberAccess);
         }
 
         // Handle all other extension methods eg. arr.First()
@@ -657,8 +663,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 }
                 else if (specialMethod == SpecialMethod.Drop)
                 {
-                    var expression = memberAccess.Expression;
-                    return expression.WithTrailingTrivia(TriviaList([.. expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
+                    return KeepExpressionBeforeDot(memberAccess);
                 }
             }
         }
@@ -761,7 +766,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                     ReturnStatement().WithTrailingTrivia(node.GetTrailingTrivia()),
                 ]))
                 .WithOpenBraceToken(MissingToken(SyntaxKind.OpenBraceToken))
-                .WithCloseBraceToken(MissingToken(SyntaxKind.CloseBraceToken));
+                .WithCloseBraceToken(MissingToken(SyntaxKind.CloseBraceToken))
+                .WithAdditionalAnnotations(ExpandedReturnAnnotation);
         }
 
         return base.VisitReturnStatement(node);
@@ -832,14 +838,11 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var retVal = @base.WithStatements(newStatements);
 
         var lastToken = retVal.CloseBraceToken;
-        if (ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack) is var (newStatements2, newTrivia))
-        {
-            var oldStatements = retVal.Statements.ToList();
-            oldStatements.AddRange([.. newStatements2]);
-            retVal = retVal.WithStatements(List(oldStatements)).WithCloseBraceToken(lastToken.WithLeadingTrivia(newTrivia));
-        }
+        var (newStatements2, newTrivia) = ProcessTrivia(node.CloseBraceToken.LeadingTrivia, directiveStack);
 
-        return retVal;
+        var oldStatements = retVal.Statements.ToList();
+        oldStatements.AddRange([.. newStatements2]);
+        return retVal.WithStatements(List(oldStatements)).WithCloseBraceToken(lastToken.WithLeadingTrivia(newTrivia));
     }
 
     /// <inheritdoc/>
@@ -884,7 +887,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        if (methodName != node)
+        if (targetMethod != node)
         {
             return default;
         }
@@ -897,18 +900,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return @base;
         }
 
-        var genericReturnType = returnType as GenericNameSyntax;
-
-        var isTask = genericReturnType is null && symbol.IsNonGenericTaskOrValueTask;
-
         var hasAsync = @base.Modifiers.Any(z => z.IsKind(SyntaxKind.AsyncKeyword));
 
         if (!hasAsync && !IsTypeOfInterest(symbol))
         {
             return @base;
         }
-
-        var modifiers = @base.Modifiers.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword));
 
         var originalName = @base.Identifier.Text;
         var newName = RemoveAsync(originalName);
@@ -930,7 +927,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             {
                 if (commentLine is XmlElementSyntax xes)
                 {
-                    var attribute = xes.StartTag.Attributes.FirstOrDefault(a => a is XmlNameAttributeSyntax) as XmlNameAttributeSyntax;
+                    var attribute = xes.StartTag.Attributes.OfType<XmlNameAttributeSyntax>().FirstOrDefault();
                     if (attribute is not null
                         && GetSymbol(attribute.Identifier) is IParameterSymbol paramSymbol
                         && removedParameters.Contains(paramSymbol))
@@ -957,8 +954,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
             || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
             || st.IsKind(SyntaxKind.DisabledTextTrivia);
-
-        var z = newTriviaList.Where(Preprocessors).ToList();
 
         while (newTriviaList.FirstOrDefault(Preprocessors) is { } preprocessor
             && preprocessor != default)
@@ -1263,13 +1258,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitVariableDeclaration(VariableDeclarationSyntax node)
     {
-        ////((Microsoft.CodeAnalysis.CSharp.Syntax.ObjectCreationExpressionSyntax)node.Variables[0].Initializer.Value).Type
-
-        ////TypeSyntax? GetInitializerType(VariableDeclarationSyntax node)
-        ////    => (node.Variables[0].Initializer?.Value as ObjectCreationExpressionSyntax)?.Type;
-
-        ////var isEqual = node.Type == GetInitializerType(node);
-
         var @base = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node)!;
 
         var type = node.Type;
@@ -1289,7 +1277,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        //return @base.WithType(ProcessType(type)).WithTriviaFrom(@base);
         return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
@@ -1311,14 +1298,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = (AttributeListSyntax)base.VisitAttributeList(node)!;
         var indices = node.Attributes.GetIndices(ShouldRemoveAttribute);
         var newList = RemoveAtRange(@base.Attributes, indices);
-
-        /*
-        if (ProcessSyncOnlyAttributes(@base.OpenBracketToken.LeadingTrivia, new())
-            is { Attributes.Count: > 0 } additionalAttributes)
-        {
-            newList.AddRange();
-        }
-        */
 
         return @base.WithAttributes(newList);
     }
@@ -1417,6 +1396,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         _ => false,
     };
 
+    private static string ReplaceWithSpan(ISymbol symbol)
+        => Regex.Replace(symbol.Name, Memory, Span);
+
+    /// <summary>
+    /// Drops the invoked member and keeps the expression in front of the dot,
+    /// preserving the trivia surrounding the dot.
+    /// </summary>
+    private static ExpressionSyntax KeepExpressionBeforeDot(MemberAccessExpressionSyntax memberAccess)
+        => memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
+
     private static string MakeType(ISymbol symbol)
         => symbol switch
         {
@@ -1485,6 +1474,48 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         { Name: WaitAsync, ReceiverType: INamedTypeSymbol { IsTaskOrValueTask: true } } => SpecialMethod.Drop,
         _ => SpecialMethod.None,
     };
+
+    /// <summary>
+    /// Emits statements recovered from a SYNC_ONLY region. When the statement following the
+    /// region is dropped, its remaining non-whitespace trivia would be lost, so it is
+    /// preserved as trailing trivia of the last recovered statement.
+    /// </summary>
+    private static void AddSyncOnlyStatements(
+        List<StatementSyntax> newStatements,
+        SyntaxList<StatementSyntax> syncOnlyStatements,
+        IList<SyntaxTrivia> orphanedTrivia)
+    {
+        for (var i = 0; i < syncOnlyStatements.Count; ++i)
+        {
+            var syncOnlyStatement = syncOnlyStatements[i];
+
+            if (i == syncOnlyStatements.Count - 1 && orphanedTrivia.Count > 0)
+            {
+                var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
+                trailingTrivia.AddRange(orphanedTrivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
+                syncOnlyStatement = syncOnlyStatement.WithTrailingTrivia(trailingTrivia);
+            }
+
+            newStatements.Add(syncOnlyStatement);
+        }
+    }
+
+    /// <summary>
+    /// Unwraps the expansion marked with <see cref="ExpandedReturnAnnotation"/> when it is the
+    /// last statement of the method body: nothing follows it, so the <c>return;</c> is redundant
+    /// and only the invocation is kept.
+    /// </summary>
+    private static StatementSyntax UnwrapTrailingReturn(StatementSyntax statement, StatementSyntax rewritten)
+    {
+        if (statement.Parent is not BlockSyntax { Parent: MethodDeclarationSyntax }
+            || !rewritten.HasAnnotation(ExpandedReturnAnnotation)
+            || rewritten is not BlockSyntax { Statements: [{ } result, ReturnStatementSyntax { Expression: null } lastReturn] })
+        {
+            return rewritten;
+        }
+
+        return result.WithTrailingTrivia(lastReturn.GetTrailingTrivia());
+    }
 
     private static SyntaxTokenList StripAsyncModifier(SyntaxTokenList list)
         => TokenList(list.Where(z => !z.IsKind(SyntaxKind.AsyncKeyword)));
@@ -1641,26 +1672,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return false;
     }
 
-    private static bool IsGenericMethodThatHasMemory(INamedTypeSymbol symbol)
-    {
-        if (!symbol.IsGenericType)
-        {
-            return false;
-        }
-
-        foreach (var typeArgument in symbol.TypeArguments)
-        {
-            if (typeArgument is not INamedTypeSymbol named)
-            {
-                continue;
-            }
-
-            return named.IsMemory || IsGenericMethodThatHasMemory(named);
-        }
-
-        return false;
-    }
-
     private static bool TryStripAsync(string str, [NotNullWhen(true)] out string? stripped)
     {
         if (str.EndsWithAsync())
@@ -1801,7 +1812,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newList = SeparatedList([@as, .. arguments], newSeparators);
 
         var newName = reducedFrom.Name;
-        newName = changeMemoryToSpan ? GetNewName(reducedFrom) : RemoveAsync(newName);
+        newName = changeMemoryToSpan ? ReplaceWithSpan(reducedFrom) : RemoveAsync(newName);
 
         var membersWithNewNameInContainingType = semanticModel.Compilation.References
             .Select(semanticModel.Compilation.GetAssemblyOrModuleSymbol)
@@ -1832,20 +1843,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private ExpressionSyntax AppendSpan(ExpressionSyntax @base)
         => yielding ? @base : MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, @base, IdentifierName(Span));
-
-    private string GetNewName(IMethodSymbol methodSymbol)
-    {
-        var containingType = methodSymbol.ContainingType;
-
-        // fixme: changeMemoryToSpan.Contains(symbol) ?
-        var replacement = ReplaceWithSpan(methodSymbol);
-        var newSymbol = containingType.GetMembers().FirstOrDefault(z => z.Name == replacement);
-        return replacement;
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "vrewwsgvr")]
-    private string ReplaceWithSpan(ISymbol symbol)
-        => Regex.Replace(symbol.Name, Memory, Span);
 
     private bool ShouldRemoveType(ITypeSymbol symbol, bool isArgument = false)
     {
@@ -2012,7 +2009,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
     }
 
-    private ExtraNodeInfo? ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
+    private ExtraNodeInfo ProcessTrivia(SyntaxTriviaList syntaxTriviaList, DirectiveStack directiveStack)
     {
         var statements = new List<StatementSyntax>();
         var triviaList = new List<SyntaxTrivia>();
@@ -2032,8 +2029,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 triviaList.Clear();
             }
 
-            //Cannot to the following because syntax node is not within syntax tree
-            //var statement = (StatementSyntax)Visit(gs.Statement)!;
+            // Cannot Visit(gs.Statement) because the parsed syntax node is not within the syntax tree.
             statements.Add(statement);
         });
 
@@ -2052,18 +2048,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 return;
             }
 
-            var originalAttributes = ims.AttributeLists;
-            if (triviaList.Count > 0)
-            {
-                ////triviaList.AddRange([.. statement.GetLeadingTrivia()]);
-                ////statement = statement.WithLeadingTrivia(triviaList);
-                ////triviaList.Clear();
-            }
-
-            //Cannot to the following because syntax node is not within syntax tree
-            ////var statement = (StatementSyntax)Visit(gs.Statement)!;
-
-            foreach (var o in originalAttributes)
+            foreach (var o in ims.AttributeLists)
             {
                 attributes.Add(o);
             }
@@ -2106,6 +2091,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         SyntaxList<StatementSyntax> rewrittenStatements,
         DirectiveStack directiveStack)
     {
+        Debug.Assert(
+            originalStatements.Count == rewrittenStatements.Count,
+            "Statement visitors must rewrite each statement into exactly one statement.");
+
         var newStatements = new List<StatementSyntax>();
         var removeRemaining = false;
 
@@ -2114,27 +2103,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var statement = originalStatements[i];
             var rewritten = rewrittenStatements[i];
 
-            var leadingTrivia = new List<SyntaxTrivia>();
-            var syncOnlyStatements = new List<StatementSyntax>();
-
-            ProcessTrivia(statement.GetLeadingTrivia(), directiveStack, leadingTrivia, (m) =>
-            {
-                if (m is not GlobalStatementSyntax gs)
-                {
-                    return;
-                }
-
-                var syncOnlyStatement = gs.Statement;
-                if (leadingTrivia.Count > 0)
-                {
-                    leadingTrivia.AddRange([.. syncOnlyStatement.GetLeadingTrivia()]);
-                    syncOnlyStatement = syncOnlyStatement.WithLeadingTrivia(leadingTrivia);
-                    leadingTrivia.Clear();
-                }
-
-                // Cannot visit the statement because it is not within the syntax tree.
-                syncOnlyStatements.Add(syncOnlyStatement);
-            });
+            var (syncOnlyStatements, leadingTrivia) = ProcessTrivia(statement.GetLeadingTrivia(), directiveStack);
 
             var dropOriginal = removeRemaining;
 
@@ -2153,36 +2122,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 dropOriginal = true;
             }
 
-            for (var j = 0; j < syncOnlyStatements.Count; ++j)
+            AddSyncOnlyStatements(newStatements, syncOnlyStatements, dropOriginal ? leadingTrivia : []);
+
+            if (directiveStack.IsSyncOnly != false
+                && DropsReturnKeyword(statement)
+                && rewritten is ReturnStatementSyntax { Expression: InvocationExpressionSyntax invocation })
             {
-                var syncOnlyStatement = syncOnlyStatements[j];
-
-                if (j == syncOnlyStatements.Count - 1 && leadingTrivia.Count > 0)
-                {
-                    var trailingTrivia = syncOnlyStatement.GetTrailingTrivia().ToList();
-                    trailingTrivia.AddRange(leadingTrivia.Where(t => !t.IsKind(SyntaxKind.WhitespaceTrivia)));
-                    syncOnlyStatement = syncOnlyStatement.WithTrailingTrivia(trailingTrivia);
-                }
-
-                newStatements.Add(syncOnlyStatement);
-            }
-
-            var dropReturn = directiveStack.IsSyncOnly != false
-                && statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax, Parent: BlockSyntax { Parent: MethodDeclarationSyntax mds } }
-                && semanticModel.GetTypeInfo(mds.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true };
-
-            if (dropReturn && rewritten is ReturnStatementSyntax { Expression: InvocationExpressionSyntax ies })
-            {
-                newStatements.Add(ExpressionStatement(ies).WithTriviaFrom(rewritten));
+                newStatements.Add(ExpressionStatement(invocation).WithTriviaFrom(rewritten));
             }
             else if (!dropOriginal)
             {
-                // Don't return if the return statement is the last statement in the method.
-                if (i == originalStatements.Count - 1
-                    && statement is ReturnStatementSyntax { Expression: not null, Parent: BlockSyntax { Parent: MethodDeclarationSyntax } }
-                    && rewritten is BlockSyntax { OpenBraceToken.IsMissing: true, Statements: [{ } resultStatement, ReturnStatementSyntax { Expression: null } lastReturn] })
+                if (i == originalStatements.Count - 1)
                 {
-                    rewritten = resultStatement.WithTrailingTrivia(lastReturn.GetTrailingTrivia());
+                    rewritten = UnwrapTrailingReturn(statement, rewritten);
                 }
 
                 newStatements.Add(rewritten.WithLeadingTrivia(leadingTrivia));
@@ -2195,6 +2147,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return List(newStatements);
     }
+
+    /// <summary>
+    /// Checks whether the <c>return</c> keyword must be dropped: <c>return InvocationAsync();</c>
+    /// in a method returning a bare <see cref="Task"/> or <see cref="ValueTask"/> has no value
+    /// to return in the synchronized version.
+    /// </summary>
+    private bool DropsReturnKeyword(StatementSyntax statement)
+        => statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax, Parent: BlockSyntax { Parent: MethodDeclarationSyntax method } }
+        && semanticModel.GetTypeInfo(method.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true };
 
     private bool RemoveDeclarator(VariableDeclaratorSyntax variable)
         => variable.Initializer is { Value: { } value } && ShouldRemoveArgument(value);
