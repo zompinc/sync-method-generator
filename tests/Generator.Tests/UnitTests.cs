@@ -807,6 +807,42 @@ public static async Task MethodAsync(IAsyncEnumerator<byte> bufferIterator)
 """.Verify();
 
     [Fact]
+    public Task AwaitNullCoalescingWithCompletedTask() => """
+[CreateSyncVersion]
+public async Task FooFooAsync(Bark? bar)
+{
+    await (bar?.BarBarAsync() ?? Task.CompletedTask);
+}
+
+public partial class Bark
+{
+    [CreateSyncVersion]
+    public async Task BarBarAsync()
+    {
+    }
+}
+""".Verify();
+
+    [Fact]
+    public Task AwaitNullCoalescingWithPendingTask() => """
+private Task? pending;
+
+[CreateSyncVersion]
+public async Task FooFooAsync(Bark bar)
+{
+    await (pending ?? bar.BarBarAsync());
+}
+
+public partial class Bark
+{
+    [CreateSyncVersion]
+    public async Task BarBarAsync()
+    {
+    }
+}
+""".Verify();
+
+    [Fact]
     public Task DropReturnStatementWhenNonGenericTaskIsReturned() => """
 [CreateSyncVersion]
 public Task MethodAsync()
