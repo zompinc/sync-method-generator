@@ -5,6 +5,9 @@ See README.md for project overview and consumer API.
 ## Build & Test
 
 ```bash
+# Restore the Node tooling the pre-commit hook needs (once per clone)
+pnpm install
+
 # Build
 dotnet build
 
@@ -16,6 +19,36 @@ dotnet test
 ```
 
 The project uses a `.slnx` solution file: `Zomp.SyncMethodGenerator.slnx`.
+
+## Line endings
+
+**Every text file in the repository is CRLF, and the build enforces it.** An
+`ENDOFLINE` error fails the build for any `.cs` file with LF endings, and the
+pre-commit hook runs that build, so a commit is rejected rather than merely
+flagged.
+
+This bites in ways that are easy to miss:
+
+- `sed -i` under Git Bash rewrites the whole file with LF. A one line change
+  then shows up as every line changed. Follow any `sed -i` with
+  `perl -0pi -e 's/(?<!\r)\n/\r\n/g' <file>`.
+- Tools which create files usually write LF. Convert before committing.
+- `git diff` against a file staged in the other convention shows the entire
+  file as changed. That is the diff, not the edit.
+
+The exception is `.husky/`, which has its own `.gitattributes` forcing LF
+because the hooks are shell scripts.
+
+## Formatting
+
+The pre-commit hook runs two checks, and CI runs the same hook as a step:
+
+- `dotnet format --verify-no-changes` over the solution
+- `pnpm format:check`, which is Prettier over `**/*.{yml,yaml,json,md}`
+
+Prettier is deliberately scoped to those extensions, with `endOfLine: crlf` so
+it does not fight the convention above. C# formatting belongs to `dotnet
+format` and the analyzers. Run `pnpm format` to fix what it finds.
 
 ## Multi-Roslyn-Version Architecture
 
@@ -38,7 +71,7 @@ src/Zomp.SyncMethodGenerator/          Generator (netstandard2.0)
   AsyncToSyncRewriter.cs               Core transformation engine (CSharpSyntaxRewriter)
   SourceGenerationHelper.cs            Output file structure and attribute definitions
   Extensions.cs                        Type-checking extensions on INamedTypeSymbol
-  DiagnosticMessages.cs                ZSMGEN001-003 diagnostic descriptors
+  DiagnosticMessages.cs                ZSMGEN001-004 diagnostic descriptors
   Models/                              Data records for the pipeline
   Helpers/                             EquatableArray<T>, DirectiveStack, etc.
   Properties/                          Assembly attributes
@@ -69,10 +102,59 @@ tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
 - Test pattern: `[Fact] public Task TestName() => "source code".Verify();`
 - Snapshot files: `{TestClass}.{TestName}[.Platform].g.verified.cs`
 - Tests compile against real framework assemblies via `TestHelper`
+- `TestHelper` fails a test whose generated code does not compile, before any
+  snapshot is compared, and reports the compiler errors
+
+### Choosing how the source is wrapped
+
+`Verify` takes a `SourceType`, and the default is the least noisy one:
+
+| SourceType            | Wraps the source in                                                 | Use for                                     |
+| --------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| `ClassBody` (default) | `namespace Test; partial class Class { ... }`                       | most tests                                  |
+| `StaticClassBody`     | the same, but a static class                                        | extension methods                           |
+| `MethodBody`          | an `async Task MethodAsync(CancellationToken ct)` inside that class | a few statements                            |
+| `Full`                | nothing, the source is the whole file                               | namespaces, using directives, several types |
+
+Prefer the smallest wrapper the test needs, and reach for `Full` only when the
+test genuinely needs file level syntax.
+
+One trap worth knowing: the test compilation has global usings, and global
+usings apply to generated files too. A bug about a type resolving through a
+_file scoped_ `using` in the source but not in the generated file therefore
+cannot be reproduced with anything but `Full` - with a smaller wrapper the
+global using resolves the type and the bug disappears.
+
+### Accepting snapshots
+
+A test with no snapshot, or one whose output changed, writes a `.received.`
+file next to the expected `.verified.` one. To accept it, copy it over the
+verified name and drop the framework infix:
+
+```text
+UnitTests.Example.DotNet10_0#Test.Class.MethodAsync.g.received.cs
+UnitTests.Example#Test.Class.MethodAsync.g.verified.cs
+```
+
+Output is normally identical across target frameworks, so one verified file
+without the infix serves both. Keep the infix only where the frameworks really
+differ. Delete stray `.received.` files before committing; they are ignored by
+git but confusing to leave behind.
+
+### Fixing a bug
+
+Land the failing test first, as its own commit, then the fix. The test commit
+should fail for the reason the issue describes - a compiler error in the
+generated code, or a snapshot recording the output the issue asks for - so that
+the fix commit demonstrably changes something. Verify this rather than assuming
+it: check out the test commit alone and watch it fail.
 
 ## Key Conventions
 
 - Central package management (`Directory.Packages.props`) — never put versions in csproj files
+- `Microsoft.CodeAnalysis.CSharp` is pinned to exactly `[5.0.0]`. That is not
+  staleness: it sets the lowest Roslyn a consumer needs, and the variant builds
+  override it per variant. Raising it raises the minimum SDK for everyone
 - `TreatWarningsAsErrors` is enabled globally
 - StyleCop + NetAnalyzers enforced; `.editorconfig` defines style rules
 - File-scoped namespaces required
@@ -87,3 +169,9 @@ tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
 | ZSMGEN001 | Invalid nesting of `SYNC_ONLY` directive                |
 | ZSMGEN002 | `SYNC_ONLY` mixed with other symbols in `#if` condition |
 | ZSMGEN003 | `SYNC_ONLY` used with `#elif`                           |
+| ZSMGEN004 | `Task.WhenAll` or `Task.WhenAny` has no sync equivalent |
+
+A new descriptor must also be listed in `AnalyzerReleases.Unshipped.md`, or
+`RS2000` fails the build. An error severity diagnostic suppresses the generated
+file for that method, which is usually what you want: emitting code known to be
+wrong is worse than emitting nothing.
