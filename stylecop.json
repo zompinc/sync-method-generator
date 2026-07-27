@@ -9,7 +9,6 @@
       "usingDirectivesPlacement": "outsideNamespace",
       "systemUsingDirectivesFirst": false
     },
-    "readabilityRules": {
-    }
+    "readabilityRules": {}
   }
 }

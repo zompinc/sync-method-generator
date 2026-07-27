@@ -5,4 +5,5 @@ fi
 
 EXIT_STATUS=0
 dotnet format --verify-no-changes Zomp.SyncMethodGenerator.slnx --exclude tests/Generator.Tests/Snapshots/*g.verified.cs -v $formatLevel whitespace || EXIT_STATUS=$?
+pnpm format:check || EXIT_STATUS=$?
 exit $EXIT_STATUS

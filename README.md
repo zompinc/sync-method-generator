@@ -26,7 +26,7 @@ Decorate your async method with `CreateSyncVersionAttribute` in your `partial` c
 
 ```cs
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
-static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, 
+static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream,
 CancellationToken ct)
     => await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
 ```
@@ -211,7 +211,7 @@ dotnet add package Zomp.SyncMethodGenerator
 
 This project is fully compatible with [act](https://github.com/nektos/act).
 
-Other than required packages to run `act` itself, GitHub Actions script installs anything else that might be missing, such as node, yarn and dotnet. On Windows platform, software installation is performed on the host itself due to [lack](https://github.com/nektos/act/issues/1608) of container support.
+Other than required packages to run `act` itself, GitHub Actions script installs anything else that might be missing, such as node, pnpm and dotnet. On Windows platform, software installation is performed on the host itself due to [lack](https://github.com/nektos/act/issues/1608) of container support.
 
 To build the project using act follow these instructions:
 

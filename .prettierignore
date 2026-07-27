@@ -1,0 +1,14 @@
+# Generated or vendored, and not ours to format.
+node_modules/
+artifacts/
+.store/
+**/bin/
+**/obj/
+pnpm-lock.yaml
+
+# Verified output of the generator, compared byte for byte.
+tests/Generator.Tests/Snapshots/
+
+# Written by the analyzer release tracking tooling in its own format.
+src/Zomp.SyncMethodGenerator/AnalyzerReleases.Shipped.md
+src/Zomp.SyncMethodGenerator/AnalyzerReleases.Unshipped.md

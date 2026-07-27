@@ -82,8 +82,8 @@ tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
 
 ## Diagnostics
 
-| ID | Description |
-|----|-------------|
-| ZSMGEN001 | Invalid nesting of `SYNC_ONLY` directive |
+| ID        | Description                                             |
+| --------- | ------------------------------------------------------- |
+| ZSMGEN001 | Invalid nesting of `SYNC_ONLY` directive                |
 | ZSMGEN002 | `SYNC_ONLY` mixed with other symbols in `#if` condition |
-| ZSMGEN003 | `SYNC_ONLY` used with `#elif` |
+| ZSMGEN003 | `SYNC_ONLY` used with `#elif`                           |

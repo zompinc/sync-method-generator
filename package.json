@@ -1,9 +1,13 @@
 {
   "devDependencies": {
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "prettier": "^3.9.6"
   },
   "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@11.17.0",
   "scripts": {
+    "format": "prettier --write \"**/*.{yml,yaml,json,md}\"",
+    "format:check": "prettier --check \"**/*.{yml,yaml,json,md}\"",
     "prepare": "husky"
   }
 }

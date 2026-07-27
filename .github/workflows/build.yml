@@ -39,7 +39,6 @@ jobs:
         id: prerequisite
         run: |
           echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
-          echo "need_yarn=$(command -v yarn >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
           echo "has_git_repo=$(git rev-parse --git-dir > /dev/null 2>&1 && echo 1 || echo 0)" >> $GITHUB_OUTPUT
 
       # Switch to https://github.com/actions/setup-node when it works
@@ -68,19 +67,12 @@ jobs:
         with:
           setAllVars: true
 
-      - name: Install yarn
-        run: |
-          npm install -g yarn
-          if [ "${{ runner.os }}" = "windows" ]
-          then
-            choco install yarn -y
-            echo "C:\Program Files (x86)\Yarn\bin" >> $GITHUB_PATH
-          else
-            npm install -g yarn
-          fi
-        if: ${{ steps.prerequisite.outputs.need_yarn == '1' }}
+      # Reads the version to install from the packageManager field of package.json.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        if: ${{ !env.ACT }}
 
-      - run: yarn install
+      - run: pnpm install --frozen-lockfile
 
       - name: "Run pre-commit hooks"
         run: bash $GITHUB_WORKSPACE/.husky/pre-commit normal
