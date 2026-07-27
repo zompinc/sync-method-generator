@@ -747,6 +747,17 @@ async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, int z)
 """.Verify();
 
     [Fact]
+    public Task ReportOverloadsWhichCollideWhenSynchronized() => """
+[CreateSyncVersion]
+async Task WriteAsync(int i, CancellationToken ct)
+    => await Task.CompletedTask;
+
+[CreateSyncVersion]
+async Task WriteAsync(int i)
+    => await Task.CompletedTask;
+""".Verify();
+
+    [Fact]
     public Task FindsASpan() => """
 class ClassThatReturnsMemoryAndSpan
 {
