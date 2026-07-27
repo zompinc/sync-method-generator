@@ -74,14 +74,7 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var collidingSignatures = methodDeclarations
             .Select(static (m, _) => m.Signature?.Key)
             .Collect()
-            .Select(static (keys, _) => new EquatableArray<string>(
-            [
-                .. keys
-                    .Where(static key => key is not null)
-                    .GroupBy(static key => key!, StringComparer.Ordinal)
-                    .Where(static group => group.Count() > 1)
-                    .Select(static group => group.Key),
-            ]));
+            .Select(static (keys, _) => ToCollidingSignatures(keys));
 
         context.RegisterSourceOutput(
             sourceTexts.Combine(collidingSignatures),
@@ -143,6 +136,27 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         return [];
 #else
         return ImmutableArray<TransformResult>.Empty;
+#endif
+    }
+
+    /// <summary>
+    /// Picks out the signatures produced by more than one method. Emitting all of them would
+    /// declare the same member twice.
+    /// </summary>
+    /// <param name="keys">Signature of every method being generated.</param>
+    /// <returns>The signatures which appear more than once.</returns>
+    private static EquatableArray<string> ToCollidingSignatures(ImmutableArray<string?> keys)
+    {
+        var colliding = keys
+            .Where(static key => key is not null)
+            .GroupBy(static key => key!, StringComparer.Ordinal)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key);
+
+#if ROSLYN_4_12_OR_GREATER
+        return new([.. colliding]);
+#else
+        return new(ImmutableArray.CreateRange(colliding));
 #endif
     }
 
