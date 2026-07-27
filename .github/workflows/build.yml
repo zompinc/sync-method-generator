@@ -236,10 +236,29 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
 
+      - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # gh infers the repo from this when no checkout is present
+        run: |
+          pkg=$(ls Zomp.SyncMethodGenerator.*.nupkg | head -1)
+          version=${pkg#Zomp.SyncMethodGenerator.}
+          version=${version%.nupkg}
+          gh release create "v$version" \
+            --target "$GITHUB_SHA" \
+            --title "v$version" \
+            --generate-notes \
+            ./*.nupkg
+
       # Accepting an upload is not the same as publishing it. NuGet validates the signature and
       # scans the package afterwards, and only then can anyone install it, so the push
-      # succeeding on its own says very little. Waiting here also keeps the tag and the release
-      # from pointing at a version which never became installable.
+      # succeeding on its own says very little.
+      #
+      # This runs last and gates nothing. The tag records which commit was built and the release
+      # carries the package as an asset, both of which hold whatever NuGet decides. Waiting first
+      # would mean that validation merely being slow, which is far more common than validation
+      # failing, left the package published with no tag and no release to go with it.
       - name: Wait for NuGet to finish validating
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: |
@@ -259,18 +278,3 @@ jobs:
 
           echo "::error::$version was accepted by NuGet but has not become available within 20 minutes. See https://www.nuget.org/packages/Zomp.SyncMethodGenerator/$version"
           exit 1
-
-      - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }} # gh infers the repo from this when no checkout is present
-        run: |
-          pkg=$(ls Zomp.SyncMethodGenerator.*.nupkg | head -1)
-          version=${pkg#Zomp.SyncMethodGenerator.}
-          version=${version%.nupkg}
-          gh release create "v$version" \
-            --target "$GITHUB_SHA" \
-            --title "v$version" \
-            --generate-notes \
-            ./*.nupkg
