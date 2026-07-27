@@ -81,7 +81,9 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          # Versions live in Directory.Packages.props, and which packages each project
+          # asks for lives in the project files. There are no lock files to hash.
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
       - name: Restore dependencies
