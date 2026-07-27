@@ -184,6 +184,15 @@ jobs:
           --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}" \
           -v normal
 
+      # Catches a signing step which quietly produced nothing usable, while the package can
+      # still be thrown away. Runs here rather than after publishing because Windows is where
+      # signature verification needs no extra setup.
+      - name: Verify signature
+        env:
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
+        if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+        run: dotnet nuget verify "${{ github.workspace }}/packages/"*.nupkg --all
+
       - name: Upload artifacts (.nupkg)
         uses: actions/upload-artifact@v5
         with:
@@ -226,6 +235,30 @@ jobs:
       - name: Push to NuGet
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
+
+      # Accepting an upload is not the same as publishing it. NuGet validates the signature and
+      # scans the package afterwards, and only then can anyone install it, so the push
+      # succeeding on its own says very little. Waiting here also keeps the tag and the release
+      # from pointing at a version which never became installable.
+      - name: Wait for NuGet to finish validating
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        run: |
+          pkg=$(ls Zomp.SyncMethodGenerator.*.nupkg | head -1)
+          version=${pkg#Zomp.SyncMethodGenerator.}
+          version=${version%.nupkg}
+          index=https://api.nuget.org/v3-flatcontainer/zomp.syncmethodgenerator/index.json
+
+          for _ in $(seq 1 40); do
+            if curl -s "$index" | grep -q "\"$version\""; then
+              echo "$version is available on NuGet"
+              exit 0
+            fi
+
+            sleep 30
+          done
+
+          echo "::error::$version was accepted by NuGet but has not become available within 20 minutes. See https://www.nuget.org/packages/Zomp.SyncMethodGenerator/$version"
+          exit 1
 
       - name: Create GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
