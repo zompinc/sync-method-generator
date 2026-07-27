@@ -1,0 +1,30 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: : (3,4)-(5,36),
+      Message: Cannot synchronize this overload. It produces 'Test.Class.Write(int)', which another overload in the same type also produces. Apply [SkipSyncVersion] to all but one of them.,
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN005,
+        Title: Overloads collide once synchronized,
+        MessageFormat: Cannot synchronize this overload. It produces '{0}', which another overload in the same type also produces. Apply [SkipSyncVersion] to all but one of them.,
+        Category: Usage,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: : (7,4)-(9,36),
+      Message: Cannot synchronize this overload. It produces 'Test.Class.Write(int)', which another overload in the same type also produces. Apply [SkipSyncVersion] to all but one of them.,
+      Severity: Error,
+      Descriptor: {
+        Id: ZSMGEN005,
+        Title: Overloads collide once synchronized,
+        MessageFormat: Cannot synchronize this overload. It produces '{0}', which another overload in the same type also produces. Apply [SkipSyncVersion] to all but one of them.,
+        Category: Usage,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

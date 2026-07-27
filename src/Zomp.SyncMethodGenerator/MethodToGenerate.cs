@@ -13,6 +13,7 @@
 /// <param name="DisableNullable">Disables nullable for the method.</param>
 /// <param name="Diagnostics">Diagnostics.</param>
 /// <param name="HasErrors">True if there are errors in <see cref="Diagnostics"/>.</param>
+/// <param name="Signature">Signature the synchronized method will be emitted with, used to detect colliding overloads.</param>
 internal sealed record MethodToGenerate(
     int Index,
     EquatableArray<string> Namespaces,
@@ -23,4 +24,5 @@ internal sealed record MethodToGenerate(
     string Implementation,
     bool DisableNullable,
     EquatableArray<ReportedDiagnostic> Diagnostics,
-    bool HasErrors);
+    bool HasErrors,
+    SynchronizedSignature? Signature);

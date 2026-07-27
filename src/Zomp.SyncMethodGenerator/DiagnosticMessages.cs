@@ -34,6 +34,14 @@ internal static class DiagnosticMessages
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    internal static readonly DiagnosticDescriptor CollidingOverloads = new(
+        id: "ZSMGEN005",
+        title: "Overloads collide once synchronized",
+        messageFormat: "Cannot synchronize this overload. It produces '{0}', which another overload in the same type also produces. Apply [SkipSyncVersion] to all but one of them.",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private const string Preprocessor = "Preprocessor";
 
     private const string Usage = "Usage";

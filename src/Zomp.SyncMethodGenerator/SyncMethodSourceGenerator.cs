@@ -69,13 +69,29 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             .Select(static (m, _) => GenerateSource(m))
             .WithTrackingName("GenerateSource");
 
+        // Signatures produced more than once. Emitting them all would declare the same member
+        // twice, so the methods behind them are reported instead of generated.
+        var collidingSignatures = methodDeclarations
+            .Select(static (m, _) => m.Signature?.Key)
+            .Collect()
+            .Select(static (keys, _) => ToCollidingSignatures(keys));
+
         context.RegisterSourceOutput(
-            sourceTexts,
-            static (spc, source) =>
+            sourceTexts.Combine(collidingSignatures),
+            static (spc, pair) =>
             {
+                var (source, colliding) = pair;
+
                 foreach (var diagnostic in source.MethodToGenerate.Diagnostics)
                 {
                     spc.ReportDiagnostic(diagnostic);
+                }
+
+                if (source.MethodToGenerate.Signature is { } signature
+                    && colliding.AsImmutableArray().Contains(signature.Key, StringComparer.Ordinal))
+                {
+                    spc.ReportDiagnostic(signature.ToCollisionDiagnostic());
+                    return;
                 }
 
                 if (!source.MethodToGenerate.HasErrors)
@@ -123,13 +139,40 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 #endif
     }
 
+    /// <summary>
+    /// Picks out the signatures produced by more than one method. Emitting all of them would
+    /// declare the same member twice.
+    /// </summary>
+    /// <param name="keys">Signature of every method being generated.</param>
+    /// <returns>The signatures which appear more than once.</returns>
+    private static EquatableArray<string> ToCollidingSignatures(ImmutableArray<string?> keys)
+    {
+        var colliding = keys
+            .Where(static key => key is not null)
+            .GroupBy(static key => key!, StringComparer.Ordinal)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key);
+
+#if ROSLYN_4_12_OR_GREATER
+        return new([.. colliding]);
+#else
+        return new(ImmutableArray.CreateRange(colliding));
+#endif
+    }
+
+    /// <summary>
+    /// Names a containing type, keeping its type parameters so that <c>Class</c>, <c>Class{T}</c>
+    /// and <c>Class{T,T2}</c> stay distinct.
+    /// </summary>
+    /// <param name="c">The containing type.</param>
+    /// <returns>The name.</returns>
+    private static string BuildClassName(MethodParentDeclaration c)
+        => c.TypeParameterListSyntax.IsEmpty
+            ? c.ParentName
+            : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
+
     private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
     {
-        static string BuildClassName(MethodParentDeclaration c)
-            => c.TypeParameterListSyntax.IsEmpty
-                ? c.ParentName
-                : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
-
         var scope = $"{string.Join(".", m.Namespaces)}" +
             $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
             (m.IsCSharp14Extension ? ".ext" : string.Empty);
@@ -355,9 +398,52 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 #else
         var isCSharp14Extension = false;
 #endif
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors);
+        var signature = BuildSignature(sn, namespaces, classes, methodDeclarationSyntax);
+
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors, signature);
 
         return result;
+    }
+
+    /// <summary>
+    /// Describes the method which is about to be emitted, precisely enough to tell whether two
+    /// of them would declare the same member. The rewritten declaration is used rather than the
+    /// original symbol, so the comparison sees exactly what the compiler will see - parameters
+    /// already dropped, types already substituted.
+    /// </summary>
+    /// <param name="rewritten">Result of rewriting the method.</param>
+    /// <param name="namespaces">Namespaces the method lives in.</param>
+    /// <param name="parents">Types the method is nested in.</param>
+    /// <param name="original">Method being synchronized, for the location to report against.</param>
+    /// <returns>The signature, or null when the rewritten method could not be located.</returns>
+    private static SynchronizedSignature? BuildSignature(
+        SyntaxNode rewritten,
+        ImmutableArray<string>.Builder namespaces,
+        ImmutableArray<MethodParentDeclaration>.Builder parents,
+        MethodDeclarationSyntax original)
+    {
+        var method = rewritten as MethodDeclarationSyntax
+            ?? rewritten.DescendantNodes().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+
+        if (method is null)
+        {
+            return null;
+        }
+
+        var scope = string.Join(".", namespaces.Concat(parents.Select(BuildClassName)));
+
+        // Arity by count rather than by name, since overloads which differ only in what they
+        // call their type parameters still declare the same member.
+        var arity = method.TypeParameterList?.Parameters.Count ?? 0;
+        var arityMarker = arity > 0 ? "`" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+
+        var parameters = string.Join(",", method.ParameterList.Parameters.Select(static p => p.Type?.ToString() ?? string.Empty));
+
+        var key = $"{scope}.{method.Identifier.ValueText}{arityMarker}({parameters})";
+
+        var location = original.GetLocation();
+
+        return new(key, location.SourceTree?.FilePath ?? string.Empty, location.SourceSpan, location.GetLineSpan().Span);
     }
 
     internal sealed record TransformResult(GeneratorAttributeSyntaxContext Context, MethodDeclarationSyntax Syntax);
