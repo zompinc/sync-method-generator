@@ -236,7 +236,13 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_PUSH_KEY }}
 
-      - name: Create GitHub Release
+      # Prepared but not announced. NuGet has accepted the upload at this point and nothing
+      # more; it still validates the signature and scans the package, and a package whose
+      # certificate is not registered with the account is rejected at that stage. Announcing a
+      # version which turns out to be uninstallable is worse than announcing it a few minutes
+      # later, and building the release now means a slow validation costs a single command
+      # rather than reconstructing the notes and assets by hand.
+      - name: Draft GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -246,19 +252,12 @@ jobs:
           version=${pkg#Zomp.SyncMethodGenerator.}
           version=${version%.nupkg}
           gh release create "v$version" \
+            --draft \
             --target "$GITHUB_SHA" \
             --title "v$version" \
             --generate-notes \
             ./*.nupkg
 
-      # Accepting an upload is not the same as publishing it. NuGet validates the signature and
-      # scans the package afterwards, and only then can anyone install it, so the push
-      # succeeding on its own says very little.
-      #
-      # This runs last and gates nothing. The tag records which commit was built and the release
-      # carries the package as an asset, both of which hold whatever NuGet decides. Waiting first
-      # would mean that validation merely being slow, which is far more common than validation
-      # failing, left the package published with no tag and no release to go with it.
       - name: Wait for NuGet to finish validating
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
         run: |
@@ -276,5 +275,18 @@ jobs:
             sleep 30
           done
 
-          echo "::error::$version was accepted by NuGet but has not become available within 20 minutes. See https://www.nuget.org/packages/Zomp.SyncMethodGenerator/$version"
+          echo "::error::$version was accepted by NuGet but has not become available within 20 minutes. The release is drafted and can be published once it appears. See https://www.nuget.org/packages/Zomp.SyncMethodGenerator/$version"
           exit 1
+
+      # The package is installable, so the release can be announced. This is also what creates
+      # the tag, which a draft release holds but does not push.
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pkg=$(ls Zomp.SyncMethodGenerator.*.nupkg | head -1)
+          version=${pkg#Zomp.SyncMethodGenerator.}
+          version=${version%.nupkg}
+          gh release edit "v$version" --draft=false
