@@ -26,7 +26,7 @@ Decorate your async method with `CreateSyncVersionAttribute` in your `partial` c
 
 ```cs
 [Zomp.SyncMethodGenerator.CreateSyncVersion]
-static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream, 
+static async Task WriteAsync(ReadOnlyMemory<byte> buffer, Stream stream,
 CancellationToken ct)
     => await stream.WriteAsync(buffer, ct).ConfigureAwait(true);
 ```

@@ -1,0 +1,3 @@
+# The repository is CRLF throughout and the analyzers enforce it for C#, so keep
+# Prettier from rewriting every line ending to its LF default.
+endOfLine: crlf
