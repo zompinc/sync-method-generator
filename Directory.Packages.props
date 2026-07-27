@@ -1,21 +1,19 @@
 <Project>
   <ItemGroup>
-    <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.9" />
-    <PackageVersion Include="coverlet.collector" Version="8.0.1" />
-    <PackageVersion Include="Fody" Version="6.6.4" />
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.6" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.10" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.202" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="[5.0.0]" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.6" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <!-- <PackageVersion Include="Microsoft.Net.Compilers.Toolset" Version="5.0.0" /> -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.202" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.301" />
     <PackageVersion Include="N.SourceGenerators.UnionTypes" Version="0.28.2" />
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.9.50" />
-    <PackageVersion Include="PolySharp" Version="1.15.0" />
+    <PackageVersion Include="PolySharp" Version="1.16.0" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
-    <PackageVersion Include="System.Runtime.Experimental" Version="6.0.2" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.5.0" />
     <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
     <PackageVersion Include="xunit" Version="2.9.3" />
