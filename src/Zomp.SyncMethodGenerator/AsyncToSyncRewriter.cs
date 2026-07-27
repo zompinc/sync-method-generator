@@ -606,6 +606,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var reducedFromExtensionMethod = methodSymbol.IsExtensionMethod ? methodSymbol.ReducedFrom : null;
 
+        // A member of an extension block is not a reduced extension method, so it arrives here
+        // in receiver form with nothing to unwrap it. Generated files carry no using directives,
+        // so leaving it that way emits a call which cannot bind. It can be invoked in static
+        // form through the class the extension block sits in, which is what unwrapping produces.
+        var extensionBlockContainer = GetExtensionBlockContainer(methodSymbol);
+
         // Handle non null conditional access expression eg. arr?.First()
         if (@base.Expression is MemberBindingExpressionSyntax
             && reducedFromExtensionMethod is not null
@@ -642,6 +648,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         if (methodSymbol is { IsTaskExtension: true, Name: not (MoveNextAsync or DisposeAsync) })
         {
             return KeepExpressionBeforeDot(memberAccess);
+        }
+
+        // Handle members of an extension block eg. entry.WriteToFile()
+        if (extensionBlockContainer is not null)
+        {
+            return UnwrapExtension(@base, changeMemoryToSpan, methodSymbol, memberAccess.Expression, extensionBlockContainer);
         }
 
         // Handle all other extension methods eg. arr.First()
@@ -1510,6 +1522,32 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     }
 
     /// <summary>
+    /// Finds the class an extension block sits in, for a method invoked on its receiver.
+    /// Returns null for anything else, including extension methods written the classic way,
+    /// which arrive already reduced and are unwrapped through their own path.
+    /// </summary>
+    /// <param name="methodSymbol">Method being invoked.</param>
+    /// <returns>The enclosing class, or null.</returns>
+    private static INamedTypeSymbol? GetExtensionBlockContainer(IMethodSymbol methodSymbol)
+    {
+#if ROSLYN_5_0_OR_GREATER
+        if (methodSymbol.IsStatic || methodSymbol.ContainingType?.ContainingType is not { } enclosing)
+        {
+            return null;
+        }
+
+        foreach (var reference in methodSymbol.ContainingType.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax() is ExtensionBlockDeclarationSyntax)
+            {
+                return enclosing;
+            }
+        }
+#endif
+        return null;
+    }
+
+    /// <summary>
     /// Checks for the task combinators, which wait on several operations at once. Synchronous
     /// code has no equivalent: the operations have already run to completion one by one.
     /// </summary>
@@ -1860,8 +1898,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return TryStripAsync(id.Identifier.ValueText, out var newName) ? newName : null;
     }
 
-    private InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool changeMemoryToSpan, IMethodSymbol reducedFrom, ExpressionSyntax expression)
+    private InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool changeMemoryToSpan, IMethodSymbol reducedFrom, ExpressionSyntax expression, INamedTypeSymbol? container = null)
     {
+        var containingType = container ?? reducedFrom.ContainingType;
+
         var arguments = ies.ArgumentList.Arguments;
         var separators = arguments.GetSeparators();
 
@@ -1878,15 +1918,15 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             .Select(semanticModel.Compilation.GetAssemblyOrModuleSymbol)
             .Append(semanticModel.Compilation.Assembly)
             .OfType<IAssemblySymbol>()
-            .Select(assemblySymbol => assemblySymbol.GetTypeByMetadataName(reducedFrom.ContainingType.ToString()))
+            .Select(assemblySymbol => assemblySymbol.GetTypeByMetadataName(containingType.ToString()))
             .OfType<INamedTypeSymbol>()
             .SelectMany(symbol => symbol.GetMembers(newName));
 
         // When the method is an AsyncEnumerable extension it must be converted to the corresponding Enumerable extension
         // regardless of the containing type featuring members with compatible names
-        var fullyQualifiedName = !reducedFrom.ContainingType.Name.Equals("AsyncEnumerable", StringComparison.Ordinal) && membersWithNewNameInContainingType.Any()
-            ? $"{reducedFrom.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{newName}"
-            : $"{MakeType(reducedFrom.ContainingType)}.{newName}";
+        var fullyQualifiedName = !containingType.Name.Equals("AsyncEnumerable", StringComparison.Ordinal) && membersWithNewNameInContainingType.Any()
+            ? $"{containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{newName}"
+            : $"{MakeType(containingType)}.{newName}";
 
         var es = (ies.Expression switch
         {
