@@ -149,7 +149,7 @@ jobs:
       # Pinned deliberately: the tool that signs the release should not change without
       # someone choosing to change it.
       - name: Install the signing tool
-        run: dotnet tool install --global SignUniversal.Cli --version 1.0.31-alpha
+        run: dotnet tool install --global SignUniversal.Cli --version 1.0.32
 
       - name: Sign
         env:
