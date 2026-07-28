@@ -18,6 +18,14 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
   - Large data from I/O which cannot be stored in memory before processing: Original async method
   - Small sample of data in memory, usually a sample of the larger data: Generated sync method
 
+## Used by
+
+- [FluentValidation](https://github.com/FluentValidation/FluentValidation) - validation library
+- [MiniExcel](https://github.com/mini-software/MiniExcel) - spreadsheet reader and writer
+- [SharpCompress](https://github.com/adamhathcock/sharpcompress) - compression library
+
+SharpCompress's [migration notes](https://github.com/adamhathcock/sharpcompress/blob/master/docs/SYNC_METHOD_GENERATION.md) are worth reading before adopting this in a codebase which already has both halves written by hand. They cover how to prove that a generated method is the one it replaces, and when attributing a method would add a member rather than remove a duplicate - a generated `Read(Span<byte>)` displaces the shim `Stream` provides, which is a change in behaviour rather than a deduplication.
+
 ## How it works
 
 ### CreateSyncVersionAttribute on a method
