@@ -212,4 +212,45 @@ public static partial class StreamExtensions
 }
 """.Verify(sourceType: SourceType.Full);
 #endif
+
+#if NET8_0_OR_GREATER
+    [Fact]
+    public Task CSharp_14_ExtensionUnwrapsOntoOneLine() => """
+namespace Helpers
+{
+    internal static partial class StreamExtensions
+    {
+        extension(Stream stream)
+        {
+            internal async Task DrainAsync(int size, CancellationToken cancellationToken = default)
+                => await stream.FlushAsync(cancellationToken);
+
+            internal void Drain(int size)
+            {
+            }
+        }
+    }
+}
+
+namespace Callers
+{
+    using Helpers;
+
+    public static partial class StreamCallers
+    {
+        extension(Stream stream)
+        {
+            [Zomp.SyncMethodGenerator.CreateSyncVersion]
+            public async Task DrainTwiceAsync(CancellationToken cancellationToken = default) =>
+                await stream
+                    .DrainAsync(
+                        1024,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+#endif
 }

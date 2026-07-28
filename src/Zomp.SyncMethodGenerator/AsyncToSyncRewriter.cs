@@ -1993,7 +1993,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         SyntaxToken[] newSeparators = arguments.Count < 1 ? []
             : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
 
-        var @as = Argument(expression.WithoutLeadingTrivia());
+        // The receiver becomes the first argument, so whatever separated it from the dot - a
+        // line break in a chained call - would otherwise land between it and the comma which
+        // now follows.
+        var @as = Argument(expression.WithoutTrivia());
         var newList = SeparatedList([@as, .. arguments], newSeparators);
 
         var newName = reducedFrom.Name;
