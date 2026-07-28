@@ -1484,11 +1484,28 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         => Regex.Replace(symbol.Name, Memory, Span);
 
     /// <summary>
-    /// Drops the invoked member and keeps the expression in front of the dot,
-    /// preserving the trivia surrounding the dot.
+    /// Drops the invoked member and keeps the expression in front of the dot.
     /// </summary>
+    /// <remarks>
+    /// Whatever separated the expression from the dot described the shape of a call which is no
+    /// longer there. When that is only whitespace - a line break before a chained
+    /// <c>ConfigureAwait</c>, say - it goes with the call, rather than being left in front of
+    /// whichever token now follows. Anything else was written by a person about the expression
+    /// which remains, so all of it is kept, including the whitespace which spaces it.
+    /// </remarks>
+    /// <param name="memberAccess">The member access to drop the member from.</param>
+    /// <returns>The expression in front of the dot.</returns>
     private static ExpressionSyntax KeepExpressionBeforeDot(MemberAccessExpressionSyntax memberAccess)
-        => memberAccess.Expression.WithTrailingTrivia(TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]));
+    {
+        var surrounding = TriviaList([.. memberAccess.Expression.GetTrailingTrivia(), .. memberAccess.OperatorToken.LeadingTrivia]);
+
+        var isOnlySpacing = surrounding.All(static t
+            => t.IsKind(SyntaxKind.WhitespaceTrivia) || t.IsKind(SyntaxKind.EndOfLineTrivia));
+
+        return isOnlySpacing
+            ? memberAccess.Expression.WithoutTrailingTrivia()
+            : memberAccess.Expression.WithTrailingTrivia(surrounding);
+    }
 
     private static string MakeType(ISymbol symbol)
         => symbol switch
@@ -2011,7 +2028,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // line break in a chained call - would otherwise land between it and the comma which
         // now follows.
         var @as = Argument(expression.WithoutTrivia());
-        var newList = SeparatedList([@as, .. arguments], newSeparators);
+
+        // The argument the receiver displaces is no longer the first thing on its line, so
+        // indentation which was written to place it at the start of one only leaves a gap after
+        // the comma. Indentation which still follows a line break is left alone.
+        List<ArgumentSyntax> newArguments = [.. arguments];
+        if (newArguments is [var displaced, ..]
+            && displaced.GetLeadingTrivia() is { Count: > 0 } leading
+            && leading.All(static t => t.IsKind(SyntaxKind.WhitespaceTrivia)))
+        {
+            newArguments[0] = displaced.WithoutLeadingTrivia();
+        }
+
+        var newList = SeparatedList([@as, .. newArguments], newSeparators);
 
         var newName = reducedFrom.Name;
         newName = changeMemoryToSpan ? ReplaceWithSpan(reducedFrom) : RemoveAsync(newName);
@@ -2038,9 +2067,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         })
             .WithLeadingTrivia(expression.GetLeadingTrivia());
 
+        // Keeping the original parentheses keeps the shape of the list between them: the break
+        // which follows the opening one and the indentation which precedes the closing one, in a
+        // list written across several lines. What trails the closing one described how the call
+        // sat in whatever contained it, which unwrapping has just changed, so it is dropped.
+        var argumentList = ies.ArgumentList
+            .WithArguments(newList)
+            .WithCloseParenToken(ies.ArgumentList.CloseParenToken.WithTrailingTrivia());
+
         return ies
             .WithExpression(es)
-            .WithArgumentList(ArgumentList(newList));
+            .WithArgumentList(argumentList);
     }
 
     private ExpressionSyntax AppendSpan(ExpressionSyntax @base)

@@ -10,7 +10,7 @@ namespace Callers
         extension(global::System.IO.Stream stream)
         {
             public void DrainTwice() =>
-                global::Helpers.StreamExtensions.Drain(stream,                         1024)                    ;
+                global::Helpers.StreamExtensions.Drain(stream, 1024);
         }
     }
 }
