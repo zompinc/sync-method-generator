@@ -20,9 +20,11 @@ This [.NET source generator](https://learn.microsoft.com/en-us/dotnet/csharp/ros
 
 ## Used by
 
-[SharpCompress](https://github.com/adamhathcock/sharpcompress), a compression library for .NET, generates its synchronous methods this way.
+- [FluentValidation](https://github.com/FluentValidation/FluentValidation) - validation library
+- [MiniExcel](https://github.com/mini-software/MiniExcel) - spreadsheet reader and writer
+- [SharpCompress](https://github.com/adamhathcock/sharpcompress) - compression library
 
-Its [migration notes](https://github.com/adamhathcock/sharpcompress/blob/master/docs/SYNC_METHOD_GENERATION.md) are worth reading before adopting this in a codebase which already has both halves written by hand. They cover how to prove that a generated method is the one it replaces, and when attributing a method would add a member rather than remove a duplicate - a generated `Read(Span<byte>)` displaces the shim `Stream` provides, which is a change in behaviour rather than a deduplication.
+SharpCompress's [migration notes](https://github.com/adamhathcock/sharpcompress/blob/master/docs/SYNC_METHOD_GENERATION.md) are worth reading before adopting this in a codebase which already has both halves written by hand. They cover how to prove that a generated method is the one it replaces, and when attributing a method would add a member rather than remove a duplicate - a generated `Read(Span<byte>)` displaces the shim `Stream` provides, which is a change in behaviour rather than a deduplication.
 
 ## How it works
 
