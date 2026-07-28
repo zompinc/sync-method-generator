@@ -415,6 +415,17 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var invalid = node.Parameters.GetIndices((v, i) => !IsValidParameter(v, i));
         var newParams = RemoveAtRange(newNode.Parameters, invalid);
 
+        // Whatever separates the last parameter from the closing parenthesis is trailing trivia
+        // of that parameter, so removing it takes the line break with it and leaves the
+        // parenthesis at the end of the line before. Hand that trivia to whichever parameter
+        // ends up last instead.
+        if (newParams.Count > 0
+            && invalid.Contains(node.Parameters.Count - 1)
+            && node.Parameters[^1].GetTrailingTrivia() is { Count: > 0 } trailing)
+        {
+            newParams = newParams.Replace(newParams[^1], newParams[^1].WithTrailingTrivia(trailing));
+        }
+
         var entries
             = modifications.OrderByDescending(z => z.Key).ToArray();
 
