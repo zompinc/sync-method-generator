@@ -853,6 +853,63 @@ public partial class Class
 }
 """.Verify(sourceType: SourceType.Full, documentationMode: DocumentationMode.None);
 
+    /// <summary>
+    /// A cref is resolved against the file it lands in, so the generated file needs the using
+    /// directives which were in scope where the documentation was written. Without them a
+    /// project building with warnings as errors fails on CS1574.
+    /// </summary>
+    /// <returns>A task.</returns>
+    [Fact]
+    public Task KeepUsingsSoDocumentationCrefsResolve() => """
+using System.Text;
+
+namespace Test
+{
+    using System.Net.Sockets;
+
+    public partial class Class
+    {
+        /// <summary>
+        /// Sends a <see cref="StringBuilder"/> over a <see cref="Socket"/>.
+        /// </summary>
+        /// <param name="input">Where to read from.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async Task SendAsync(Stream input, CancellationToken cancellationToken = default)
+            => await input.FlushAsync(cancellationToken);
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
+    /// <summary>
+    /// The task a method returned is not returned by its synchronized version, so documentation
+    /// describing that task describes nothing. Documentation of a value which survives stays.
+    /// </summary>
+    /// <returns>A task.</returns>
+    [Fact]
+    public Task DropReturnsDocumentationWhenNothingIsReturned() => """
+/// <summary>
+/// Reads a value.
+/// </summary>
+/// <param name="input">Where to read from.</param>
+/// <returns>A <see cref="Task"/> that represents the asynchronous read.</returns>
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task ReadAsync(Stream input)
+    => await input.FlushAsync();
+
+/// <summary>
+/// Counts the values.
+/// </summary>
+/// <param name="input">Where to read from.</param>
+/// <returns>A <see cref="Task"/> whose result is the number of values.</returns>
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task<int> CountAsync(Stream input)
+{
+    await input.FlushAsync();
+    return 0;
+}
+""".Verify();
+
     [Fact]
     public Task VerifyParamHandling() => $$"""
 static byte[] HelperMethod(params int[] myParams) => null;
