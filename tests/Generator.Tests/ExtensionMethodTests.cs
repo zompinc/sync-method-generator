@@ -253,4 +253,51 @@ namespace Callers
 }
 """.Verify(sourceType: SourceType.Full);
 #endif
+
+#if NET8_0_OR_GREATER
+    [Fact]
+    public Task CSharp_14_ExtensionKeepsRemainingArgumentsOnTheirLines() => """
+namespace Helpers
+{
+    internal static partial class StreamExtensions
+    {
+        extension(Stream stream)
+        {
+            internal async Task WriteToAsync(Stream destination, int size, IProgress<int>? progress = null, CancellationToken cancellationToken = default)
+                => await stream.FlushAsync(cancellationToken);
+
+            internal void WriteTo(Stream destination, int size, IProgress<int>? progress = null)
+            {
+            }
+        }
+    }
+}
+
+namespace Callers
+{
+    using Helpers;
+
+    public static partial class StreamCallers
+    {
+        extension(Stream stream)
+        {
+            [Zomp.SyncMethodGenerator.CreateSyncVersion(PreserveProgress = true)]
+            public async Task CopyAsync(
+                Stream destination,
+                IProgress<int>? progress = null,
+                CancellationToken cancellationToken = default
+            ) =>
+                await stream
+                    .WriteToAsync(
+                        destination,
+                        4096,
+                        progress: progress,
+                        cancellationToken: cancellationToken
+                    )
+                    .ConfigureAwait(false);
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+#endif
 }
