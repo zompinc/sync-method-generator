@@ -372,6 +372,15 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var isNamespaceFileScoped = false;
         var namespaces = ImmutableArray.CreateBuilder<string>();
 
+        // Documentation comments are copied across verbatim, and a cref in one is resolved
+        // against the file it lands in rather than the file it was written in. Without the
+        // using directives which were in scope where it was written, every cref which relied on
+        // one goes unresolved, which a project building with warnings as errors reads as a
+        // build failure. The directives are kept on the side of the namespace they were
+        // declared on, since one declared inside a namespace may name it only relatively.
+        var outerUsings = ImmutableArray.CreateBuilder<string>();
+        var innerUsings = ImmutableArray.CreateBuilder<string>();
+
         if (!hasErrors)
         {
             while (node is not null and not CompilationUnitSyntax)
@@ -380,9 +389,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 {
                     case NamespaceDeclarationSyntax nds:
                         namespaces.Insert(0, nds.Name.ToString());
+                        InsertUsings(innerUsings, nds.Usings);
                         break;
                     case FileScopedNamespaceDeclarationSyntax file:
                         namespaces.Add(file.Name.ToString());
+                        InsertUsings(innerUsings, file.Usings);
                         isNamespaceFileScoped = true;
                         break;
                     default:
@@ -390,6 +401,11 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 }
 
                 node = node.Parent;
+            }
+
+            if (node is CompilationUnitSyntax compilationUnit)
+            {
+                InsertUsings(outerUsings, compilationUnit.Usings);
             }
         }
 
@@ -400,9 +416,24 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
 #endif
         var signature = BuildSignature(sn, namespaces, classes, methodDeclarationSyntax);
 
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors, signature);
+        var result = new MethodToGenerate(index, namespaces.ToImmutable(), outerUsings.ToImmutable(), innerUsings.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors, signature);
 
         return result;
+    }
+
+    /// <summary>
+    /// Records the directives, innermost first, so that walking outwards from the method builds
+    /// them up in the order they were written.
+    /// </summary>
+    /// <param name="destination">Collected directives.</param>
+    /// <param name="usings">Directives declared at one level.</param>
+    private static void InsertUsings(ImmutableArray<string>.Builder destination, SyntaxList<UsingDirectiveSyntax> usings)
+    {
+        var index = 0;
+        foreach (var @using in usings)
+        {
+            destination.Insert(index++, @using.ToString());
+        }
     }
 
     /// <summary>

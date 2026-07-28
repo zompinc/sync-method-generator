@@ -3,6 +3,8 @@
 #nullable enable
 namespace Callers
 {
+    using Helpers;
+
     public static partial class StreamCallers
     {
         extension(global::System.IO.Stream stream)

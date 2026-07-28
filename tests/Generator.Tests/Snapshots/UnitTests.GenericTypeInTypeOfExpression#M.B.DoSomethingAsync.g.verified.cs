@@ -3,6 +3,8 @@
 #nullable enable
 namespace M
 {
+    using N;
+
     public partial class B
     {
         public void DoSomething()
