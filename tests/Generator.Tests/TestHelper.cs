@@ -53,10 +53,16 @@ global using global::Zomp.SyncMethodGenerator;
         bool disableUnique = false,
         SourceType sourceType = SourceType.ClassBody,
         LanguageVersion languageVersion = LanguageVersion.Preview,
+        DocumentationMode documentationMode = DocumentationMode.Parse,
         params object?[] parameters)
     {
+        // A project which does not produce an XML documentation file compiles with
+        // DocumentationMode.None, and its documentation comments are then ordinary comment
+        // trivia rather than the structured kind. The default here parses them, so a test has
+        // to ask for None to see what those projects see.
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(languageVersion)
+            .WithDocumentationMode(documentationMode)
             .WithPreprocessorSymbols(PreprocessorSymbols);
 
         if (sourceType != SourceType.Full)

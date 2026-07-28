@@ -829,6 +829,30 @@ if (true)
 #endif
 """.Verify(sourceType: SourceType.MethodBody);
 
+    /// <summary>
+    /// A project which produces no XML documentation file compiles with
+    /// <see cref="DocumentationMode.None"/>, which leaves documentation comments unstructured.
+    /// The documentation of a removed parameter must still be dropped.
+    /// </summary>
+    /// <returns>A task.</returns>
+    [Fact]
+    public Task DropDocsOfRemovedParametersWithoutDocumentationFile() => """
+namespace Test;
+
+public partial class Class
+{
+    /// <summary>
+    /// Reads a value.
+    /// </summary>
+    /// <param name="input">Where to read from.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task.</returns>
+    [Zomp.SyncMethodGenerator.CreateSyncVersion]
+    public async Task ReadAsync(Stream input, CancellationToken cancellationToken = default)
+        => await input.FlushAsync(cancellationToken);
+}
+""".Verify(sourceType: SourceType.Full, documentationMode: DocumentationMode.None);
+
     [Fact]
     public Task VerifyParamHandling() => $$"""
 static byte[] HelperMethod(params int[] myParams) => null;

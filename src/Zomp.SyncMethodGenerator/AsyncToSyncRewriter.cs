@@ -992,6 +992,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var newTrivia = Trivia(comment);
             newTriviaList = trivia.Replace(comments, newTrivia);
         }
+        else
+        {
+            newTriviaList = RemoveParameterDocumentationLines(trivia, removedParameters);
+        }
 
         static bool Preprocessors(SyntaxTrivia st)
             => st.IsKind(SyntaxKind.IfDirectiveTrivia)
@@ -1530,6 +1534,76 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 separatedItems = separatedItems.Insert(index, pRemoveEndIf);
             }
         }
+    }
+
+    /// <summary>
+    /// Drops the documentation of parameters which were removed, working on the comment text
+    /// rather than on a parsed documentation comment.
+    /// </summary>
+    /// <remarks>
+    /// A project which produces no XML documentation file compiles with
+    /// <see cref="DocumentationMode.None"/>, and its documentation comments are then ordinary
+    /// comment trivia. There is nothing to walk in that case, so the lines are matched as text.
+    /// A <c>param</c> element split across several lines is left alone.
+    /// </remarks>
+    /// <param name="trivia">Leading trivia of the method.</param>
+    /// <param name="removedParameters">Parameters which the synchronized method does not take.</param>
+    /// <returns>The trivia without the documentation of removed parameters.</returns>
+    private static SyntaxTriviaList RemoveParameterDocumentationLines(SyntaxTriviaList trivia, HashSet<IParameterSymbol> removedParameters)
+    {
+        if (removedParameters.Count == 0)
+        {
+            return trivia;
+        }
+
+        var kept = new List<SyntaxTrivia>();
+
+        for (var i = 0; i < trivia.Count; ++i)
+        {
+            var current = trivia[i];
+
+            if (current.IsKind(SyntaxKind.SingleLineCommentTrivia) && DocumentsRemovedParameter(current.ToString(), removedParameters))
+            {
+                // The indent belongs to the line being dropped, and so does the break which ends it.
+                if (kept.Count > 0 && kept[^1].IsKind(SyntaxKind.WhitespaceTrivia))
+                {
+                    kept.RemoveAt(kept.Count - 1);
+                }
+
+                if (i + 1 < trivia.Count && trivia[i + 1].IsKind(SyntaxKind.EndOfLineTrivia))
+                {
+                    ++i;
+                }
+
+                continue;
+            }
+
+            kept.Add(current);
+        }
+
+        return TriviaList(kept);
+    }
+
+    private static bool DocumentsRemovedParameter(string commentText, HashSet<IParameterSymbol> removedParameters)
+    {
+        var match = Regex.Match(commentText, @"^\s*///\s*<param\s+name\s*=\s*""([^""]+)""");
+
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var name = match.Groups[1].Value;
+
+        foreach (var parameter in removedParameters)
+        {
+            if (string.Equals(parameter.Name, name, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
