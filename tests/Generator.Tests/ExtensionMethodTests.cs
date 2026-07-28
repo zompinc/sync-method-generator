@@ -185,4 +185,31 @@ namespace Callers
 }
 """.Verify(sourceType: SourceType.Full);
 #endif
+
+#if NET8_0_OR_GREATER
+    [Fact]
+    public Task CSharp_14_ExtensionKeepsParameterListFormatting() => """
+namespace Tests;
+
+public static partial class StreamExtensions
+{
+    /// <param name="stream">The stream to copy from.</param>
+    extension(Stream stream)
+    {
+        /// <summary>
+        /// Copies the stream.
+        /// </summary>
+        /// <param name="destination">Where to copy to.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <param name="progress">Progress reporter.</param>
+        [Zomp.SyncMethodGenerator.CreateSyncVersion(PreserveProgress = true)]
+        public async Task CopyAsync(
+            Stream destination,
+            IProgress<int>? progress = null,
+            CancellationToken cancellationToken = default
+        ) => await stream.CopyToAsync(destination, cancellationToken);
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+#endif
 }
