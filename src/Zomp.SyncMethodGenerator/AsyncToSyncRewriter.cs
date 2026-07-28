@@ -957,6 +957,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var originalName = @base.Identifier.Text;
         var newName = RemoveAsync(originalName);
 
+        // A method which returned a task returns nothing once it is synchronized, so whatever
+        // its documentation said about the task it returned no longer describes anything. The
+        // documentation of a value which survives is left alone: it is imprecise about the task
+        // it mentions, but dropping it would say less than saying it imprecisely.
+        var returnsNothing = GetReturnType(@base.ReturnType, symbol)
+            is PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.VoidKeyword }
+            or IdentifierNameSyntax { Identifier.ValueText: "void" };
+
         // Documentation
         var trivia = node.GetLeadingTrivia();
         var newTriviaList = trivia;
@@ -978,6 +986,12 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                     if (attribute is not null
                         && GetSymbol(attribute.Identifier) is IParameterSymbol paramSymbol
                         && removedParameters.Contains(paramSymbol))
+                    {
+                        indicesToRemove.Add(i - 1); // preceding slashes
+                        indicesToRemove.Add(i);
+                    }
+                    else if (returnsNothing
+                        && xes.StartTag.Name.LocalName.ValueText.Equals("returns", StringComparison.Ordinal))
                     {
                         indicesToRemove.Add(i - 1); // preceding slashes
                         indicesToRemove.Add(i);

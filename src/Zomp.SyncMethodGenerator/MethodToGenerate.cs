@@ -5,6 +5,8 @@
 /// </summary>
 /// <param name="Index">Index of the method in the source file.</param>
 /// <param name="Namespaces">List of namespaces this method is under.</param>
+/// <param name="OuterUsings">Using directives the source file declares outside its namespace.</param>
+/// <param name="InnerUsings">Using directives the source file declares inside its namespace.</param>
 /// <param name="IsNamespaceFileScoped">True if namespace is file scoped.</param>
 /// <param name="IsCSharp14Extension">True if this is C# 14 extension.</param>
 /// <param name="Parents">List of classes/structs/records this method belongs to starting from the outer-most class.</param>
@@ -17,6 +19,8 @@
 internal sealed record MethodToGenerate(
     int Index,
     EquatableArray<string> Namespaces,
+    EquatableArray<string> OuterUsings,
+    EquatableArray<string> InnerUsings,
     bool IsNamespaceFileScoped,
     bool IsCSharp14Extension,
     EquatableArray<MethodParentDeclaration> Parents,
