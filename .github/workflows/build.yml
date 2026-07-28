@@ -128,40 +128,17 @@ jobs:
     # Skip for outside contributors: fork PRs have no access to signing/publish
     # secrets, so the release pipeline can't do anything useful for them.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Set path for nektos/act
-        if: ${{ runner.os == 'Windows' && env.ACT }}
-        run: echo "C:\Program Files\Git\bin" >> $GITHUB_PATH
-        shell: '"C:\Program Files\Git\bin\bash.exe" -c {0}'
-
-      - name: "Determine prerequisites"
-        id: prerequisite
-        run: |
-          echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_OUTPUT
-
       - name: Setup .NET
-        if: ${{ runner.os != 'Windows' || !env.ACT }}
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
             10.0.x
-
-      - name: Install node
-        if: ${{ steps.prerequisite.outputs.need_node == '1' }}
-        run: |
-          if [ "${{ runner.os }}" = "windows" ]
-          then
-            choco install nodejs -y
-            echo "C:\Program Files\nodejs" >> $GITHUB_PATH
-          else
-            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&\
-            apt-get install -y nodejs
-          fi
 
       - name: Download Package artifact
         uses: actions/download-artifact@v5
@@ -169,29 +146,39 @@ jobs:
           name: packages
           path: packages
 
+      # Pinned deliberately: the tool that signs the release should not change without
+      # someone choosing to change it.
+      - name: Install the signing tool
+        run: dotnet tool install --global SignUniversal --version 1.0.26-alpha
+
       - name: Sign
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
         if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+        # --trust-signing-root is required on Linux and its absence is not obvious. Trusted
+        # Signing issues from Microsoft Identity Verification Root CA 2020, which Linux trust
+        # stores do not carry, and NuGet refuses to sign against a chain it cannot build:
+        # without the flag this step fails with only "Certificate chain validation failed".
+        # The root is installed for this user alone, from the chain the signing service
+        # itself returned.
         run: |
-          dotnet dnx --prerelease --yes sign code trusted-signing \
-          --base-directory "${{ github.workspace }}/packages" \
-          "*.nupkg" \
-          --trusted-signing-endpoint "${{ secrets.TRUSTED_SIGNING_ENDPOINT }}" \
-          --trusted-signing-account "${{ secrets.TRUSTED_SIGNING_ACCOUNT }}" \
-          --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}" \
-          -v normal
+          sign-universal sign packages/*.nupkg --trust-signing-root \
+            --trusted-signing-endpoint "${{ secrets.TRUSTED_SIGNING_ENDPOINT }}" \
+            --trusted-signing-account "${{ secrets.TRUSTED_SIGNING_ACCOUNT }}" \
+            --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}"
 
       # Catches a signing step which quietly produced nothing usable, while the package can
-      # still be thrown away. Runs here rather than after publishing because Windows is where
-      # signature verification needs no extra setup.
+      # still be thrown away. dotnet nuget verify is cross-platform, so this needs nothing
+      # Windows-specific: a real Trusted Signing certificate chains to a root in NuGet's own
+      # bundle, so anything short of a clean pass means nobody downstream could validate the
+      # package either.
       - name: Verify signature
         env:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
         if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
-        run: dotnet nuget verify "${{ github.workspace }}/packages/"*.nupkg --all
+        run: dotnet nuget verify packages/*.nupkg --all
 
       - name: Upload artifacts (.nupkg)
         uses: actions/upload-artifact@v5
