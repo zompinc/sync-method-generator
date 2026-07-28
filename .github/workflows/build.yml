@@ -146,17 +146,14 @@ jobs:
           name: packages
           path: packages
 
-      # Pinned deliberately: the tool that signs the release should not change without
-      # someone choosing to change it.
-      - name: Install the signing tool
-        run: dotnet tool install --global SignUniversal.Cli --version 1.0.32
-
       - name: Sign
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNER_CLIENT_SECRET }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNER_CLIENT_ID }}
         if: ${{ env.AZURE_CLIENT_SECRET != '' && github.ref == 'refs/heads/master' }}
+        # dnx runs the tool without installing it. The version stays pinned: the thing
+        # signing the release should not change without someone choosing to change it.
         # --trust-signing-root is required on Linux and its absence is not obvious. Trusted
         # Signing issues from Microsoft Identity Verification Root CA 2020, which Linux trust
         # stores do not carry, and NuGet refuses to sign against a chain it cannot build:
@@ -164,7 +161,7 @@ jobs:
         # The root is installed for this user alone, from the chain the signing service
         # itself returned.
         run: |
-          sign-universal sign packages/*.nupkg --trust-signing-root \
+          dotnet dnx SignUniversal.Cli@1.0.34 --yes sign packages/*.nupkg --trust-signing-root \
             --trusted-signing-endpoint "${{ secrets.TRUSTED_SIGNING_ENDPOINT }}" \
             --trusted-signing-account "${{ secrets.TRUSTED_SIGNING_ACCOUNT }}" \
             --trusted-signing-certificate-profile "${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}"
