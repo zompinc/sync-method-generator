@@ -13,9 +13,9 @@ namespace Callers
                 global::System.IO.Stream destination,
                 global::System.IProgress<int>? progress = null
             ) =>
-                global::Helpers.StreamExtensions.WriteTo(stream,                         destination,
+                global::Helpers.StreamExtensions.WriteTo(stream, destination,
                         4096,
-                        progress: progress)                    ;
+                        progress: progress);
         }
     }
 }
