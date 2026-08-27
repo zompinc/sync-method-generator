@@ -215,7 +215,7 @@ public static partial class StreamExtensions
 
 #if NET8_0_OR_GREATER
     [Fact]
-    public Task CSharp_14_ExtensionUnwrapsOntoOneLine() => """
+    public Task CSharp_14_ExtensionDropsTheChainBreakAfterTheReceiver() => """
 namespace Helpers
 {
     internal static partial class StreamExtensions
