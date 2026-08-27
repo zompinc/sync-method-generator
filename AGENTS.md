@@ -31,6 +31,17 @@ remove the limit.
 Consumers installing the Claude Code plugin are unaffected, the documented
 install command using a sparse checkout which never touches the snapshots.
 
+## Claude Code plugin
+
+`.claude/settings.json` declares this repository as a plugin marketplace and
+enables the `sync-method-generator` plugin at project scope, so Claude Code
+offers the skill to anyone working here. The skill lives in
+`plugins/sync-method-generator/skills/sync-from-async` and is the same one
+consumers install; editing it and reloading is how to try a change.
+
+Declining the plugin costs nothing. It contributes a skill and no hooks, agents
+or MCP servers.
+
 ## Build & Test
 
 ```bash
