@@ -214,9 +214,11 @@ dotnet add package Zomp.SyncMethodGenerator
 This repository is also a [Claude Code](https://claude.com/claude-code) marketplace. Installing the plugin teaches the agent to reach for this generator when it finds itself writing or maintaining both halves of a sync/async pair, rather than duplicating the method by hand.
 
 ```sh
-claude plugin marketplace add zompinc/sync-method-generator
+claude plugin marketplace add zompinc/sync-method-generator --sparse .claude-plugin plugins
 claude plugin install sync-method-generator@zomp
 ```
+
+`--sparse` checks out only the two directories the marketplace needs. It is worth passing everywhere for the smaller clone, and is required on Windows, where the snapshot file names under `tests/Generator.Tests/Snapshots` carry a full checkout past the 260 character path limit.
 
 The plugin ships a single skill covering setup, the attribute options, the transformation table, and how to verify that a generated method is the hand-written one it replaces.
 
