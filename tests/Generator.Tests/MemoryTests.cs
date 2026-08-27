@@ -4,6 +4,34 @@ public class MemoryTests
 {
 #if NETCOREAPP1_0_OR_GREATER
     [Fact]
+    public Task AsyncIteratorWithMemory()
+        => """
+    [CreateSyncVersion]
+    public static async IAsyncEnumerable<int> Foo(
+        IAsyncEnumerable<ReadOnlyMemory<bool>> input,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ReadOnlyMemory<bool> prev = default;
+        var hasPrev = false;
+
+        await foreach (var col in input.WithCancellation(ct))
+        {
+            if (hasPrev)
+            {
+                Helper(prev, col);
+            }
+
+            prev = col;
+            hasPrev = true;
+
+            yield return 1;
+        }
+    }
+
+    private static void Helper(ReadOnlyMemory<bool> a, ReadOnlyMemory<bool> b) { }
+    """.Verify();
+
+    [Fact]
     public Task MemoryToSpan() => """
 [CreateSyncVersion]
 private async Task ReadAsMemoryAsync(Stream stream, byte[] sampleBytes, CancellationToken ct = default)
