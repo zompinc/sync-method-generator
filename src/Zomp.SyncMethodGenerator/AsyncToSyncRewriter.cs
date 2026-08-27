@@ -1159,9 +1159,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (invalid.Contains(node.Arguments.Count - 1))
         {
-            retval = retval
-                .WithCloseParenToken(@base.CloseParenToken.WithLeadingTrivia())
-                .WithOpenParenToken(@base.OpenParenToken.WithTrailingTrivia());
+            retval = retval.WithCloseParenToken(@base.CloseParenToken.WithLeadingTrivia());
+
+            // The newline which followed the opening parenthesis belongs to whichever argument
+            // now comes first, so it only goes when nothing is left to put on that line.
+            if (newParams.Count == 0)
+            {
+                retval = retval.WithOpenParenToken(@base.OpenParenToken.WithTrailingTrivia());
+            }
         }
 
         return retval;
@@ -2021,23 +2026,40 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var arguments = ies.ArgumentList.Arguments;
         var separators = arguments.GetSeparators();
 
+        // A list broken after its opening parenthesis gives each argument a line of its own. The
+        // receiver is about to become the first of them, so it wants the line the argument it
+        // displaces was starting, rather than the one the parenthesis is on.
+        var lineBreak = ies.ArgumentList.OpenParenToken.TrailingTrivia
+            .LastOrDefault(static t => t.IsKind(SyntaxKind.EndOfLineTrivia));
+        var brokenAfterOpenParen = lineBreak != default;
+
         SyntaxToken[] newSeparators = arguments.Count < 1 ? []
-            : [Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
+            : [brokenAfterOpenParen
+                ? Token(SyntaxKind.CommaToken).WithTrailingTrivia(lineBreak)
+                : Token(SyntaxKind.CommaToken).AppendSpace(), .. separators];
 
         // The receiver becomes the first argument, so whatever separated it from the dot - a
         // line break in a chained call - would otherwise land between it and the comma which
         // now follows.
         var @as = Argument(expression.WithoutTrivia());
 
-        // The argument the receiver displaces is no longer the first thing on its line, so
-        // indentation which was written to place it at the start of one only leaves a gap after
-        // the comma. Indentation which still follows a line break is left alone.
+        // The argument the receiver displaces either keeps the line it was starting, in which
+        // case the receiver takes its indentation and the comma between them takes the break, or
+        // it no longer starts one, in which case indentation written to place it at the start of
+        // a line only leaves a gap after the comma.
         List<ArgumentSyntax> newArguments = [.. arguments];
         if (newArguments is [var displaced, ..]
             && displaced.GetLeadingTrivia() is { Count: > 0 } leading
             && leading.All(static t => t.IsKind(SyntaxKind.WhitespaceTrivia)))
         {
-            newArguments[0] = displaced.WithoutLeadingTrivia();
+            if (brokenAfterOpenParen)
+            {
+                @as = @as.WithLeadingTrivia(leading);
+            }
+            else
+            {
+                newArguments[0] = displaced.WithoutLeadingTrivia();
+            }
         }
 
         var newList = SeparatedList([@as, .. newArguments], newSeparators);
