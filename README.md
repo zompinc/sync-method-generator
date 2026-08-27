@@ -215,7 +215,7 @@ This repository is also a [Claude Code](https://claude.com/claude-code) marketpl
 
 ```sh
 claude plugin marketplace add zompinc/sync-method-generator
-claude plugin install sync-method-generator@sync-method-generator
+claude plugin install sync-method-generator@zomp
 ```
 
 The plugin ships a single skill covering setup, the attribute options, the transformation table, and how to verify that a generated method is the hand-written one it replaces.
