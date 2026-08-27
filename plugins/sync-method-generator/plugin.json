@@ -1,0 +1,12 @@
+{
+  "name": "sync-method-generator",
+  "version": "0.1.0",
+  "description": "Generate the sync half of a C# sync/async method pair with Zomp.SyncMethodGenerator instead of hand-maintaining both",
+  "author": {
+    "name": "Zomp"
+  },
+  "homepage": "https://github.com/zompinc/sync-method-generator",
+  "license": "MIT",
+  "keywords": ["dotnet", "csharp", "async", "source-generator", "roslyn"],
+  "skills": "./skills"
+}
