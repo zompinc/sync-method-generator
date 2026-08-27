@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "zomp": {
+      "source": {
+        "source": "github",
+        "repo": "zompinc/sync-method-generator",
+        "sparsePaths": [".claude-plugin", "plugins"]
+      }
+    }
+  },
+  "enabledPlugins": {
+    "sync-method-generator@zomp": true
+  }
+}
