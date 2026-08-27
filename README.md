@@ -224,6 +224,12 @@ The plugin ships a single skill covering setup, the attribute options, the trans
 
 ## Development
 
+Clone with `core.longpaths` enabled on Windows - the snapshot file names are long enough that a checkout otherwise fails partway through:
+
+```sh
+git clone -c core.longpaths=true https://github.com/zompinc/sync-method-generator.git
+```
+
 ### Related projects
 
 - [SyncToAsyncExtension](https://marketplace.visualstudio.com/items?itemName=lsoft.SyncToAsyncExtension) - Allows switching between sync and async versions of a method. Very useful in development of this library.
