@@ -1,0 +1,15 @@
+{
+  "name": "zomp",
+  "description": "Zomp's Claude Code plugins. Currently skills for Zomp.SyncMethodGenerator, the .NET source generator which writes the sync half of a sync/async method pair",
+  "owner": {
+    "name": "Zomp"
+  },
+  "plugins": [
+    {
+      "name": "sync-method-generator",
+      "source": "./plugins/sync-method-generator",
+      "description": "Generate the sync half of a C# sync/async method pair with Zomp.SyncMethodGenerator instead of hand-maintaining both",
+      "version": "0.1.0"
+    }
+  ]
+}
