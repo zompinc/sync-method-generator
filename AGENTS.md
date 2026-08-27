@@ -2,6 +2,35 @@
 
 See README.md for project overview and consumer API.
 
+## Cloning on Windows
+
+The snapshot file names under `tests/Generator.Tests/Snapshots` run to 199
+characters, which carries a checkout past the 260 character Windows path limit
+unless the clone root is unusually shallow. Git reports `Filename too long` for
+each one, then `fatal: unable to checkout working tree`, and leaves a
+repository with most of its files missing rather than an obvious failure.
+
+```sh
+git clone -c core.longpaths=true https://github.com/zompinc/sync-method-generator.git
+```
+
+`-c` applies the setting to this clone alone. Setting it globally is worth
+doing on any Windows machine which builds .NET repositories, snapshot testing
+being common enough that this is not the last repository to hit it:
+
+```sh
+git config --global core.longpaths true
+```
+
+The length is mostly intrinsic rather than careless. The generator caps its own
+generated file names at 100 characters, and Verify prefixes each snapshot with
+the test class and method names, which puts the floor near 155 before any
+particular test is named. Renaming tests buys tens of characters; it does not
+remove the limit.
+
+Consumers installing the Claude Code plugin are unaffected, the documented
+install command using a sparse checkout which never touches the snapshots.
+
 ## Build & Test
 
 ```bash
