@@ -28,4 +28,21 @@ public async Task CallProgressMethodAsync()
     await ProgressMethodAsync(progress: null);
 }
 """.Verify();
+
+    [Fact]
+    public Task KeepLineBreaksWhenTheLastArgumentIsDropped() => """
+public void ProgressMethod(int p1, int p2) { }
+
+public async Task ProgressMethodAsync(int p1, int p2, CancellationToken cancellationToken) => await Task.CompletedTask;
+
+[Zomp.SyncMethodGenerator.CreateSyncVersion]
+public async Task CallProgressMethodAsync(CancellationToken cancellationToken)
+{
+    await ProgressMethodAsync(
+        1,
+        2,
+        cancellationToken
+    );
+}
+""".Verify();
 }
