@@ -55,6 +55,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The tests clone methods through the Cloning layer directly -->
+    <InternalsVisibleTo Include="Generator.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
   </ItemGroup>
 </Project>

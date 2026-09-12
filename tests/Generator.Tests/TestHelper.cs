@@ -134,6 +134,8 @@ namespace Test;
                 "Compilation errors:\n" + string.Join("\n", diagnostics.Select(d => d.ToString())));
         }
 
+        EnsureIdentityClonesCompile(compilation, parseOptions);
+
         var target = new RunResultWithIgnoreList
         {
             Result = driver.GetRunResult(),
@@ -175,6 +177,51 @@ namespace Test;
 #endif
         var linesWithIndentation = string.Join("\r\n", lines.Select(func));
         return linesWithIndentation;
+    }
+
+    /// <summary>
+    /// Clones every method the test synchronizes, changing nothing but its name, and fails the
+    /// test when a clone does not compile. Such a failure is in the cloning layer, whatever the
+    /// test itself is about.
+    /// </summary>
+    private static void EnsureIdentityClonesCompile(CSharpCompilation compilation, CSharpParseOptions parseOptions)
+    {
+        // The sync generator runs as well, since it declares the attributes the source uses.
+        var result = CSharpGeneratorDriver.Create(new SyncMethodSourceGenerator(), new IdentityCloneGenerator())
+            .WithUpdatedParseOptions(parseOptions)
+            .RunGenerators(compilation)
+            .GetRunResult();
+
+        var identity = result.Results.Single(r => r.Generator.GetGeneratorType() == typeof(IdentityCloneGenerator));
+
+        if (identity.Exception is { } exception)
+        {
+            throw new InvalidOperationException("Identity clone threw", exception);
+        }
+
+        // Every method which is synchronized is cloned as well, so that a pass which cloned
+        // nothing cannot pass for one whose clones compile.
+        var synchronized = result.Results
+            .Single(r => r.Generator.GetGeneratorType() == typeof(SyncMethodSourceGenerator))
+            .GeneratedSources
+            .Count(s => s.HintName is not ($"{SyncMethodSourceGenerator.CreateSyncVersionAttribute}.g.cs" or $"{SyncMethodSourceGenerator.SkipSyncVersionAttribute}.g.cs"));
+
+        if (identity.GeneratedSources.Length < synchronized)
+        {
+            throw new InvalidOperationException(
+                $"Identity clone produced {identity.GeneratedSources.Length} files for {synchronized} synchronized methods");
+        }
+
+        var errors = identity.Diagnostics
+            .Concat(compilation.AddSyntaxTrees(result.GeneratedTrees).GetDiagnostics())
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+
+        if (errors.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Identity clone does not compile:\n" + string.Join("\n", errors.Select(d => d.ToString())));
+        }
     }
 
 #if NET8_0_OR_GREATER
