@@ -167,6 +167,30 @@ namespace Zomp.SyncMethodGenerator.IntegrationTests
     }
 }
 """.Verify(sourceType: SourceType.Full);
+
+    [Fact]
+    public Task EntityFrameworkQueryableExtensionsInStaticForm() => """
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Zomp.SyncMethodGenerator.IntegrationTests
+{
+    using Microsoft.EntityFrameworkCore;
+
+    public partial class Caller
+    {
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
+        public async Task<int> CallAsync(DbContext dbContext, CancellationToken ct)
+        {
+            var dbSet = dbContext.Set<object>();
+            var any = await EntityFrameworkQueryableExtensions.AnyAsync(dbSet, ct);
+            var list = await EntityFrameworkQueryableExtensions.ToListAsync(dbSet, ct);
+            return any ? list.Count : await EntityFrameworkQueryableExtensions.ExecuteDeleteAsync(dbSet, ct);
+        }
+    }
+}
+""".Verify(sourceType: SourceType.Full);
+
 #endif
 
     [Fact]
