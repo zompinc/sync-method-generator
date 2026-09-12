@@ -49,3 +49,7 @@ dotnet_diagnostic.IDE0340.severity = error
 
 [*.sh]
 end_of_line = lf
+
+# StyleCop predates C# 15 and SA1649 throws on a union declaration
+[src/Zomp.SyncMethodGenerator/Operation.cs]
+dotnet_diagnostic.SA1649.severity = none

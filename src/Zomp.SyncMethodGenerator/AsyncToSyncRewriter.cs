@@ -393,8 +393,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             var extra = ProcessTrivia(leading, ds);
             if (extra.AdditionalStatements.Count > 0)
             {
-                modifications.Add(i, new Operation([.. extra.AdditionalStatements]));
-                modifications.Add(i + 1, new Operation(true));
+                modifications.Add(i, new List<StatementSyntax>(extra.AdditionalStatements));
+                modifications.Add(i + 1, true);
             }
 
             if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
@@ -1126,8 +1126,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
             if (extra is { AdditionalStatements.Count: > 0 })
             {
-                modifications.Add(index, new Operation([.. extra.AdditionalStatements]));
-                modifications.Add(index + 1, new Operation(true));
+                modifications.Add(index, new List<StatementSyntax>(extra.AdditionalStatements));
+                modifications.Add(index + 1, true);
             }
 
             if (byExpression || nullableParameters is not { } parameters)
@@ -1547,10 +1547,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             var index = extraParameterGroup.Key;
 
-            if (extraParameterGroup.Value.IsNewStatements)
+            if (extraParameterGroup.Value.Value is List<StatementSyntax> newStatements)
             {
                 separatedItems = separatedItems.RemoveAt(index);
-                foreach (var extraParameter in extraParameterGroup.Value.AsNewStatements)
+                foreach (var extraParameter in newStatements)
                 {
                     if (createNewListItem(extraParameter) is not { } newItem)
                     {

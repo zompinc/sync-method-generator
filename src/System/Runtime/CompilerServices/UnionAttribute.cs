@@ -3,5 +3,5 @@
 /// <summary>
 /// Marks a type as a C# union.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false)]
-public sealed class UnionAttribute : Attribute;
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+internal sealed class UnionAttribute : Attribute;
