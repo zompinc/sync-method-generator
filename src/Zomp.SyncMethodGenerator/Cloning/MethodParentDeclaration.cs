@@ -1,7 +1,7 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator.Cloning;
 
 /// <summary>
-/// Represents a class a <see cref="MethodToGenerate"/> belongs to.
+/// Represents a type a <see cref="MethodLocation"/> is nested in.
 /// </summary>
 /// <param name="MethodParent">Type of container.</param>
 /// <param name="ParentName">Class name.</param>
@@ -19,4 +19,12 @@ internal sealed record MethodParentDeclaration(MethodParent MethodParent, string
             classOrStructKeyword)
     {
     }
+
+    /// <summary>
+    /// Gets the name of the type with its type parameters, so that <c>Class</c>, <c>Class{T}</c>
+    /// and <c>Class{T,T2}</c> stay distinct.
+    /// </summary>
+    public string ScopeName => TypeParameterListSyntax.IsEmpty
+        ? ParentName
+        : ParentName + "{" + string.Join(",", TypeParameterListSyntax) + "}";
 }

@@ -1,4 +1,4 @@
-﻿namespace Zomp.SyncMethodGenerator;
+﻿namespace Zomp.SyncMethodGenerator.Cloning;
 
 internal enum MethodParent
 {
