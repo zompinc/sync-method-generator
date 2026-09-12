@@ -211,6 +211,20 @@ public static ValueTask<int> ReturnDefaultAsync() => default;
 public static ValueTask<int> ReturnAsync() {statement}
 """.Verify(disableUnique: true);
 
+    // The argument must be rewritten like any other expression: here the token it passes
+    // is a parameter the synchronized method no longer has.
+    [Theory]
+    [InlineData("new(Tally(ct))")]
+    [InlineData("new ValueTask<int>(Tally(ct))")]
+    public Task ReturnValueTaskInstanceRewritesArgument(string creation) => $"""
+[CreateSyncVersion]
+public static ValueTask<int> CountAsync(CancellationToken ct) => {creation};
+
+private static int Tally(CancellationToken ct) => 1;
+
+private static int Tally() => 1;
+""".Verify(disableUnique: true);
+
     [Fact]
     public Task ReturnValueTask() => """
 [CreateSyncVersion]
