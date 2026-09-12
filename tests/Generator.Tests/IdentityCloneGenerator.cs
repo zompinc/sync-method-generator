@@ -1,5 +1,5 @@
+using Zomp.MethodCloning;
 using Zomp.SyncMethodGenerator;
-using Zomp.SyncMethodGenerator.Cloning;
 
 namespace Generator.Tests;
 
