@@ -160,6 +160,10 @@ come back empty.
 - Tests compile against real framework assemblies via `TestHelper`
 - `TestHelper` fails a test whose generated code does not compile, before any
   snapshot is compared, and reports the compiler errors
+- `TestHelper` also clones every synchronized method through
+  `IdentityCloneGenerator`, which changes nothing but the method's name, and
+  fails the test with "Identity clone does not compile" when a clone does not.
+  That failure is in the `Cloning/` layer, not in the async to sync rules
 
 ### Choosing how the source is wrapped
 
