@@ -42,6 +42,14 @@ internal static class DiagnosticMessages
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    internal static readonly DiagnosticDescriptor EndlessLoop = new(
+        id: "ZSMGEN006",
+        title: "Loop never ends once synchronized",
+        messageFormat: $"The synchronized loop never ends. Its condition '{{0}}' becomes 'true' without a CancellationToken, and nothing else leaves the loop. Provide a synchronous implementation in an #if {AsyncToSyncRewriter.SyncOnly} region.",
+        category: Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private const string Preprocessor = "Preprocessor";
 
     private const string Usage = "Usage";

@@ -10,3 +10,4 @@ ZSMGEN002 | Preprocessor | Error | DiagnosticMessages
 ZSMGEN003 | Preprocessor | Error | DiagnosticMessages
 ZSMGEN004 | Usage | Error | DiagnosticMessages
 ZSMGEN005 | Usage | Error | DiagnosticMessages
+ZSMGEN006 | Usage | Warning | DiagnosticMessages
