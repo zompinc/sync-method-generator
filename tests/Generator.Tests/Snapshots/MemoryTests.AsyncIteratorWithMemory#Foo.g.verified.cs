@@ -9,7 +9,7 @@ public static global::System.Collections.Generic.IEnumerable<int> Foo(
     {
         if (hasPrev)
         {
-            global::Test.Class.Helper(prev.Span, col.Span);
+            global::Test.Class.Helper(prev, col);
         }
 
         prev = col;

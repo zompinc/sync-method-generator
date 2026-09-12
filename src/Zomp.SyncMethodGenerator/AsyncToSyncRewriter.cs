@@ -287,7 +287,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
         {
             { IsMemory: true }
-            => (changeMemoryToSpan.Contains(symbol) || node.Parent is ParameterSyntax or VariableDeclarationSyntax)
+            => (changeMemoryToSpan.Contains(symbol) || node.Parent is ParameterSyntax
+                || (node.Parent is VariableDeclarationSyntax && !IsInIterator(node)))
                 ? $"{System}.{ReplaceWithSpan(symbol)}" : null,
             {
                 IsIAsyncEnumerableOrIAsyncEnumerator: true
@@ -1097,7 +1098,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         {
             // Handles nameof(Type)
             ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol) => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
-            ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } } ls when changeMemoryToSpan.Contains(ls) => Argument(AppendSpan(node.Expression)),
+            ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } } ls when changeMemoryToSpan.Contains(ls) && droppingAsync => Argument(AppendSpan(node.Expression)),
             IFieldSymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
             IPropertySymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
             _ => @base,
@@ -1325,7 +1326,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Cannot initialize Span to null, so preserving memory.
         if (semanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
-            && !node.InitializedToNull())
+            && !node.InitializedToNull()
+            && !IsInIterator(node))
         {
             _ = changedMemoryToSpan.Add(symbol);
         }
@@ -1758,6 +1760,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             .Any(m => m.Parameters.Length == ms.Parameters.Length
                       && m.Parameters.Zip(ms.Parameters, (p1, p2) => SymbolEqualityComparer.Default.Equals(p1, p2))
                           .All(z => z));
+
+    /// <summary>
+    /// Checks whether a node sits in an iterator, whose locals may have to survive a
+    /// <c>yield return</c>, which a span can't.
+    /// </summary>
+    private static bool IsInIterator(SyntaxNode node)
+        => node.FirstAncestorOrSelf<SyntaxNode>(static n => n is BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax or AccessorDeclarationSyntax or AnonymousFunctionExpressionSyntax) is { } function
+        && function.DescendantNodes(n => n == function || n is not (LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax))
+            .OfType<YieldStatementSyntax>()
+            .Any();
 
     private static bool CanDropIf(IfStatementSyntax ifStatement)
         => ifStatement.Statement is BlockSyntax { Statements.Count: 0 } or null
