@@ -19,16 +19,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
     internal const string QualifiedCreateSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{CreateSyncVersionAttribute}";
     internal const string QualifiedSkipSyncVersionAttribute = $"{ThisAssembly.RootNamespace}.{SkipSyncVersionAttribute}";
 
-    /// <summary>
-    /// Longest generated file name before the scope is shortened. Emitted files sit under
-    /// {project}\obj\{configuration}\{framework}\generated\{generator assembly}\{generator},
-    /// which alone is around a hundred characters before the project path is counted.
-    /// </summary>
     internal const string OmitNullableDirective = "OmitNullableDirective";
     internal const string PreserveProgress = "PreserveProgress";
     internal const string PreserveCancellationToken = "PreserveCancellationToken";
-
-    private const int MaxFileNameLength = 100;
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -54,199 +47,16 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
                 return isNullableDisabledInProject || isLanguageVersionBelowCSharp8;
             });
 
-        var methodDeclarations = context.SyntaxProvider
-            .ForAttributeWithMetadataName(
-                QualifiedCreateSyncVersionAttribute,
-                predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, ct) => TransformForGeneration(ctx, ct))
-            .SelectMany((list, ct) => list)
+        var methodDeclarations = CloneTarget.ForAttribute(context.SyntaxProvider, QualifiedCreateSyncVersionAttribute)
             .Combine(disableNullable)
             .Select((data, ct) => GetMethodToGenerate(data.Left.Context, data.Left.Syntax, data.Right, ct)!)
             .WithTrackingName("GetMethodToGenerate")
             .Where(static s => s is not null);
 
-        var sourceTexts = methodDeclarations
-            .Select(static (m, _) => GenerateSource(m))
-            .WithTrackingName("GenerateSource");
-
-        // Signatures produced more than once. Emitting them all would declare the same member
-        // twice, so the methods behind them are reported instead of generated.
-        var collidingSignatures = methodDeclarations
-            .Select(static (m, _) => m.Signature?.Key)
-            .Collect()
-            .Select(static (keys, _) => ToCollidingSignatures(keys));
-
-        context.RegisterSourceOutput(
-            sourceTexts.Combine(collidingSignatures),
-            static (spc, pair) =>
-            {
-                var (source, colliding) = pair;
-
-                foreach (var diagnostic in source.MethodToGenerate.Diagnostics)
-                {
-                    spc.ReportDiagnostic(diagnostic);
-                }
-
-                if (source.MethodToGenerate.Signature is { } signature
-                    && colliding.AsImmutableArray().Contains(signature.Key, StringComparer.Ordinal))
-                {
-                    spc.ReportDiagnostic(signature.ToCollisionDiagnostic());
-                    return;
-                }
-
-                if (!source.MethodToGenerate.HasErrors)
-                {
-                    spc.AddSource(source.Path, SourceText.From(source.Content, Encoding.UTF8));
-                }
-            });
+        ClonedMethodOutput.Register(context, methodDeclarations, CollidingOverloads);
     }
 
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node) => node switch
-    {
-        MethodDeclarationSyntax { AttributeLists.Count: > 0 } => true,
-        ClassDeclarationSyntax { AttributeLists.Count: > 0 } => true,
-        StructDeclarationSyntax { AttributeLists.Count: > 0 } => true,
-        InterfaceDeclarationSyntax { AttributeLists.Count: > 0 } => true,
-        RecordDeclarationSyntax { AttributeLists.Count: > 0 } => true,
-        _ => false,
-    };
-
-    private static ImmutableArray<TransformResult> TransformForGeneration(GeneratorAttributeSyntaxContext ctx, CancellationToken ct)
-    {
-        ct.ThrowIfCancellationRequested();
-
-        if (ctx.TargetNode is TypeDeclarationSyntax typeDecl)
-        {
-#if ROSLYN_4_12_OR_GREATER
-            return [.. typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s))];
-#else
-            return ImmutableArray.CreateRange(typeDecl.Members.OfType<MethodDeclarationSyntax>().Select(s => new TransformResult(ctx, s)));
-#endif
-        }
-        else if (ctx.TargetNode is MethodDeclarationSyntax methodDecl)
-        {
-#if ROSLYN_4_12_OR_GREATER
-            return [new TransformResult(ctx, methodDecl)];
-#else
-            return ImmutableArray.Create(new TransformResult(ctx, methodDecl));
-#endif
-        }
-
-#if ROSLYN_4_12_OR_GREATER
-        return [];
-#else
-        return ImmutableArray<TransformResult>.Empty;
-#endif
-    }
-
-    /// <summary>
-    /// Picks out the signatures produced by more than one method. Emitting all of them would
-    /// declare the same member twice.
-    /// </summary>
-    /// <param name="keys">Signature of every method being generated.</param>
-    /// <returns>The signatures which appear more than once.</returns>
-    private static EquatableArray<string> ToCollidingSignatures(ImmutableArray<string?> keys)
-    {
-        var colliding = keys
-            .Where(static key => key is not null)
-            .GroupBy(static key => key!, StringComparer.Ordinal)
-            .Where(static group => group.Count() > 1)
-            .Select(static group => group.Key);
-
-#if ROSLYN_4_12_OR_GREATER
-        return new([.. colliding]);
-#else
-        return new(ImmutableArray.CreateRange(colliding));
-#endif
-    }
-
-    /// <summary>
-    /// Names a containing type, keeping its type parameters so that <c>Class</c>, <c>Class{T}</c>
-    /// and <c>Class{T,T2}</c> stay distinct.
-    /// </summary>
-    /// <param name="c">The containing type.</param>
-    /// <returns>The name.</returns>
-    private static string BuildClassName(MethodParentDeclaration c)
-        => c.TypeParameterListSyntax.IsEmpty
-            ? c.ParentName
-            : c.ParentName + "{" + string.Join(",", c.TypeParameterListSyntax) + "}";
-
-    private static (MethodToGenerate MethodToGenerate, string Path, string Content) GenerateSource(MethodToGenerate m)
-    {
-        var scope = $"{string.Join(".", m.Namespaces)}" +
-            $".{string.Join(".", m.Parents.Select(BuildClassName))}" +
-            (m.IsCSharp14Extension ? ".ext" : string.Empty);
-
-        var method = m.MethodName + (m.Index == 1 ? string.Empty : "_" + m.Index);
-
-        var sourcePath = BuildFileName(scope, method);
-
-        var source = SourceGenerationHelper.GenerateExtensionClass(m);
-
-        return (m, sourcePath, source);
-    }
-
-    /// <summary>
-    /// Builds the file name a generated method is emitted under, shortening it when the
-    /// namespace and containing type chain make it long enough to be a problem. Emitted files
-    /// live several directories deep inside the intermediate output path, so a long name here
-    /// can carry the full path past the limit the file system accepts.
-    /// </summary>
-    /// <remarks>
-    /// The scope is what gets shortened, since the method name is what someone reads the file
-    /// name for. A hash of the untruncated name keeps distinct methods in distinct files.
-    /// </remarks>
-    private static string BuildFileName(string scope, string method)
-    {
-        const string extension = ".g.cs";
-
-        var fileName = $"{scope}.{method}{extension}";
-
-        if (fileName.Length <= MaxFileNameLength)
-        {
-            return fileName;
-        }
-
-        var hash = Hash(fileName);
-
-        // separator, hash, dot, extension
-        var fixedLength = 1 + hash.Length + 1 + extension.Length;
-
-        var forScope = MaxFileNameLength - fixedLength - method.Length;
-
-        if (forScope > 0)
-        {
-            return $"{scope[..Math.Min(scope.Length, forScope)]}_{hash}.{method}{extension}";
-        }
-
-        // The method name alone fills the budget, so it has to be shortened as well.
-        return $"_{hash}.{method[..(MaxFileNameLength - fixedLength)]}{extension}";
-    }
-
-    /// <summary>
-    /// FNV-1a. Short, dependency free, and stable across processes and runtimes, which
-    /// <see cref="string.GetHashCode()"/> is not.
-    /// </summary>
-    private static string Hash(string value)
-    {
-        const uint offsetBasis = 2166136261;
-        const uint prime = 16777619;
-
-        var hash = offsetBasis;
-
-        unchecked
-        {
-            foreach (var c in value)
-            {
-                hash ^= c;
-                hash *= prime;
-            }
-        }
-
-        return hash.ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static MethodToGenerate? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
+    private static ClonedMethod? GetMethodToGenerate(GeneratorAttributeSyntaxContext context, MethodDeclarationSyntax methodDeclarationSyntax, bool disableNullable, CancellationToken ct)
     {
         // stop if we're asked to
         ct.ThrowIfCancellationRequested();
@@ -269,25 +79,6 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        // find the index of the method in the containing type
-        var index = 1;
-
-        if (methodSymbol.ContainingType is { } containingType)
-        {
-            foreach (var member in containingType.GetMembers())
-            {
-                if (member.Equals(methodSymbol, SymbolEqualityComparer.Default))
-                {
-                    break;
-                }
-
-                if (member.Name.Equals(methodSymbol.Name, StringComparison.Ordinal))
-                {
-                    ++index;
-                }
-            }
-        }
-
         foreach (var attributeData in methodSymbol.GetAttributes())
         {
             var attributeClassName = attributeData.AttributeClass?.ToDisplayString();
@@ -305,46 +96,12 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
             }
         }
 
-        var syncMethodGeneratorAttributeData = context.Attributes[0];
-
-        var classes = ImmutableArray.CreateBuilder<MethodParentDeclaration>();
-        SyntaxNode? node = methodDeclarationSyntax;
-#if ROSLYN_5_0_OR_GREATER
-        ExtensionBlockDeclarationSyntax? extensionParent = null;
-#endif
-        while (node.Parent is not null)
-        {
-            node = node.Parent;
-#if ROSLYN_5_0_OR_GREATER
-            if (node is ExtensionBlockDeclarationSyntax eds)
-            {
-                extensionParent = eds;
-                continue;
-            }
-#endif
-
-            MethodParentDeclaration? mpd = node switch
-            {
-                ClassDeclarationSyntax o => new(MethodParent.Class, o.Identifier, o.Modifiers, o.TypeParameterList),
-                StructDeclarationSyntax o => new(MethodParent.Struct, o.Identifier, o.Modifiers, o.TypeParameterList),
-                RecordDeclarationSyntax o => new(MethodParent.Record, o.Identifier, o.Modifiers, o.TypeParameterList, o.ClassOrStructKeyword),
-                InterfaceDeclarationSyntax o => new(MethodParent.Interface, o.Identifier, o.Modifiers, o.TypeParameterList),
-                ////ExtensionBlockDeclarationSyntax o => new(MethodParent.ExtensionDeclaration, o.Identifier, o.Modifiers, o.TypeParameterList),
-                _ => null,
-            };
-
-            if (mpd is null)
-            {
-                break;
-            }
-
-            classes.Insert(0, mpd);
-        }
-
-        if (classes.Count == 0)
+        if (!MethodLocation.TryCreate(methodDeclarationSyntax, methodSymbol, out var location, out var root))
         {
             return null;
         }
+
+        var syncMethodGeneratorAttributeData = context.Attributes[0];
 
         var explicitDisableNullable = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == OmitNullableDirective) is { Value.Value: true };
         disableNullable |= explicitDisableNullable;
@@ -352,130 +109,9 @@ public class SyncMethodSourceGenerator : IIncrementalGenerator
         var preserveProgress = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveProgress) is { Value.Value: true };
         var preserveCancellationToken = syncMethodGeneratorAttributeData.NamedArguments.FirstOrDefault(c => c.Key == PreserveCancellationToken) is { Value.Value: true };
 
-#if ROSLYN_5_0_OR_GREATER
-        var toVisit = extensionParent ?? (SyntaxNode)methodDeclarationSyntax;
-#else
-        var toVisit = (SyntaxNode)methodDeclarationSyntax;
-#endif
         var rewriter = new AsyncToSyncRewriter(context.SemanticModel, disableNullable, preserveProgress, preserveCancellationToken, methodDeclarationSyntax);
-        var sn = rewriter.Visit(toVisit);
-        var content = sn.ToFullString();
+        var rewritten = rewriter.Visit(root);
 
-        var diagnostics = rewriter.Diagnostics;
-
-        var hasErrors = false;
-        foreach (var diagnostic in diagnostics)
-        {
-            hasErrors |= diagnostic.Descriptor.DefaultSeverity == DiagnosticSeverity.Error;
-        }
-
-        var isNamespaceFileScoped = false;
-        var namespaces = ImmutableArray.CreateBuilder<string>();
-
-        // Documentation comments are copied across verbatim, and a cref in one is resolved
-        // against the file it lands in rather than the file it was written in. Without the
-        // using directives which were in scope where it was written, every cref which relied on
-        // one goes unresolved, which a project building with warnings as errors reads as a
-        // build failure. The directives are kept on the side of the namespace they were
-        // declared on, since one declared inside a namespace may name it only relatively.
-        var outerUsings = ImmutableArray.CreateBuilder<string>();
-        var innerUsings = ImmutableArray.CreateBuilder<string>();
-
-        if (!hasErrors)
-        {
-            while (node is not null and not CompilationUnitSyntax)
-            {
-                switch (node)
-                {
-                    case NamespaceDeclarationSyntax nds:
-                        namespaces.Insert(0, nds.Name.ToString());
-                        InsertUsings(innerUsings, nds.Usings);
-                        break;
-                    case FileScopedNamespaceDeclarationSyntax file:
-                        namespaces.Add(file.Name.ToString());
-                        InsertUsings(innerUsings, file.Usings);
-                        isNamespaceFileScoped = true;
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Cannot handle {node}");
-                }
-
-                node = node.Parent;
-            }
-
-            if (node is CompilationUnitSyntax compilationUnit)
-            {
-                InsertUsings(outerUsings, compilationUnit.Usings);
-            }
-        }
-
-#if ROSLYN_5_0_OR_GREATER
-        var isCSharp14Extension = extensionParent is not null;
-#else
-        var isCSharp14Extension = false;
-#endif
-        var signature = BuildSignature(sn, namespaces, classes, methodDeclarationSyntax);
-
-        var result = new MethodToGenerate(index, namespaces.ToImmutable(), outerUsings.ToImmutable(), innerUsings.ToImmutable(), isNamespaceFileScoped, isCSharp14Extension, classes.ToImmutable(), methodDeclarationSyntax.Identifier.ValueText, content, disableNullable, rewriter.Diagnostics, hasErrors, signature);
-
-        return result;
+        return ClonedMethod.Create(location, methodDeclarationSyntax, rewritten, disableNullable, rewriter.Diagnostics);
     }
-
-    /// <summary>
-    /// Records the directives, innermost first, so that walking outwards from the method builds
-    /// them up in the order they were written.
-    /// </summary>
-    /// <param name="destination">Collected directives.</param>
-    /// <param name="usings">Directives declared at one level.</param>
-    private static void InsertUsings(ImmutableArray<string>.Builder destination, SyntaxList<UsingDirectiveSyntax> usings)
-    {
-        var index = 0;
-        foreach (var @using in usings)
-        {
-            destination.Insert(index++, @using.ToString());
-        }
-    }
-
-    /// <summary>
-    /// Describes the method which is about to be emitted, precisely enough to tell whether two
-    /// of them would declare the same member. The rewritten declaration is used rather than the
-    /// original symbol, so the comparison sees exactly what the compiler will see - parameters
-    /// already dropped, types already substituted.
-    /// </summary>
-    /// <param name="rewritten">Result of rewriting the method.</param>
-    /// <param name="namespaces">Namespaces the method lives in.</param>
-    /// <param name="parents">Types the method is nested in.</param>
-    /// <param name="original">Method being synchronized, for the location to report against.</param>
-    /// <returns>The signature, or null when the rewritten method could not be located.</returns>
-    private static SynchronizedSignature? BuildSignature(
-        SyntaxNode rewritten,
-        ImmutableArray<string>.Builder namespaces,
-        ImmutableArray<MethodParentDeclaration>.Builder parents,
-        MethodDeclarationSyntax original)
-    {
-        var method = rewritten as MethodDeclarationSyntax
-            ?? rewritten.DescendantNodes().OfType<MethodDeclarationSyntax>().FirstOrDefault();
-
-        if (method is null)
-        {
-            return null;
-        }
-
-        var scope = string.Join(".", namespaces.Concat(parents.Select(BuildClassName)));
-
-        // Arity by count rather than by name, since overloads which differ only in what they
-        // call their type parameters still declare the same member.
-        var arity = method.TypeParameterList?.Parameters.Count ?? 0;
-        var arityMarker = arity > 0 ? "`" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
-
-        var parameters = string.Join(",", method.ParameterList.Parameters.Select(static p => p.Type?.ToString() ?? string.Empty));
-
-        var key = $"{scope}.{method.Identifier.ValueText}{arityMarker}({parameters})";
-
-        var location = original.GetLocation();
-
-        return new(key, location.SourceTree?.FilePath ?? string.Empty, location.SourceSpan, location.GetLineSpan().Span);
-    }
-
-    internal sealed record TransformResult(GeneratorAttributeSyntaxContext Context, MethodDeclarationSyntax Syntax);
 }

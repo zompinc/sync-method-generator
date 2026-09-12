@@ -108,10 +108,11 @@ Use `#if ROSLYN_X_Y_OR_GREATER` guards for APIs that only exist in newer Roslyn 
 ```text
 src/Zomp.SyncMethodGenerator/          Generator (netstandard2.0)
   SyncMethodSourceGenerator.cs         Entry point — IIncrementalGenerator
-  AsyncToSyncRewriter.cs               Core transformation engine (CSharpSyntaxRewriter)
-  SourceGenerationHelper.cs            Output file structure and attribute definitions
+  AsyncToSyncRewriter.cs               Async to sync rules, on top of CloningRewriter
+  SourceGenerationHelper.cs            Attribute definitions
   Extensions.cs                        Type-checking extensions on INamedTypeSymbol
-  DiagnosticMessages.cs                ZSMGEN001-004 diagnostic descriptors
+  DiagnosticMessages.cs                ZSMGEN001-006 diagnostic descriptors
+  Cloning/                             Copying a method into a file of its own
   Models/                              Data records for the pipeline
   Helpers/                             EquatableArray<T>, DirectiveStack, etc.
   Properties/                          Assembly attributes
@@ -121,11 +122,26 @@ tests/Generator.Tests/                 Unit tests (xUnit + Verify snapshot testi
 tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
 ```
 
+## Cloning layer
+
+`Cloning/` holds everything about emitting a copy of a method that has nothing
+to do with async: finding the marked methods (`CloneTarget`), collecting the
+namespaces, usings and containing types around them (`MethodLocation`), fully
+qualifying the names a method uses (`CloningRewriter`), detecting colliding
+signatures and naming the files (`ClonedMethodOutput`), and writing the file
+(`ClonedMethodSource`).
+
+Keep async knowledge out of it. A transformation plugs in by deriving from
+`CloningRewriter`, overriding the visitors it needs, and using the `MapSymbol`
+and `MapTypeName` hooks to substitute types. Nothing under `Cloning/` should
+know about tasks or `SYNC_ONLY`; a grep for `Task|Async|SYNC_ONLY` there should
+come back empty.
+
 ## Transformation Pipeline
 
-1. **Find candidates** — `ForAttributeWithMetadataName` locates `[CreateSyncVersion]` on methods or types
-2. **Extract metadata** — parent class hierarchy, namespaces, configuration flags
-3. **Rewrite** — `AsyncToSyncRewriter` (a `CSharpSyntaxRewriter`) traverses the syntax tree:
+1. **Find candidates** — `CloneTarget` uses `ForAttributeWithMetadataName` to locate `[CreateSyncVersion]` on methods or types
+2. **Extract metadata** — `MethodLocation` collects the parent class hierarchy, namespaces and usings; the generator reads the configuration flags
+3. **Rewrite** — `AsyncToSyncRewriter` (a `CloningRewriter`, which fully qualifies names) traverses the syntax tree:
    - Strips `async` modifier and `await` expressions
    - Transforms return types: `Task`/`ValueTask` to `void`, `Task<T>`/`ValueTask<T>` to `T`
    - Transforms collection types: `IAsyncEnumerable<T>` to `IEnumerable<T>`
@@ -134,7 +150,7 @@ tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
    - Renames method calls: strips `Async` suffix
    - Handles special methods: `Task.FromResult(x)` to `x`, `Task.Delay()` to `Thread.Sleep()`
    - Processes `#if SYNC_ONLY` / `#if !SYNC_ONLY` directives
-4. **Emit** — `SourceGenerationHelper` wraps the rewritten method in namespace/class structure
+4. **Emit** — `ClonedMethodSource` wraps the rewritten method in namespace/class structure, and `ClonedMethodOutput` names the file and reports colliding signatures
 
 ## Testing Conventions
 

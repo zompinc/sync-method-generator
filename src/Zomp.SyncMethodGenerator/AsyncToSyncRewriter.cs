@@ -1,4 +1,4 @@
-using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+﻿using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Zomp.SyncMethodGenerator;
 
@@ -13,7 +13,7 @@ namespace Zomp.SyncMethodGenerator;
 /// <param name="preserveProgress">Instructs the source generator to preserve <see cref="IProgress{T}"/> parameters.</param>
 /// <param name="preserveCancellationToken">Instructs the source generator to preserve <see cref="CancellationToken"/> parameters.</param>
 /// <param name="targetMethod">The method declaration to rewrite; other method declarations are ignored.</param>
-internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, bool preserveCancellationToken, MethodDeclarationSyntax targetMethod) : CSharpSyntaxRewriter
+internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disableNullable, bool preserveProgress, bool preserveCancellationToken, MethodDeclarationSyntax targetMethod) : CloningRewriter(semanticModel, targetMethod)
 {
     public const string SyncOnly = "SYNC_ONLY";
 
@@ -50,22 +50,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     private const string TaskFullyQualified = $"{System}.{Threading}.{Tasks}.{TaskName}";
     private const string TimeProviderTaskExtensionsFullyQualified = $"{System}.{Threading}.{Tasks}.{TimeProviderTaskExtensions}";
 
-    private static readonly SymbolDisplayFormat GlobalDisplayFormat = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.None,
-        miscellaneousOptions:
-            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
-            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
-
-    private static readonly SymbolDisplayFormat GlobalDisplayFormatWithTypeParameters = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-        miscellaneousOptions:
-            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
-            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
-
     /// <summary>
     /// Marks the brace-less block which <see cref="VisitReturnStatement"/> produces for
     /// <c>return TaskReturningAsync();</c> (<c>TaskReturning(); return;</c>) so that
@@ -74,10 +58,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// </summary>
     private static readonly SyntaxAnnotation ExpandedReturnAnnotation = new(nameof(ExpandedReturnAnnotation));
 
-    private readonly SemanticModel semanticModel = semanticModel;
     private readonly bool disableNullable = disableNullable;
     private readonly bool preserveProgress = preserveProgress;
-    private readonly MethodDeclarationSyntax targetMethod = targetMethod;
     private readonly HashSet<IParameterSymbol> removedParameters = [];
 
     /// <summary>
@@ -267,22 +249,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     }
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
-    {
-        var @base = (NullableTypeSyntax)base.VisitNullableType(node)!;
-
-        return TypeAlreadyQualified(node.ElementType) ? @base : @base.WithElementType(ProcessType(@base.ElementType)).WithTriviaFrom(@base);
-    }
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
     {
+        var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
+
         if (GetSymbol(node) is not INamedTypeSymbol symbol)
         {
-            return (GenericNameSyntax)base.VisitGenericName(node)!;
+            return @base;
         }
-
-        var @base = (GenericNameSyntax)base.VisitGenericName(node)!;
 
         string? GetReplacement(INamedTypeSymbol symbol) => symbol switch
         {
@@ -298,67 +272,27 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => null,
         };
 
-        string GetIdentifier(INamedTypeSymbol symbol)
-            => GetReplacement(symbol) is { } replacement
-                ? Global(replacement)
-                : symbol switch
-                {
-                    { ContainingSymbol: INamedTypeSymbol { IsGenericType: true } parentSymbol }
-                    => parentSymbol.ToDisplayString(GlobalDisplayFormatWithTypeParameters) + "." + symbol.Name,
-                    _ => symbol.ToDisplayString(GlobalDisplayFormat),
-                };
-
         var replacement = symbol switch
         {
             { IsTaskOrValueTask: true, IsGenericType: true, } => @base.TypeArgumentList.Arguments[0],
-            _ => @base.WithIdentifier(Identifier(GetIdentifier(symbol))),
+            _ when GetReplacement(symbol) is { } name => @base.WithIdentifier(Identifier(Global(name))),
+            _ => null,
         };
 
-        return replacement.WithTriviaFrom(@base);
+        return replacement is null ? @base : replacement.WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
-    {
-        var @base = (IdentifierNameSyntax)base.VisitIdentifierName(node)!;
-        if (renamedLocalFunctions.TryGetValue(@base.Identifier.ValueText, out var newName))
-        {
-            return @base.WithIdentifier(Identifier(newName));
-        }
-
-        if (node.Parent is not MemberAccessExpressionSyntax)
-        {
-            var symbol = GetSymbol(node);
-            if (symbol is { IsStatic: true, ContainingType: { } containingType } memberSymbol)
-            {
-                if (symbol is IFieldSymbol or IMethodSymbol { MethodKind: not MethodKind.LocalFunction })
-                {
-                    var typeString = containingType.ToDisplayString(GlobalDisplayFormatWithTypeParameters);
-                    return @base.WithIdentifier(Identifier($"{typeString}.{memberSymbol.Name}")).WithTriviaFrom(node);
-                }
-            }
-        }
-
-        if (node.Parent is TypeArgumentListSyntax)
-        {
-            return ProcessType(node);
-        }
-
-        return @base;
-    }
-
-    public override SyntaxNode? VisitQualifiedName(QualifiedNameSyntax node)
-    {
-        var @base = (QualifiedNameSyntax)base.VisitQualifiedName(node)!;
-
-        return @base.Right is GenericNameSyntax ? @base.Right : (SyntaxNode)ProcessType(node);
-    }
+        => renamedLocalFunctions.TryGetValue(node.Identifier.ValueText, out var newName)
+            ? node.WithIdentifier(Identifier(newName))
+            : base.VisitIdentifierName(node);
 
     public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
     {
         var @base = (LocalFunctionStatementSyntax)base.VisitLocalFunctionStatement(node)!;
 
-        if (semanticModel.GetTypeInfo(node.ReturnType).Type is not INamedTypeSymbol symbol)
+        if (SemanticModel.GetTypeInfo(node.ReturnType).Type is not INamedTypeSymbol symbol)
         {
             return @base;
         }
@@ -398,7 +332,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 modifications.Add(i + 1, true);
             }
 
-            if (semanticModel.GetDeclaredSymbol(ps) is not { } symbol)
+            if (SemanticModel.GetDeclaredSymbol(ps) is not { } symbol)
             {
                 return true;
             }
@@ -458,7 +392,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
     {
         if (node.Type is null || GetSymbol(node.Type) is not INamedTypeSymbol namedTypeSymbol
-            || semanticModel.GetDeclaredSymbol(node) is not IParameterSymbol ps)
+            || SemanticModel.GetDeclaredSymbol(node) is not IParameterSymbol ps)
         {
             return (ParameterSyntax)base.VisitParameter(node)!;
         }
@@ -496,8 +430,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        return node.Type is null || TypeAlreadyQualified(node.Type) ? @base
-            : @base.WithType(ProcessType(node.Type)).WithAttributeLists(attributeLists).WithTriviaFrom(@base);
+        return TypeAlreadyQualified(node.Type) ? @base
+            : @base.WithAttributeLists(attributeLists).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -515,22 +449,13 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         callingSpanProperty = prevCallingSpanProperty;
 
-        if (exprSymbol is ITypeSymbol && node.Expression is TypeSyntax type)
+        // Calling EntityFrameworkQueryableExtensions.AnyAsync(query) directly rather than as an extension
+        if (exprSymbol is INamedTypeSymbol containingType
+            && node.Expression is TypeSyntax
+            && GetSymbol(node) is IMethodSymbol { Name: var name } && name.EndsWithAsync()
+            && SyncQueryableContainer(containingType, RemoveAsync(name)) is { } container)
         {
-            // Rewrite static invocation (eg. File.ReadAllTextAsync)
-            var newType = ProcessType(type);
-            if (newType != type)
-            {
-                @base = @base.WithExpression(newType);
-            }
-
-            // Calling EntityFrameworkQueryableExtensions.AnyAsync(query) directly rather than as an extension
-            if (exprSymbol is INamedTypeSymbol containingType
-                && GetSymbol(node) is IMethodSymbol { Name: var name } && name.EndsWithAsync()
-                && SyncQueryableContainer(containingType, RemoveAsync(name)) is { } container)
-            {
-                @base = @base.WithExpression(IdentifierName(container).WithTriviaFrom(@base.Expression));
-            }
+            @base = @base.WithExpression(IdentifierName(container).WithTriviaFrom(@base.Expression));
         }
 
         if (isSpan && changedMemoryToSpan.Contains(exprSymbol))
@@ -545,7 +470,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool InitializedToMemory(SyntaxNode node)
             => node.Parent is EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax { } z }
-            && semanticModel.GetDeclaredSymbol(z) is ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } };
+            && SemanticModel.GetDeclaredSymbol(z) is ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } };
 
         return GetSymbol(node) is IPropertySymbol property
             && property.Type is INamedTypeSymbol { IsMemory: true }
@@ -746,33 +671,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     }
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
-    {
-        var @base = (ArrayTypeSyntax)base.VisitArrayType(node)!;
-        var elementType = TypeAlreadyQualified(node.ElementType)
-            ? @base.ElementType
-            : ProcessType(@base.ElementType);
-        return @base.WithElementType(elementType).WithTriviaFrom(@base);
-    }
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitAnonymousMethodExpression(AnonymousMethodExpressionSyntax node)
     {
         var @base = (AnonymousMethodExpressionSyntax)base.VisitAnonymousMethodExpression(node)!;
         return @base.WithModifiers(StripAsyncModifier(@base.Modifiers));
-    }
-
-    /// <inheritdoc/>
-    public override SyntaxNode? VisitInterpolation(InterpolationSyntax node)
-    {
-        var @base = (InterpolationSyntax)base.VisitInterpolation(node)!;
-        if (@base.Expression is not ParenthesizedExpressionSyntax)
-        {
-            var newExpression = ParenthesizedExpression(@base.Expression);
-            @base = @base.WithExpression(newExpression);
-        }
-
-        return @base;
     }
 
     /// <inheritdoc/>
@@ -788,7 +690,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Replace expressions that return the task directly.
         if (node is { Expression: { } returnExpression } &&
-            semanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol named && named.IsNonGenericTaskOrValueTask)
+            SemanticModel.GetTypeInfo(returnExpression).Type is INamedTypeSymbol named && named.IsNonGenericTaskOrValueTask)
         {
             var result = ExpressionToStatement(returnExpression);
 
@@ -829,22 +731,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// <inheritdoc/>
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
     {
-        var @base = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
+        var @base = base.VisitObjectCreationExpression(node);
         var symbol = GetSymbol(node);
 
-        if (TryReplaceObjectCreation(node, symbol, out var replacement))
-        {
-            return replacement;
-        }
-
-        if (semanticModel.GetTypeInfo(node).Type is not { } t
-            || t is INamedTypeSymbol { IsGenericType: true })
-        {
-            return @base;
-        }
-
-        var newType = ProcessSymbol(t);
-        return newType == node.Type ? @base : @base.WithType(newType);
+        return TryReplaceObjectCreation(node, symbol, out var replacement) ? replacement : @base;
     }
 
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
@@ -903,7 +793,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         // Ensure that Func<Task<T>> is not removed
         var isFunc = node.Parent is { } parent
-            && semanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true, IsSystemFunc: true } n;
+            && SemanticModel.GetTypeInfo(parent).Type is INamedTypeSymbol { IsGenericType: true, IsSystemFunc: true } n;
 
         // Generic method type arguments like Bar<Task<T>> are unwrapped to Bar<T>, not removed
         var isMethodTypeArgumentList = node.Parent is GenericNameSyntax gn && GetSymbol(gn) is IMethodSymbol;
@@ -911,7 +801,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // Do not remove Task<T>, but remove Task inside a Func<>
         bool RemoveType(TypeSyntax z, int index) =>
             !(isFunc && index == node.Arguments.Count - 1 && z is GenericNameSyntax)
-            && semanticModel.GetTypeInfo(z).Type is { } type
+            && SemanticModel.GetTypeInfo(z).Type is { } type
             && !(isMethodTypeArgumentList && type is INamedTypeSymbol { IsTaskOrValueTask: true, IsGenericType: true })
             && ShouldRemoveType(type);
 
@@ -927,32 +817,16 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     }
 
     /// <inheritdoc/>
-    public override SyntaxNode? VisitTypeConstraint(TypeConstraintSyntax node)
-    {
-        var @base = (TypeConstraintSyntax)base.VisitTypeConstraint(node)!;
-        var newType = ProcessType(@base.Type);
-        return newType == @base.Type ? @base : @base.WithType(newType).WithTriviaFrom(@base);
-    }
-
-    /// <inheritdoc/>
-    public override SyntaxNode? VisitCatchDeclaration(CatchDeclarationSyntax node)
-    {
-        var @base = (CatchDeclarationSyntax)base.VisitCatchDeclaration(node)!;
-        return @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
-    }
-
-    /// <inheritdoc/>
     public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
     {
-        if (targetMethod != node)
+        if (base.VisitMethodDeclaration(node) is not MethodDeclarationSyntax @base)
         {
             return default;
         }
 
-        var @base = base.VisitMethodDeclaration(node) as MethodDeclarationSyntax ?? throw new InvalidOperationException("Can't cast");
         var returnType = node.ReturnType;
 
-        if (semanticModel.GetTypeInfo(returnType).Type is not INamedTypeSymbol symbol)
+        if (SemanticModel.GetTypeInfo(returnType).Type is not INamedTypeSymbol symbol)
         {
             return @base;
         }
@@ -1021,20 +895,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             newTriviaList = RemoveParameterDocumentationLines(trivia, removedParameters);
         }
 
-        static bool Preprocessors(SyntaxTrivia st)
-            => st.IsKind(SyntaxKind.IfDirectiveTrivia)
-            || st.IsKind(SyntaxKind.ElifDirectiveTrivia)
-            || st.IsKind(SyntaxKind.ElseDirectiveTrivia)
-            || st.IsKind(SyntaxKind.EndIfDirectiveTrivia)
-            || st.IsKind(SyntaxKind.RegionDirectiveTrivia)
-            || st.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
-            || st.IsKind(SyntaxKind.DisabledTextTrivia);
-
-        while (newTriviaList.FirstOrDefault(Preprocessors) is { } preprocessor
-            && preprocessor != default)
-        {
-            newTriviaList = newTriviaList.Remove(preprocessor);
-        }
+        newTriviaList = RemovePreprocessorDirectives(newTriviaList);
 
         if (ShouldRemoveArrowExpression(node.ExpressionBody))
         {
@@ -1096,8 +957,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = (ArgumentSyntax)base.VisitArgument(node)!;
         return GetSymbol(node.Expression) switch
         {
-            // Handles nameof(Type)
-            ITypeSymbol { } typeSymbol when !TypeAlreadyQualified(typeSymbol) => @base.WithExpression(ProcessSymbol(typeSymbol)).WithTriviaFrom(@base),
             ILocalSymbol { Type: INamedTypeSymbol { IsMemory: true } } ls when changeMemoryToSpan.Contains(ls) && droppingAsync => Argument(AppendSpan(node.Expression)),
             IFieldSymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
             IPropertySymbol { Type: INamedTypeSymbol { IsMemory: true } } when droppingAsync => Argument(AppendSpan(node.Expression)),
@@ -1195,7 +1054,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (GetIdentifier(node.Expression) is { } identifier
             && GetSymbol(identifier) is { }
-                && semanticModel.GetDeclaredSymbol(node) is { } s)
+                && SemanticModel.GetDeclaredSymbol(node) is { } s)
         {
             if (s.Type is INamedTypeSymbol { IsMemory: true })
             {
@@ -1207,7 +1066,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         return TypeAlreadyQualified(node.Type)
             ? @base.WithAwaitKeyword(default)
-            : @base.WithAwaitKeyword(default).WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
+            : @base.WithAwaitKeyword(default).WithTriviaFrom(@base);
     }
 
     /// <inheritdoc/>
@@ -1248,7 +1107,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var variableTypeName = node.Declaration.Type;
 
-        var variableType = semanticModel
+        var variableType = SemanticModel
             .GetSymbolInfo(variableTypeName)
             .Symbol;
 
@@ -1325,7 +1184,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     public override SyntaxNode? VisitVariableDeclarator(VariableDeclaratorSyntax node)
     {
         // Cannot initialize Span to null, so preserving memory.
-        if (semanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
+        if (SemanticModel.GetDeclaredSymbol(node) is ILocalSymbol { Type: INamedTypeSymbol { IsMemoryOrNullableMemory: true } } symbol
             && !node.InitializedToNull()
             && !IsInIterator(node))
         {
@@ -1334,31 +1193,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         var @base = (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;
         return @base;
-    }
-
-    /// <inheritdoc/>
-    public override SyntaxNode? VisitVariableDeclaration(VariableDeclarationSyntax node)
-    {
-        var @base = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node)!;
-
-        var type = node.Type;
-        var newType = @base.Type;
-
-        if (newType == type ||
-            (newType is IdentifierNameSyntax { Identifier.ValueText: { } newTypeString }
-            && type is IdentifierNameSyntax { Identifier.ValueText: { } typeString }
-            && newTypeString == typeString))
-        {
-            // not replaced
-            newType = ProcessType(type);
-
-            if (newType == type)
-            {
-                return @base;
-            }
-        }
-
-        return @base.WithType(newType).WithTriviaFrom(@base);
     }
 
     public override SyntaxNode? VisitAttributeList(AttributeListSyntax node)
@@ -1383,69 +1217,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return @base.WithAttributes(newList);
     }
 
-    public override SyntaxNode? VisitAttribute(AttributeSyntax node)
-    {
-        var @base = (AttributeSyntax)base.VisitAttribute(node)!;
-
-        if (GetSymbol(node.Name) is not IMethodSymbol ms)
-        {
-            return @base;
-        }
-
-        var retval = @base.WithName(ProcessSymbol(ms.ContainingType));
-        return retval;
-    }
-
-    public override SyntaxNode? VisitConstantPattern(ConstantPatternSyntax node)
-    {
-        var @base = (ConstantPatternSyntax)base.VisitConstantPattern(node)!;
-        return node.Expression switch
-        {
-            LiteralExpressionSyntax or MemberAccessExpressionSyntax => @base,
-            _ => semanticModel.GetTypeInfo(node.Expression).Type is { } type
-                ? @base.WithExpression(ProcessSymbol(type).WithTriviaFrom(@base))
-                : @base,
-        };
-    }
-
-    public override SyntaxNode? VisitDeclarationExpression(DeclarationExpressionSyntax node)
-    {
-        var @base = (DeclarationExpressionSyntax)base.VisitDeclarationExpression(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
-    }
-
-    public override SyntaxNode? VisitCastExpression(CastExpressionSyntax node)
-    {
-        var @base = (CastExpressionSyntax)base.VisitCastExpression(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
-    }
-
-    public override SyntaxNode? VisitTupleType(TupleTypeSyntax node)
-    {
-        var @base = (TupleTypeSyntax)base.VisitTupleType(node)!;
-
-        var newTuples = new List<TupleElementSyntax>();
-        foreach (var t in node.Elements.Zip(@base.Elements, (original, visited) => (original, visited)))
-        {
-            var newType = TypeAlreadyQualified(t.original.Type) ? t.visited.Type : ProcessType(t.original.Type);
-            newTuples.Add(TupleElement(newType, t.original.Identifier));
-        }
-
-        return @base.WithElements(SeparatedList(newTuples, node.Elements.GetSeparators()));
-    }
-
-    public override SyntaxNode? VisitDeclarationPattern(DeclarationPatternSyntax node)
-    {
-        var @base = (DeclarationPatternSyntax)base.VisitDeclarationPattern(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
-    }
-
-    public override SyntaxNode? VisitTypeOfExpression(TypeOfExpressionSyntax node)
-    {
-        var @base = (TypeOfExpressionSyntax)base.VisitTypeOfExpression(node)!;
-        return TypeAlreadyQualified(node.Type) ? @base : @base.WithType(ProcessType(node.Type)).WithTriviaFrom(@base);
-    }
-
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
     {
         var @base = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
@@ -1453,7 +1224,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         // For task-valued null coalescing (eg. await (t?.DoAsync() ?? Task.CompletedTask)),
         // reduce to the side which has a synchronized version when the other side has none.
         if (node.IsKind(SyntaxKind.CoalesceExpression)
-            && semanticModel.GetTypeInfo(node).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true })
+            && SemanticModel.GetTypeInfo(node).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true })
         {
             var removeLeft = ShouldRemoveArgument(node.Left);
             var removeRight = ShouldRemoveArgument(node.Right);
@@ -1469,21 +1240,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             }
         }
 
-        if (@base.OperatorToken.IsKind(SyntaxKind.IsKeyword) || @base.OperatorToken.IsKind(SyntaxKind.AsKeyword))
-        {
-            if (GetSymbol(node.Left) is IFieldSymbol leftSymbol)
-            {
-                @base = @base.WithLeft(ProcessSymbol(leftSymbol).WithTriviaFrom(node.Left));
-            }
-
-            if (GetSymbol(node.Right) is ISymbol symbol)
-            {
-                @base = @base.WithRight(ProcessSymbol(symbol).WithTriviaFrom(node.Right));
-            }
-
-            return @base.WithTriviaFrom(@base);
-        }
-
         return @base;
     }
 
@@ -1495,6 +1251,19 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         { IsIAsyncEnumerableOrIAsyncEnumerator: true } => true,
         _ => false,
     };
+
+    /// <inheritdoc/>
+    protected override SimpleNameSyntax? MapSymbol(ISymbol symbol) => symbol switch
+    {
+        INamedTypeSymbol { IsEnumerator: true } s
+            => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([ProcessSymbol(s.ContainingType.TypeArguments[0])], []))),
+        INamedTypeSymbol { IsTaskOrValueTask: true } s => s.IsGenericType ? ProcessSymbol(s.TypeArguments[0]) : IdentifierName("void"),
+        _ => null,
+    };
+
+    /// <inheritdoc/>
+    protected override string? MapTypeName(INamedTypeSymbol symbol)
+        => symbol is { Name: "AsyncEnumerable" } ? Global("System.Linq.Enumerable") : null;
 
     private static string ReplaceWithSpan(ISymbol symbol)
         => Regex.Replace(symbol.Name, Memory, Span);
@@ -1522,25 +1291,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             ? memberAccess.Expression.WithoutTrailingTrivia()
             : memberAccess.Expression.WithTrailingTrivia(surrounding);
     }
-
-    private static string MakeType(ISymbol symbol)
-        => symbol switch
-        {
-            INamedTypeSymbol { Name: "AsyncEnumerable" } => Global("System.Linq.Enumerable"),
-            INamedTypeSymbol => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            _ => symbol.Name,
-        };
-
-    private static SimpleNameSyntax ProcessSymbol(ISymbol typeSymbol) => typeSymbol switch
-    {
-        INamedTypeSymbol { IsEnumerator: true } s
-            => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([ProcessSymbol(s.ContainingType.TypeArguments[0])], []))),
-        INamedTypeSymbol { IsTaskOrValueTask: true } s => s.IsGenericType ? ProcessSymbol(s.TypeArguments[0]) : IdentifierName("void"),
-        INamedTypeSymbol nts => IdentifierName(MakeType(nts)),
-        IArrayTypeSymbol ats => IdentifierName(MakeType(ats.ElementType) + $"[{new string(',', ats.Rank - 1)}]"),
-        IFieldSymbol fs => IdentifierName(MakeType(fs.Type) + '.' + fs.Name),
-        _ => IdentifierName(typeSymbol.Name),
-    };
 
     private static void ProcessSyncOnlyEntries<TNode>(KeyValuePair<int, Operation>[] entries, ref SeparatedSyntaxList<TNode> separatedItems, ref bool removeTrailingEndIf, Func<StatementSyntax, TNode?> createNewListItem)
         where TNode : SyntaxNode
@@ -1883,21 +1633,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             _ => false,
         };
 
-    private static TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
-    {
-        IdentifierNameSyntax => ProcessSymbol(symbol),
-        _ => returnType,
-    }).WithTriviaFrom(returnType);
-
-    private static string Global(string type) => $"global::{type}";
-
-    private static bool TypeAlreadyQualified(TypeSyntax type)
-        => type is NullableTypeSyntax or GenericNameSyntax or TupleTypeSyntax or ArrayTypeSyntax or QualifiedNameSyntax;
-
-    private static bool TypeAlreadyQualified(ITypeSymbol type)
-        => type is INamedTypeSymbol namedType
-            && namedType is { IsGenericType: true };
-
     private static bool TryReplaceObjectCreation(BaseObjectCreationExpressionSyntax node, ISymbol? symbol, out SyntaxNode? replacement)
     {
         if (symbol is IMethodSymbol { ReceiverType: INamedTypeSymbol { IsValueTask: true, IsGenericType: true } }
@@ -1923,7 +1658,33 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return false;
     }
 
-    private static TypeSyntax? ConvertFuncToAction(TypeSyntax originalType, INamedTypeSymbol namedTypeSymbol)
+    private static List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
+    {
+        var newLeadingTrivia = new List<SyntaxTrivia>();
+
+        var removed = false;
+        foreach (var st in list)
+        {
+            if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
+            {
+                removed = true;
+                newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
+                continue;
+            }
+
+            newLeadingTrivia.Add(st);
+        }
+
+        return newLeadingTrivia;
+    }
+
+    private TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
+    {
+        IdentifierNameSyntax => ProcessSymbol(symbol),
+        _ => returnType,
+    }).WithTriviaFrom(returnType);
+
+    private TypeSyntax? ConvertFuncToAction(TypeSyntax originalType, INamedTypeSymbol namedTypeSymbol)
     {
         var typeArgs = namedTypeSymbol.TypeArguments;
 
@@ -1983,26 +1744,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return newTypeSyntax;
     }
 
-    private static List<SyntaxTrivia> RemoveFirstEndIf(SyntaxTriviaList list)
-    {
-        var newLeadingTrivia = new List<SyntaxTrivia>();
-
-        var removed = false;
-        foreach (var st in list)
-        {
-            if (!removed && st.IsKind(SyntaxKind.EndIfDirectiveTrivia))
-            {
-                removed = true;
-                newLeadingTrivia.Add(ElasticCarriageReturnLineFeed);
-                continue;
-            }
-
-            newLeadingTrivia.Add(st);
-        }
-
-        return newLeadingTrivia;
-    }
-
     private bool EndsWithAsync(ExpressionSyntax expression) => expression switch
     {
         IdentifierNameSyntax id => ReplaceAsync(id) is not null,
@@ -2025,7 +1766,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     {
         if (id.Identifier.ValueText is WaitAsync)
         {
-            var symbol = semanticModel.GetSymbolInfo(id).Symbol as IMethodSymbol;
+            var symbol = SemanticModel.GetSymbolInfo(id).Symbol as IMethodSymbol;
             if (symbol?.ContainingType?.ToDisplayString() is { } containingType)
             {
                 if (containingType.StartsWith(TaskFullyQualified, StringComparison.Ordinal) ||
@@ -2053,7 +1794,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             return null;
         }
 
-        var (enumerableMembers, queryableMembers) = linqMembers ??= semanticModel.Compilation.GetLinqMembers();
+        var (enumerableMembers, queryableMembers) = linqMembers ??= SemanticModel.Compilation.GetLinqMembers();
 
         return queryableMembers.Contains(newName) ? Global("System.Linq.Queryable")
             : enumerableMembers.Contains(newName) ? Global("System.Linq.Enumerable")
@@ -2348,8 +2089,6 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return new(List(attributes), triviaList);
     }
 
-    private ISymbol? GetSymbol(SyntaxNode node) => semanticModel.GetSymbolInfo(node).Symbol;
-
     private bool IsEnumeratorCancellationAttribute(AttributeSyntax attributeSyntax)
     {
         var type = GetSymbol(attributeSyntax)?.ContainingType;
@@ -2474,23 +2213,10 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     /// </summary>
     private bool DropsReturnKeyword(StatementSyntax statement)
         => statement is ReturnStatementSyntax { Expression: InvocationExpressionSyntax, Parent: BlockSyntax { Parent: MethodDeclarationSyntax method } }
-        && semanticModel.GetTypeInfo(method.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true };
+        && SemanticModel.GetTypeInfo(method.ReturnType).Type is INamedTypeSymbol { IsNonGenericTaskOrValueTask: true };
 
     private bool RemoveDeclarator(VariableDeclaratorSyntax variable)
         => variable.Initializer is { Value: { } value } && ShouldRemoveArgument(value);
-
-    private TypeSyntax ProcessSyntaxUsingSymbol(TypeSyntax typeSyntax)
-    {
-        var typeSymbol = semanticModel.GetTypeInfo(typeSyntax).Type;
-        return typeSymbol is null ? typeSyntax : ProcessSymbol(typeSymbol).WithTriviaFrom(typeSyntax);
-    }
-
-    private TypeSyntax ProcessType(TypeSyntax typeSyntax) => typeSyntax switch
-    {
-        IdentifierNameSyntax { Identifier.ValueText: "var" } => typeSyntax,
-        IdentifierNameSyntax or QualifiedNameSyntax => ProcessSyntaxUsingSymbol(typeSyntax),
-        _ => typeSyntax,
-    };
 
     private bool CanDropStatement(StatementSyntax statement) => statement switch
     {
@@ -2628,7 +2354,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private bool ShouldRemoveLiteral(LiteralExpressionSyntax literalExpression)
         => literalExpression.Token.IsKind(SyntaxKind.DefaultKeyword)
-           && semanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { IsNonGenericValueTask: true };
+           && SemanticModel.GetTypeInfo(literalExpression).Type is INamedTypeSymbol { IsNonGenericValueTask: true };
 
     private bool ShouldRemoveObjectCreation(BaseObjectCreationExpressionSyntax oe)
         => GetSymbol(oe) is IMethodSymbol { ReceiverType: INamedTypeSymbol { IsNonGenericValueTask: true } };
