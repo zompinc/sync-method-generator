@@ -683,7 +683,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = base.VisitImplicitObjectCreationExpression(node);
         var symbol = GetSymbol(node);
 
-        return TryReplaceObjectCreation(node, symbol, out var replacement) ? replacement : @base;
+        // The argument is taken from the rewritten node, so that what is inside it is rewritten too.
+        return @base is BaseObjectCreationExpressionSyntax visited
+            && TryReplaceObjectCreation(visited, symbol, out var replacement) ? replacement : @base;
     }
 
     public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node)
@@ -734,7 +736,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var @base = base.VisitObjectCreationExpression(node);
         var symbol = GetSymbol(node);
 
-        return TryReplaceObjectCreation(node, symbol, out var replacement) ? replacement : @base;
+        // The argument is taken from the rewritten node, so that what is inside it is rewritten too.
+        return @base is BaseObjectCreationExpressionSyntax visited
+            && TryReplaceObjectCreation(visited, symbol, out var replacement) ? replacement : @base;
     }
 
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
