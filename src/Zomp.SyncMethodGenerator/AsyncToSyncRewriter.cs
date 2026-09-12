@@ -522,6 +522,14 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             {
                 @base = @base.WithExpression(newType);
             }
+
+            // Calling EntityFrameworkQueryableExtensions.AnyAsync(query) directly rather than as an extension
+            if (exprSymbol is INamedTypeSymbol containingType
+                && GetSymbol(node) is IMethodSymbol { Name: var name } && name.EndsWithAsync()
+                && SyncQueryableContainer(containingType, RemoveAsync(name)) is { } container)
+            {
+                @base = @base.WithExpression(IdentifierName(container).WithTriviaFrom(@base.Expression));
+            }
         }
 
         if (isSpan && changedMemoryToSpan.Contains(exprSymbol))
@@ -2019,6 +2027,27 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         return TryStripAsync(id.Identifier.ValueText, out var newName) ? newName : null;
     }
 
+    /// <summary>
+    /// Gets the type holding the sync counterpart of a method on a *QueryableExtensions class such as
+    /// EntityFrameworkQueryableExtensions, when that counterpart lives in System.Linq rather than beside
+    /// the async method, as EF Core's ExecuteDelete does.
+    /// </summary>
+    /// <returns>The fully qualified System.Linq type, or <see langword="null"/> to keep the containing type.</returns>
+    private string? SyncQueryableContainer(INamedTypeSymbol containingType, string newName)
+    {
+        if (!containingType.Name.EndsWith("QueryableExtensions", StringComparison.Ordinal)
+            || !containingType.GetMembers(newName).IsEmpty)
+        {
+            return null;
+        }
+
+        var (enumerableMembers, queryableMembers) = linqMembers ??= semanticModel.Compilation.GetLinqMembers();
+
+        return queryableMembers.Contains(newName) ? Global("System.Linq.Queryable")
+            : enumerableMembers.Contains(newName) ? Global("System.Linq.Enumerable")
+            : null;
+    }
+
     private InvocationExpressionSyntax UnwrapExtension(InvocationExpressionSyntax ies, bool changeMemoryToSpan, IMethodSymbol reducedFrom, ExpressionSyntax expression, INamedTypeSymbol? container = null)
     {
         var containingType = container ?? reducedFrom.ContainingType;
@@ -2067,24 +2096,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newName = reducedFrom.Name;
         newName = changeMemoryToSpan ? ReplaceWithSpan(reducedFrom) : RemoveAsync(newName);
 
-        var fullyQualifiedName = $"{MakeType(containingType)}.{newName}";
-
-        // Supports EntityFrameworkQueryableExtensions and potentially other queryable extensions.
-        // A sync counterpart declared beside the async method wins, as EF Core's ExecuteDelete does.
-        if (containingType.Name.EndsWith("QueryableExtensions", StringComparison.Ordinal)
-            && containingType.GetMembers(newName).IsEmpty)
-        {
-            var (enumerableMembers, queryableMembers) = linqMembers ??= semanticModel.Compilation.GetLinqMembers();
-
-            if (queryableMembers.Contains(newName))
-            {
-                fullyQualifiedName = $"{Global("System.Linq.Queryable")}.{newName}";
-            }
-            else if (enumerableMembers.Contains(newName))
-            {
-                fullyQualifiedName = $"{Global("System.Linq.Enumerable")}.{newName}";
-            }
-        }
+        var fullyQualifiedName = $"{SyncQueryableContainer(containingType, newName) ?? MakeType(containingType)}.{newName}";
 
         var es = (ies.Expression switch
         {
