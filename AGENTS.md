@@ -230,6 +230,8 @@ it: check out the test commit alone and watch it fail.
 | ZSMGEN002 | `SYNC_ONLY` mixed with other symbols in `#if` condition |
 | ZSMGEN003 | `SYNC_ONLY` used with `#elif`                           |
 | ZSMGEN004 | `Task.WhenAll` or `Task.WhenAny` has no sync equivalent |
+| ZSMGEN005 | Overloads produce the same signature once synchronized  |
+| ZSMGEN006 | Synchronized loop never ends (warning)                  |
 
 A new descriptor must also be listed in `AnalyzerReleases.Unshipped.md`, or
 `RS2000` fails the build. An error severity diagnostic suppresses the generated
