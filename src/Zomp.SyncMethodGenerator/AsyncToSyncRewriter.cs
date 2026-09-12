@@ -2422,10 +2422,38 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             {
                 newStatements.Add(EmptyStatement().WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken)).WithLeadingTrivia(leadingTrivia));
             }
+
+            // A cancellation check in a loop's condition becomes true in the synchronized version,
+            // so unless something else leaves the loop it now runs forever, and whatever follows it
+            // can't be reached.
+            if (!dropOriginal
+                && statement is WhileStatementSyntax loop
+                && rewritten is WhileStatementSyntax { Statement: var body }
+                && ChecksIfNegatedIsCancellationRequested(loop.Condition))
+            {
+                var exits = new LoopExitWalker(MethodsWhichNeverReturn(loop.Statement));
+                exits.Visit(body);
+
+                if (!exits.Breaks && !exits.Jumps && !exits.LeavesMethod)
+                {
+                    diagnostics.Add(ReportedDiagnostic.Create(EndlessLoop, loop.WhileKeyword.GetLocation(), loop.Condition.ToString()));
+                }
+
+                removeRemaining |= !exits.Breaks && !exits.Jumps
+                    && !originalStatements.Skip(i + 1).OfType<LabeledStatementSyntax>().Any();
+            }
         }
 
         return List(newStatements);
     }
+
+    private HashSet<string> MethodsWhichNeverReturn(SyntaxNode node)
+        => [.. node.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(GetSymbol)
+            .OfType<IMethodSymbol>()
+            .Where(static m => m.GetAttributes().Any(static a => a.AttributeClass is { Name: "DoesNotReturnAttribute" }))
+            .Select(static m => m.Name)];
 
     /// <summary>
     /// Checks whether the <c>return</c> keyword must be dropped: <c>return InvocationAsync();</c>
