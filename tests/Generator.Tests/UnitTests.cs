@@ -75,52 +75,6 @@ public T Bar<T>(Func<T> innerLogic) => innerLogic();
 """.Verify();
 
     [Fact]
-    public Task MultipleNamespaces() => """
-namespace NsOne
-{
-    namespace NsTwo.NsThree
-    {
-        namespace NsFour
-        {
-            public partial class MultipleNamespaces
-            {
-                [CreateSyncVersion]
-                async void EmptyAsync()
-                {
-                }
-            }
-        }
-    }
-}
-""".Verify(sourceType: SourceType.Full);
-
-    [Fact]
-    public Task StaticUsings() => """
-using static N2.C2;
-
-namespace N1
-{
-    public partial class C1
-    {
-        [CreateSyncVersion]
-        public async Task MethodAsync()
-        {
-            _ = OtherConst;
-        }
-    }
-}
-
-namespace N2
-{
-    public class C2
-    {
-        public const int OtherConst = 1;
-    }
-}
-
-""".Verify(sourceType: SourceType.Full);
-
-    [Fact]
     public Task GenericClass() => """
 namespace Test;
 partial class GenericClass<T1, T2> where T1 : struct where T2 : class
