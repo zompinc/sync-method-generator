@@ -67,10 +67,12 @@ jobs:
         with:
           setAllVars: true
 
-      # Reads the version to install from the packageManager field of package.json.
+      # Reads the version to install from the packageManager field of package.json. Only a
+      # Windows job under act skips it: that runs on the host, which has pnpm already, while
+      # the act image for Linux does not.
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        if: ${{ !env.ACT }}
+        if: ${{ runner.os != 'Windows' || !env.ACT }}
 
       - run: pnpm install --frozen-lockfile
 
