@@ -133,13 +133,16 @@ them (`MethodLocation`), fully qualifying the names a method uses
 The package ships source, not a DLL. Its files compile into the generator as
 internal types in the `Zomp.MethodCloning` namespace, with the `ROSLYN_*`
 constants this repository defines, so each Roslyn variant gets its own build of
-them. A change to them belongs in that repository: fix it there, pack it, and
+them. A change to them belongs in that repository: fix it there, publish it, and
 bump the version in `Directory.Packages.props`. `AsyncToSyncRewriter` plugs in
 by deriving from `CloningRewriter` and using its `MapSymbol` and `MapTypeName`
 hooks.
 
-Until the package is on a public feed, `nuget.config` maps `Zomp.MethodCloning`
-to a local folder feed, `~/.nuget/local-feed`, which CI cannot restore from.
+A cloning bug gets its failing test and its fix in that repository, as a test of
+its identity clone, whichever generator it was found through. This repository
+adds a test of its own only when the bug shows up through the async to sync
+rules. Tests which exercise nothing but cloning - file names, containing types,
+name qualification, namespaces - live there, not here.
 
 ## Transformation Pipeline
 
@@ -167,7 +170,8 @@ to a local folder feed, `~/.nuget/local-feed`, which CI cannot restore from.
 - `TestHelper` also clones every synchronized method through
   `IdentityCloneGenerator`, which changes nothing but the method's name, and
   fails the test with "Identity clone does not compile" when a clone does not.
-  That failure is in the `Cloning/` layer, not in the async to sync rules
+  That failure is in the `Zomp.MethodCloning` package, not in the async to sync
+  rules, and is fixed there
 
 ### Choosing how the source is wrapped
 
@@ -224,7 +228,7 @@ it: check out the test commit alone and watch it fail.
 - File-scoped namespaces required
 - Nerdbank.GitVersioning for version management (from git tags/height)
 - The generator targets `netstandard2.0` for maximum host compatibility
-- `EquatableArray<T>` wraps `ImmutableArray<T>` for value equality in the incremental pipeline
+- `EquatableArray<T>`, from `Zomp.MethodCloning`, wraps `ImmutableArray<T>` for value equality in the incremental pipeline
 
 ## Diagnostics
 
