@@ -112,9 +112,7 @@ src/Zomp.SyncMethodGenerator/          Generator (netstandard2.0)
   SourceGenerationHelper.cs            Attribute definitions
   Extensions.cs                        Type-checking extensions on INamedTypeSymbol
   DiagnosticMessages.cs                ZSMGEN001-006 diagnostic descriptors
-  Cloning/                             Copying a method into a file of its own
-  Models/                              Data records for the pipeline
-  Helpers/                             EquatableArray<T>, DirectiveStack, etc.
+  Helpers/                             CompilationExtensions, LoopExitWalker
   Properties/                          Assembly attributes
   tools/                               MSBuild props/targets shipped in the NuGet package
 src/Zomp.SyncMethodGenerator.Pack/     Packing-only project (no code)
@@ -124,18 +122,27 @@ tests/GenerationSandbox.Tests/         Integration tests (real-world patterns)
 
 ## Cloning layer
 
-`Cloning/` holds everything about emitting a copy of a method that has nothing
-to do with async: finding the marked methods (`CloneTarget`), collecting the
-namespaces, usings and containing types around them (`MethodLocation`), fully
-qualifying the names a method uses (`CloningRewriter`), detecting colliding
-signatures and naming the files (`ClonedMethodOutput`), and writing the file
-(`ClonedMethodSource`).
+Everything about emitting a copy of a method that has nothing to do with async
+comes from the `Zomp.MethodCloning` source package, maintained in the
+`zompinc/method-cloning` repository: finding the marked methods
+(`CloneTarget`), collecting the namespaces, usings and containing types around
+them (`MethodLocation`), fully qualifying the names a method uses
+(`CloningRewriter`), detecting colliding signatures and naming the files
+(`ClonedMethodOutput`), and writing the file (`ClonedMethodSource`).
 
-Keep async knowledge out of it. A transformation plugs in by deriving from
-`CloningRewriter`, overriding the visitors it needs, and using the `MapSymbol`
-and `MapTypeName` hooks to substitute types. Nothing under `Cloning/` should
-know about tasks or `SYNC_ONLY`; a grep for `Task|Async|SYNC_ONLY` there should
-come back empty.
+The package ships source, not a DLL. Its files compile into the generator as
+internal types in the `Zomp.MethodCloning` namespace, with the `ROSLYN_*`
+constants this repository defines, so each Roslyn variant gets its own build of
+them. A change to them belongs in that repository: fix it there, publish it, and
+bump the version in `Directory.Packages.props`. `AsyncToSyncRewriter` plugs in
+by deriving from `CloningRewriter` and using its `MapSymbol` and `MapTypeName`
+hooks.
+
+A cloning bug gets its failing test and its fix in that repository, as a test of
+its identity clone, whichever generator it was found through. This repository
+adds a test of its own only when the bug shows up through the async to sync
+rules. Tests which exercise nothing but cloning - file names, containing types,
+name qualification, namespaces - live there, not here.
 
 ## Transformation Pipeline
 
@@ -163,7 +170,8 @@ come back empty.
 - `TestHelper` also clones every synchronized method through
   `IdentityCloneGenerator`, which changes nothing but the method's name, and
   fails the test with "Identity clone does not compile" when a clone does not.
-  That failure is in the `Cloning/` layer, not in the async to sync rules
+  That failure is in the `Zomp.MethodCloning` package, not in the async to sync
+  rules, and is fixed there
 
 ### Choosing how the source is wrapped
 
@@ -220,7 +228,7 @@ it: check out the test commit alone and watch it fail.
 - File-scoped namespaces required
 - Nerdbank.GitVersioning for version management (from git tags/height)
 - The generator targets `netstandard2.0` for maximum host compatibility
-- `EquatableArray<T>` wraps `ImmutableArray<T>` for value equality in the incremental pipeline
+- `EquatableArray<T>`, from `Zomp.MethodCloning`, wraps `ImmutableArray<T>` for value equality in the incremental pipeline
 
 ## Diagnostics
 

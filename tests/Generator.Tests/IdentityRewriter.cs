@@ -1,5 +1,5 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Zomp.SyncMethodGenerator.Cloning;
+using Zomp.MethodCloning;
 
 namespace Generator.Tests;
 

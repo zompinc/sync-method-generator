@@ -29,6 +29,7 @@
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" PrivateAssets="all" Pack="false" />
     <PackageReference Include="Microsoft.Bcl.HashCode" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" Pack="false" />
+    <PackageReference Include="Zomp.MethodCloning" PrivateAssets="all" />
     <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
     <PackageReference Include="PolySharp" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <!-- <PackageReference Include="Microsoft.Net.Compilers.Toolset" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" /> -->
@@ -45,9 +46,8 @@
     <Using Include="System.Runtime.CompilerServices" />
     <Using Include="System.Text" />
     <Using Include="System.Text.RegularExpressions" />
-    <Using Include="Zomp.SyncMethodGenerator.Cloning" />
+    <Using Include="Zomp.MethodCloning" />
     <Using Include="Zomp.SyncMethodGenerator.Helpers" />
-    <Using Include="Zomp.SyncMethodGenerator.Models" />
   </ItemGroup>
 
   <ItemGroup>
