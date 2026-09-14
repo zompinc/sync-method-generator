@@ -166,9 +166,9 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         }
         else
         {
-            var argumentTypeExpr = ProcessSymbol(funcArgumentType);
+            var argumentTypeExpr = Qualify(funcArgumentType);
 
-            var separated = SeparatedList([MaybeNullableType(argumentTypeExpr), MaybeNullableType(ProcessSymbol(chain[^1].ReturnType))]);
+            var separated = SeparatedList([MaybeNullableType(argumentTypeExpr), MaybeNullableType(Qualify(chain[^1].ReturnType))]);
 
             var type = TypeArgumentList(separated);
             funcExpr = GenericName(
@@ -203,7 +203,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                             toCheckForNullExpr,
                             IdentifierName(nameof(Nullable<>.HasValue))))
                     : CheckNull(toCheckForNullExpr);
-                var castTo = MaybeNullableType(ProcessSymbol(returnType), returnType.IsValueType);
+                var castTo = MaybeNullableType(Qualify(returnType), returnType.IsValueType);
 
                 var conditional = ConditionalExpression(
                     condition.AppendSpace(),
@@ -223,7 +223,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             statements.Add(ifStatement);
 
             var toCheckForNull = Identifier($"check{i}");
-            var localType = ProcessSymbol(returnType); // reduced will return generic
+            var localType = Qualify(returnType); // reduced will return generic
 
             var declarator = VariableDeclarator(toCheckForNull.AppendSpace(), null, EqualsValueClause(unwrappedExpr.PrependSpace()));
             var declaration = VariableDeclaration(localType.AppendSpace(), SeparatedList([declarator]));
@@ -1144,7 +1144,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
                 {
                     for (var i = 0; i < typeArgs.Length - 1; i++)
                     {
-                        list.Add(ProcessSymbol(typeArgs[i]));
+                        list.Add(Qualify(typeArgs[i]));
                     }
 
                     var originalSeparators = gns.TypeArgumentList.Arguments.GetSeparators();
@@ -1260,8 +1260,8 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
     protected override SimpleNameSyntax? MapSymbol(ISymbol symbol) => symbol switch
     {
         INamedTypeSymbol { IsEnumerator: true } s
-            => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([ProcessSymbol(s.ContainingType.TypeArguments[0])], []))),
-        INamedTypeSymbol { IsTaskOrValueTask: true } s => s.IsGenericType ? ProcessSymbol(s.TypeArguments[0]) : IdentifierName("void"),
+            => GenericName(IEnumerator).WithTypeArgumentList(TypeArgumentList(SeparatedList<TypeSyntax>([Qualify(s.ContainingType.TypeArguments[0])], []))),
+        INamedTypeSymbol { IsTaskOrValueTask: true } s => s.IsGenericType ? Qualify(s.TypeArguments[0]) : IdentifierName("void"),
         _ => null,
     };
 
@@ -1684,7 +1684,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     private TypeSyntax GetReturnType(TypeSyntax returnType, INamedTypeSymbol symbol) => (returnType switch
     {
-        IdentifierNameSyntax => ProcessSymbol(symbol),
+        IdentifierNameSyntax => Qualify(symbol),
         _ => returnType,
     }).WithTriviaFrom(returnType);
 
@@ -1726,7 +1726,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
             // Func<something, Task> => Action<something>
             for (var i = 0; i < typeArgs.Length - 1; i++)
             {
-                list.Add(ProcessSymbol(typeArgs[i]));
+                list.Add(Qualify(typeArgs[i]));
             }
 
             var originalSeparators = (List<SyntaxToken>)[.. gns.TypeArgumentList.Arguments.GetSeparators()];
@@ -1853,7 +1853,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
         var newName = reducedFrom.Name;
         newName = changeMemoryToSpan ? ReplaceWithSpan(reducedFrom) : RemoveAsync(newName);
 
-        var fullyQualifiedName = $"{SyncQueryableContainer(containingType, newName) ?? MakeType(containingType)}.{newName}";
+        var fullyQualifiedName = $"{SyncQueryableContainer(containingType, newName) ?? FullyQualifiedName(containingType)}.{newName}";
 
         var es = (ies.Expression switch
         {
