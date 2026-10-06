@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "echo '{\"terminalSequence\": \"\\u001b]9;4;3;\\u0007\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "echo '{\"terminalSequence\": \"\\u001b]9;4;0;\\u0007\\u0007\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "echo '{\"terminalSequence\": \"\\u001b]9;4;0;\\u0007\\u0007\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "echo '{\"terminalSequence\": \"\\u001b]9;4;0;\\u0007\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

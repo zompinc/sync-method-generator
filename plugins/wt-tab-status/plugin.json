@@ -1,0 +1,12 @@
+{
+  "name": "wt-tab-status",
+  "version": "0.1.0",
+  "description": "Show which Windows Terminal tabs have Claude working (progress ring) and which finished while you were away (bell), even on renamed tabs and split panes",
+  "author": {
+    "name": "Zomp"
+  },
+  "homepage": "https://github.com/zompinc/sync-method-generator",
+  "license": "MIT",
+  "keywords": ["windows-terminal", "terminal", "notifications", "hooks"],
+  "hooks": "./hooks/hooks.json"
+}
