@@ -284,9 +284,24 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     /// <inheritdoc/>
     public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
-        => renamedLocalFunctions.TryGetValue(node.Identifier.ValueText, out var newName)
-            ? node.WithIdentifier(Identifier(newName))
-            : base.VisitIdentifierName(node);
+    {
+        if (renamedLocalFunctions.TryGetValue(node.Identifier.ValueText, out var newName))
+        {
+            return node.WithIdentifier(Identifier(newName));
+        }
+
+        // A statement or an argument which mentions a removed CancellationToken is dropped whole,
+        // but an expression such as a catch filter has to keep its shape. CancellationToken.None
+        // stands in for the parameter: it is never cancelled, which is what the synchronized
+        // method does.
+        if (GetSymbol(node) is IParameterSymbol { Type: INamedTypeSymbol { IsCancellationToken: true } } parameter
+            && removedParameters.Contains(parameter))
+        {
+            return IdentifierName(Global("System.Threading.CancellationToken.None")).WithTriviaFrom(node);
+        }
+
+        return base.VisitIdentifierName(node);
+    }
 
     public override SyntaxNode? VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
     {
