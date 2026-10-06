@@ -65,4 +65,23 @@ public async Task MethodAsync()
 private async Task FooAsync() => await Task.CompletedTask;
 private void Foo() { }
 """.Verify();
+
+    [Fact]
+    public Task ConfigureAwaitOnAnUnboundCall() => """
+[CreateSyncVersion]
+static async Task ReadAsync(dynamic d)
+{
+    await d.ReadPayloadAsync().ConfigureAwait(false);
+}
+""".Verify();
+
+    [Fact]
+    public Task ConfigureAwaitOnAnUnboundCallInADeclaration() => """
+[CreateSyncVersion]
+static async Task<dynamic> ReadAsync(dynamic d)
+{
+    dynamic payload = await d.ReadPayloadAsync().ConfigureAwait(false);
+    return payload;
+}
+""".Verify();
 }
