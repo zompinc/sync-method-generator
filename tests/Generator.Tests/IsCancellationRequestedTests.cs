@@ -129,4 +129,47 @@ while (!ct.IsCancellationRequested)
 }
 #endif
 """.Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task CatchFilterChecksCancellation() => """
+try
+{
+    await Task.Delay(1, ct);
+}
+catch (OperationCanceledException) when (ct.IsCancellationRequested)
+{
+    throw;
+}
+catch (Exception)
+{
+}
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task CatchFilterChecksCancellationAndMore() => """
+try
+{
+    await Task.Delay(1, ct);
+}
+catch (OperationCanceledException) when (ct.IsCancellationRequested || Environment.TickCount > 0)
+{
+    throw;
+}
+""".Verify(sourceType: SourceType.MethodBody);
+
+    [Fact]
+    public Task CatchFilterKeepsPreservedToken() => """
+[CreateSyncVersion(PreserveCancellationToken = true)]
+public async Task MethodAsync(CancellationToken ct)
+{
+    try
+    {
+        await Task.Delay(1, ct);
+    }
+    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+    {
+        throw;
+    }
+}
+""".Verify();
 }
