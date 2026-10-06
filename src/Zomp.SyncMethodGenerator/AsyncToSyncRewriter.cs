@@ -34,6 +34,7 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
     // Members
     private const string CompletedTask = nameof(Task.CompletedTask);
+    private const string ConfigureAwait = nameof(Task.ConfigureAwait);
     private const string Delay = nameof(Task<>.Delay);
     private const string FromResult = nameof(Task<>.FromResult);
     private const string WaitAsync = "WaitAsync";
@@ -493,8 +494,23 @@ internal sealed class AsyncToSyncRewriter(SemanticModel semanticModel, bool disa
 
         if (symbol is null)
         {
-            // A missing symbol usually means the code doesn't compile due to an error or a missing reference / usings.
-            return base.VisitInvocationExpression(node);
+            // A missing symbol usually means the code doesn't compile due to an error or a missing
+            // reference / usings, but a call whose argument another generator supplies cannot bind
+            // either, generators not seeing each other's output. An awaited ConfigureAwait has no
+            // place in the synchronized method whether or not the call it follows binds, so drop
+            // it by its shape, as the Async suffix is already dropped by its shape.
+            var unbound = base.VisitInvocationExpression(node);
+
+            var awaitedConfigureAwait = node is
+            {
+                Parent: AwaitExpressionSyntax,
+                Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: ConfigureAwait },
+                ArgumentList.Arguments.Count: 1,
+            };
+
+            return awaitedConfigureAwait && unbound is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax rewritten }
+                ? KeepExpressionBeforeDot(rewritten)
+                : unbound;
         }
 
         if (symbol is not IMethodSymbol methodSymbol)
